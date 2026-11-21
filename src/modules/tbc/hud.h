@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Turn-based HUD, BG3 style, drawn by the engine's own .menu UI (pure text builders, unit-tested).
+//   - top: the initiative bar, one card per combatant with its bestiary picture (the journal's own
+//     `bestiary` table, matched on the animation's bestiary index), HP bar, active card larger with
+//     a gold frame, cards that already acted this round dimmed;
+//   - bottom: the active party member's action pip, movement bar "23 / 31 ft" and End Turn;
+//   - in the world: the movement line, dots along the engine's walk path, gold while reachable, red
+//     beyond the movement left, with the path length at its end.
+// The menu text is appended to UI.MENU at load (engine/menu.h). Every frame of a fight the module
+// sets the Lua table `pstfTbc` (BuildHudLua) and calls pstfTbcLayout(), which places the elements.
+#pragma once
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace pstf::tbc {
+
+constexpr int kHudCards = 12;
+constexpr int kHudDots = 40;
+
+struct HudCard {
+  int32_t id = -1;
+  int32_t bestiary = -1;
+  int32_t name_ref = -1;
+  std::string name;  // fallback when name_ref is -1
+  int hp = 0, max_hp = 0;
+  bool foe = false, active = false, done = false;
+};
+
+struct HudView {
+  bool on = false;
+  uint32_t round = 0;
+  std::vector<HudCard> cards;  // initiative order
+  bool party_turn = false;
+  double move_ft = 0, max_ft = 0;
+  bool action_used = false, acting = false;
+  std::string msg;             // short notice ("No action left this turn")
+  std::vector<int> dots;       // x,y pairs in UI coordinates, reachable
+  std::vector<int> red_dots;   // x,y pairs, beyond the movement left
+  int path_ft = 0;             // whole path length, shown at its end
+  int label_x = -1, label_y = -1;
+};
+
+std::string BuildHudMenu();             // menu PSTF_TBC + its Lua helpers
+std::string BuildHudLua(const HudView& v);  // "pstfTbc = {...}"
+
+}  // namespace pstf::tbc

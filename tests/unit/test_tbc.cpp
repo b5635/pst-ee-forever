@@ -300,3 +300,124 @@ TEST_CASE("tbc turn clock: budget of busy ticks, AI idle end, party waits") {
   CHECK(pc.Feed(21, true) == TurnEnd::Budget);
   CHECK(pc.busy == 51);
 }
+
+// ---- action economy, movement line, HUD text ---------------------------------------------------
+#include "modules/tbc/economy.h"
+#include "modules/tbc/hud.h"
+#include "modules/tbc/path_line.h"
+
+TEST_CASE("tbc economy: feet on the 16x12 cell metric") {
+  CHECK(FeetBetween(0, 0, 16, 0) == 1.0);
+  CHECK(FeetBetween(0, 0, 0, 12) == 1.0);
+  CHECK(FeetBetween(0, 0, 48, 48) == 5.0);  // 3 ft across, 4 ft down
+  CHECK(IsMoveAction(23) && IsMoveAction(22) && !IsMoveAction(3) && !IsMoveAction(31));
+  CHECK(IsIdleAction(0) && !IsIdleAction(3));
+}
+
+TEST_CASE("tbc economy: walking spends feet and stops when they are gone") {
+  Economy e(31, 51, true);
+  auto st = e.Feed(1, 10, true, 23);  // MoveToPoint, 10 ft
+  CHECK(st.stop == Stop::None && !st.hold_walk && !st.end_turn);
+  CHECK(e.move_ft == 21.0);
+  e.Feed(1, 15, true, 23);
+  st = e.Feed(1, 10, true, 23);  // overshoot: clamp at 0, path still wants more
+  CHECK(e.move_ft == 0.0);
+  CHECK(st.stop == Stop::OutOfMove && st.hold_walk);
+  CHECK(!e.action_used);
+  st = e.Feed(1, 0, false, 0);  // cleared; action still free: party turn goes on
+  CHECK(!st.end_turn);
+  CHECK(e.Feed(1, 40, false, 0).hold_walk);  // a teleport-sized jump is not walking
+  CHECK(e.move_ft == 0.0);
+}
+
+TEST_CASE("tbc economy: one action, one attack round, then nothing else") {
+  Economy e(31, 51, true);
+  auto st = e.Feed(1, 3, true, 3);  // Attack: walking up to the target, not the action yet
+  CHECK(!e.action_used);
+  st = e.Feed(10, 0, false, 3);  // in reach: swinging
+  CHECK(e.action_used && e.acting && st.stop == Stop::None);
+  st = e.Feed(40, 0, false, 3);  // 50 ticks
+  CHECK(e.acting);
+  st = e.Feed(1, 0, false, 3);  // 51 = one round
+  CHECK(st.stop == Stop::RoundDone && !e.acting);
+  st = e.Feed(1, 0, false, 0);
+  CHECK(!st.end_turn);  // 28 ft of movement left
+  st = e.Feed(1, 0, false, 31);  // Spell: no action left
+  CHECK(st.stop == Stop::NoAction);
+  e.Feed(1, 15, true, 23);
+  st = e.Feed(1, 15, true, 23);  // walk the rest
+  CHECK(st.stop == Stop::OutOfMove);
+  st = e.Feed(1, 0, false, 0);
+  CHECK(st.end_turn);
+}
+
+TEST_CASE("tbc economy: a cast ends when the engine finishes it") {
+  Economy e(31, 51, true);
+  e.Feed(1, 0, false, 31);
+  CHECK(e.acting);
+  auto st = e.Feed(20, 0, false, 0);  // casting done after 20 ticks
+  CHECK(!e.acting && e.action_used && st.stop == Stop::None);
+}
+
+TEST_CASE("tbc economy: AI turns end after acting or idling, never hang") {
+  Economy a(31, 51, false);
+  a.Feed(1, 0, false, 3);
+  auto st = a.Feed(51, 0, false, 3);
+  CHECK(st.stop == Stop::RoundDone);
+  st = a.Feed(8, 0, false, 0);
+  CHECK(st.end_turn);
+  Economy idle(31, 51, false);
+  CHECK(!idle.Feed(29, 0, false, 0).end_turn);
+  CHECK(idle.Feed(1, 0, false, 0).end_turn);  // 30 ticks of thinking, nothing chosen
+  Economy stuck(31, 51, false);
+  bool ended = false;
+  for (int i = 0; i < 200 && !ended; ++i) ended = stuck.Feed(1, 0, true, 23).end_turn;  // path never walked
+  CHECK(ended);
+}
+
+TEST_CASE("tbc path line: cells decode as AIUpdateWalk, dots split at the budget") {
+  const Grid g;
+  // cell = (GRID_ACTUALY - 1 - y) * GRID_ACTUALX + x
+  const Pt p = CellCentre((320 - 1 - 10) * 320 + 5, g);
+  CHECK(p.x == 5 * 16 + 8 && p.y == 10 * 12 + 6);
+  const Pt from{0, 0};
+  const std::vector<Pt> nodes = {{160, 0}, {160, 120}};  // 10 ft across, then 10 ft down
+  CHECK(PathFeet(from, nodes) == 20.0);
+  const auto dots = PathDots(from, nodes, 12.0, 2.0, 40);
+  CHECK(dots.size() == 10);
+  CHECK(dots[0].p.x == 32 && dots[0].p.y == 0 && dots[0].reachable);
+  CHECK(dots[5].reachable && !dots[6].reachable);  // 12 ft reachable, 14 ft not
+  CHECK(dots[9].p.x == 160 && dots[9].p.y == 120);
+  CHECK(PathDots(from, nodes, 12.0, 2.0, 3).size() == 3);
+}
+
+TEST_CASE("tbc hud: menu text and Lua data") {
+  const std::string m = BuildHudMenu();
+  CHECK(m.find("name 'PSTF_TBC'") != std::string::npos);
+  CHECK(m.find("name \"pstfCardImg12\"") != std::string::npos);
+  CHECK(m.find("name \"pstfDot40\"") != std::string::npos);
+  CHECK(m.find("action \"PSTF_EndTurn()\"") != std::string::npos);
+  CHECK(std::count(m.begin(), m.end(), '`') == 2);  // one inline Lua chunk
+  CHECK(std::count(m.begin(), m.end(), '{') == std::count(m.begin(), m.end(), '}'));
+  HudView v;
+  v.on = true;
+  v.round = 2;
+  v.party_turn = true;
+  v.move_ft = 12.5;
+  v.max_ft = 31;
+  HudCard c;
+  c.id = 7;
+  c.bestiary = 43;
+  c.name_ref = 274;
+  c.name = "a \"b\"";
+  c.hp = 5;
+  c.max_hp = 10;
+  c.active = true;
+  v.cards.push_back(c);
+  v.dots = {1, 2};
+  const std::string lua = BuildHudLua(v);
+  CHECK(lua.find("round=2,party=true,move=12.50,maxMove=31.00") != std::string::npos);
+  CHECK(lua.find("{id=7,best=43,name=274,hp=5,maxhp=10,foe=false,active=true,done=false,str=\"a b\"}") !=
+        std::string::npos);
+  CHECK(lua.find("dots={1,2},rdots={}") != std::string::npos);
+}

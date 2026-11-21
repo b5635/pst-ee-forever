@@ -30,3 +30,8 @@
 140164E30	CGameAIBase::ClearActions(int)
 1403FB520	CGameSprite::Animate(void)
 1400E7380	luaL_loadstring
+140459E00	uiLoadMenu(CResText *)
+140456630	uiMenuNextToken
+140484330	CString::CString(char const*)
+1404842C0	CString::CString(CString const&)
+14043A780	CGameSprite::FloatingHP(void)

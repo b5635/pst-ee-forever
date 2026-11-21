@@ -107,3 +107,38 @@ the zombie dies on round 2 to the protagonist's attacks (engine rules), "Combat 
    take the screen, so keep them short or ask first.
 
 **Next.** Combat clock and effect rebase, opportunity attacks, turn order UI, Dexterity initiative.
+
+## 2026-11-21: turn-based HUD and BG3 action economy (module `tbc`)
+
+**Built.**
+- Action economy (`economy.h`, pure): per turn 31 ft of movement (`[tbc] move_feet`) and ONE action.
+  Walking spends feet (16 px across / 12 px up-down = 1 ft, one search-map cell); with no feet left the
+  walk hook skips `AIUpdateWalk` and a path that still wants feet is cancelled. A non-move action
+  (attack, cast, item, talk) that runs while not walking is the action; it ends when the engine finishes
+  it or after one round (attack repeats otherwise). Later actions are cancelled. Party turns end when
+  both are spent or on End Turn; AI turns also on idle or a cap. The engine still decides every roll.
+- HUD (`hud.cpp`) drawn by the engine's own .menu UI: menu `PSTF_TBC` + inline Lua appended to UI.MENU
+  at load (redirected CString copy in `uiLoadMenu`, win 140459EC3; nothing on disk changes).
+  Initiative bar with **bestiary art** (animation INI key `bestiary` -> anim +0x1D0C, matched to the
+  journal's Lua `bestiary` table), HP bars, active card larger with gold frame, acted cards dimmed,
+  "Round N: name"; bottom panel with action pip, "Movement 21 / 31 ft" bar and End Turn button;
+  movement line = dots along the engine's own walk path (+0x4470 cells), gold within the feet left,
+  red beyond, path length at the end. World -> UI as `CGameAreaNotes` places map notes (zoom aware).
+- 16 new manifest entries (66 total), `pstf_verify` checks call/RIP targets and the 16x12 / 320x320 grid.
+
+**Verified in game** (`launch.ps1 -Lua tests\ingame\tbc_fight.lua`, party AI, screenshots): HUD shows
+Nameless One / Zombie Worker / Morte bestiary cards; TNO's walk stopped at 0.0/31 ft ("no movement
+left"); each later turn one attack round ("Attack round done"); zombie 8 -> 1 -> dead in round 3.
+
+**Gotchas.**
+1. Ported names: win 140459E00 (named `lua_type`) is uiLoadMenu; 140456630 (named uiLoadMenu) is its tokenizer.
+2. `launch.ps1` matched the previous run's log for `-Until` before the game rewrote it: now deletes it first.
+3. A `mosaic` in a small label is scaled to the label (bestiary art 316x492 fits 54x84 cards).
+4. Bestiary entries become known when the engine renders the creature (Render -> SetBestiaryKnown),
+   so the cards always use `imageKnown`.
+
+**Not done / next.** Hover preview of the path before clicking (needs a synchronous `CPathSearch`
+on the game thread; today the line appears once the move is ordered, and the walk stops at the
+budget). Manual party turns and the End Turn button were not clicked in this test (party AI ran the
+turns). Camera does not follow the active creature. Effect-duration rebase and opportunity attacks
+still open.

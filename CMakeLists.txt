@@ -19,6 +19,7 @@ add_library(pstf_logic STATIC
   src/modules/tbc/tbc_rules.cpp
   src/modules/tbc/director.cpp
   src/modules/tbc/tbc_sim.cpp
+  src/modules/tbc/hud.cpp
 )
 target_include_directories(pstf_logic PUBLIC src)
 
@@ -48,6 +49,7 @@ add_library(pst_forever SHARED
   src/core/tick.cpp
   src/core/shot.cpp
   src/engine/sprites.cpp
+  src/engine/menu.cpp
   src/modules/tbc/tbc_module.cpp
 )
 target_link_libraries(pst_forever PRIVATE pstf_logic bcrypt)

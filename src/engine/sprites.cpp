@@ -30,6 +30,8 @@ uint64_t Lookup(int32_t id) {
   return IsSprite(p) ? p : 0;
 }
 
+bool HudOk();
+
 SpriteInfo Info(uint64_t p) {
   SpriteInfo s;
   s.id = R<int32_t>(p + sym::kOffSpriteId);
@@ -41,9 +43,71 @@ SpriteInfo Info(uint64_t p) {
   s.alive = (R<uint32_t>(p + sel) & sym::kStateDead) == 0;
   s.hp = R<int16_t>(p + sym::kOffSpriteHp);
   s.busy = R<uint16_t>(p + sym::kOffSpriteCurAction) != 0 || R<int32_t>(p + sym::kOffSpriteQueueCount) > 0;
+  s.action = R<uint16_t>(p + sym::kOffSpriteCurAction);
+  if (HudOk()) {
+    s.max_hp = R<int16_t>(p + (R<int32_t>(p + sym::kOffSpriteStatsSel) ? sym::kOffSpriteMaxHpA
+                                                                        : sym::kOffSpriteMaxHpB));
+    s.name_ref = R<int32_t>(p + sym::kOffSpriteNameRef);
+    s.has_path = R<uint64_t>(p + sym::kOffSpritePath) != 0;
+    const uint64_t anim = R<uint64_t>(p + sym::kOffSpriteAnim);
+    // Only PST character animations carry the bestiary field.
+    if (anim && R<uint64_t>(anim) == sym::kVaAnimPstVtable) s.bestiary = R<int32_t>(anim + sym::kOffAnimBestiary);
+  }
   return s;
 }
+bool HudOk() {
+  static const int ok = [] {
+    const uint32_t need[] = {sym::kRvaAnimVtblLea, sym::kRvaAnimBestiary, sym::kRvaSpriteAnim,
+                             sym::kRvaMaxHp,       sym::kRvaNameRef,       sym::kRvaPathPtr,
+                             sym::kRvaPathIndex,   sym::kRvaGridX,         sym::kRvaGridY,
+                             sym::kRvaGridSx,      sym::kRvaVisibleArea,   sym::kRvaScreenCoords,
+                             sym::kRvaZoom};
+    int found = 0;
+    for (const auto& s : sym::kAll)
+      for (uint32_t r : need)
+        if (s.rva == r) {
+          if (!CheckSymbol(s)) return 0;
+          ++found;
+        }
+    return found == static_cast<int>(sizeof(need) / sizeof(need[0])) ? 1 : 0;
+  }();
+  return ok != 0;
+}
 }  // namespace
+
+bool HudAvailable() { return SpritesAvailable() && HudOk(); }
+
+std::vector<std::pair<int, int>> PathPoints(int32_t id) {
+  std::vector<std::pair<int, int>> out;
+  const uint64_t p = HudAvailable() ? Lookup(id) : 0;
+  if (!p) return out;
+  const uint64_t cells = R<uint64_t>(p + sym::kOffSpritePath);
+  if (!cells) return out;
+  const int gx = R<int16_t>(sym::kVaGridActualX), gy = R<int16_t>(sym::kVaGridActualY);
+  const int sx = R<uint8_t>(sym::kVaGridSquareX), sy = R<uint8_t>(sym::kVaGridSquareY);
+  const int from = R<int16_t>(p + sym::kOffSpritePathIndex), n = R<int16_t>(p + sym::kOffSpritePathCount);
+  if (gx <= 0 || from < 0 || n > 4096) return out;
+  for (int i = from; i < n; ++i) {
+    const int32_t c = R<int32_t>(cells + 4ull * i);
+    out.emplace_back((c % gx) * sx + sx / 2, (gy - 1 - c / gx) * sy + sy / 2);
+  }
+  return out;
+}
+
+bool WorldToUi(int x, int y, int* ux, int* uy) {
+  const uint64_t g = HudAvailable() ? Game() : 0;
+  if (!g) return false;
+  const uint64_t area = R<uint64_t>(g + sym::kOffGameAreas + 8ull * R<uint8_t>(g + sym::kOffGameVisibleIdx));
+  if (!area) return false;
+  const uint64_t inf = area + sym::kOffAreaInfinity;
+  const float zoom = R<float>(area + sym::kOffAreaZoom);
+  const int sx = x - R<int32_t>(inf + sym::kOffInfView) + R<int32_t>(inf + sym::kOffInfRect);
+  const int sy = y - R<int32_t>(inf + sym::kOffInfView + 4) + R<int32_t>(inf + sym::kOffInfRect + 4);
+  const float z = zoom > 0.05f && zoom < 20.f ? zoom : 1.f;
+  *ux = static_cast<int>(sx / z);
+  *uy = static_cast<int>(sy / z);
+  return true;
+}
 
 bool SpritesAvailable() {
   static const int ok = [] {

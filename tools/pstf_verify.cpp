@@ -133,6 +133,19 @@ int wmain(int argc, wchar_t** argv) {
     if (v != sym::kImageBase + sym::kRvaProcessAI) Fail("slot does not hold ProcessAI", "vtbl");
   }
 
+  // Turn-based HUD.
+  call_to(sym::kRvaMenuCopyCall, sym::kVaCStringCopy, "uiLoadMenu -> CString copy");
+  rip(sym::kRvaAnimVtblLea, 7, 3, sym::kVaAnimPstVtable, "PST animation vtable");
+  rip(sym::kRvaGridX, 7, 3, sym::kVaGridActualX, "GRID_ACTUALX");
+  rip(sym::kRvaGridY, 8, 4, sym::kVaGridActualY, "GRID_ACTUALY");
+  rip(sym::kRvaGridSx, 7, 3, sym::kVaGridSquareX, "GRID_SQUARE_SIZEX");
+  if (auto* p = img.At(static_cast<uint32_t>(sym::kVaGridSquareX - sym::kImageBase), 2)) {
+    if (p[0] != 16 || p[1] != 12) Fail("grid square is not 16x12", "GRID_SQUARE_SIZE");
+  }
+  if (auto* p = img.At(static_cast<uint32_t>(sym::kVaGridActualX - sym::kImageBase), 6)) {
+    if (p[0] != 0x40 || p[1] != 1 || p[4] != 0x40 || p[5] != 1) Fail("grid is not 320x320", "GRID_ACTUAL");
+  }
+
   // Static initialiser of ROUND_LENGTH (.data) is the non-PST default; LoadOptions stores 51.
   if (auto* p = img.At(static_cast<uint32_t>(sym::kVaRoundLength - sym::kImageBase), 4)) {
     uint32_t v = 0;

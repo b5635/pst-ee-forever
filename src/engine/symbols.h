@@ -246,6 +246,65 @@ inline constexpr uint8_t kLuaLoadStringBytes[] = {0x48, 0x83, 0xEC, 0x58, 0x48, 
                                                   0x1C, 0x64, 0x00, 0x48, 0x33, 0xC4, 0x48, 0x89};
 constexpr uint32_t kRvaLuaLoadString = 0x0E7380;
 
+// --- turn-based HUD -------------------------------------------------------------------------
+// uiLoadMenu (lin 581790 uiLoadMenu(CResText*), win 140459E00; the port named it lua_type and gave
+// the name uiLoadMenu to its tokenizer 140456630). After CRes::Demand it copies the UI.MENU text
+// (CString at CResText+0x58) with `call 1404842C0` (CString copy ctor) at 140459EC3, takes the char*,
+// releases the copy and tokenizes the text. We redirect that copy to append our menus.
+inline constexpr uint8_t kMenuCopyCallBytes[] = {0xE8, 0xF8, 0xA3, 0x02, 0x00};
+constexpr uint32_t kRvaMenuCopyCall = 0x459EC3;
+constexpr uint64_t kVaCStringCopy = 0x1404842C0ull;
+// CString::CString(char const*) lin 69BED0, win 140484330 (afxPchNil, strlen, AllocBuffer, memmove).
+inline constexpr uint8_t kCStringCtorBytes[] = {0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83,
+                                                0xEC, 0x20, 0x48, 0x8B, 0x05, 0x6F, 0xCD, 0x29};
+constexpr uint32_t kRvaCStringCtor = 0x484330;
+// Bestiary index: CGameAnimationTypePlanescapeCharacter +0x1D0C (lin SetNewAnimation reads the
+// animation INI key "bestiary"; Render/RenderLarge call SetBestiaryKnown(it)). Ctor win 14038042C:
+// lea rax, vtbl (1406470B0) ... mov [rsi+1D0Ch], edi (-1).
+inline constexpr uint8_t kAnimVtblLeaBytes[] = {0x48, 0x8D, 0x05, 0x7D, 0x6C, 0x2C, 0x00};
+inline constexpr uint8_t kAnimBestiaryBytes[] = {0x89, 0xBE, 0x0C, 0x1D, 0x00, 0x00};
+constexpr uint32_t kRvaAnimVtblLea = 0x38042C, kRvaAnimBestiary = 0x380487;
+constexpr uint64_t kVaAnimPstVtable = 0x1406470B0ull;
+constexpr uint32_t kOffAnimBestiary = 0x1D0C;
+// Sprite -> animation type pointer: CGameAIBase::GetTargetShareType win 14017358E
+// mov rcx,[rdi+3950h] (lin this+1831*8 = +0x3938) then vtable +192 GetPersonalSpace.
+inline constexpr uint8_t kSpriteAnimBytes[] = {0x48, 0x8B, 0x8F, 0x50, 0x39, 0x00, 0x00};
+constexpr uint32_t kRvaSpriteAnim = 0x17358E, kOffSpriteAnim = 0x3950;
+// Max HP i16 in the derived stats (FloatingHP "%d/%d" win 14043A908: sel ? +0xFEC : +0x1C9C).
+inline constexpr uint8_t kMaxHpBytes[] = {0xB9, 0x9C, 0x1C, 0x00, 0x00, 0xB8, 0xEC, 0x0F, 0x00, 0x00};
+constexpr uint32_t kRvaMaxHp = 0x43A908, kOffSpriteMaxHpA = 0xFEC, kOffSpriteMaxHpB = 0x1C9C;
+// Name strref (CGameSprite::GetNameRef lin 521CB0 this+342*4, win 1403C93F4 mov eax,[rcx+558h]).
+inline constexpr uint8_t kNameRefBytes[] = {0x8B, 0x81, 0x58, 0x05, 0x00, 0x00, 0x83, 0xF8, 0xFF};
+constexpr uint32_t kRvaNameRef = 0x3C93F4, kOffSpriteNameRef = 0x558;
+// Walk path (CGameSprite::AIUpdateWalk lin 51FFA0, win 1403B6D20): int cells at +0x4470
+// (1403B718E), next index i16 +0x44F0 vs count i16 +0x4478 (1403B71FA). Cell c: x = c % GRID_ACTUALX,
+// y = GRID_ACTUALY - 1 - c / GRID_ACTUALX; point = (x*SX + SX/2, y*SY + SY/2) (1403B72E8..1403B732D).
+inline constexpr uint8_t kPathPtrBytes[] = {0x4C, 0x8B, 0x8E, 0x70, 0x44, 0x00, 0x00};
+inline constexpr uint8_t kPathIndexBytes[] = {0x0F, 0xB7, 0x8E, 0xF0, 0x44, 0x00, 0x00,
+                                              0x66, 0x3B, 0x8E, 0x78, 0x44, 0x00, 0x00};
+inline constexpr uint8_t kGridXBytes[] = {0x0F, 0xBF, 0x0D, 0x9D, 0x72, 0x27, 0x00};
+inline constexpr uint8_t kGridYBytes[] = {0x44, 0x0F, 0xBF, 0x15, 0x99, 0x72, 0x27, 0x00};
+inline constexpr uint8_t kGridSxBytes[] = {0x0F, 0xB6, 0x05, 0x82, 0x72, 0x27, 0x00};
+constexpr uint32_t kRvaPathPtr = 0x3B718E, kRvaPathIndex = 0x3B71FA;
+constexpr uint32_t kRvaGridX = 0x3B72E8, kRvaGridY = 0x3B72EF, kRvaGridSx = 0x3B72FF;
+constexpr uint32_t kOffSpritePath = 0x4470, kOffSpritePathIndex = 0x44F0, kOffSpritePathCount = 0x4478;
+constexpr uint64_t kVaGridActualX = 0x14062E58Cull, kVaGridActualY = 0x14062E590ull;
+constexpr uint64_t kVaGridSquareX = 0x14062E588ull, kVaGridSquareY = 0x14062E589ull;
+// World -> UI point, as CGameAreaNotes::UpdateButtonPositions (lin 1C1920, win 1401A5B94):
+// area = game[+0xA180 + 8 * byte game[+0xA178]]; CInfinity at area+0x5D8;
+// CInfinity::GetScreenCoordinates (win 140305AB0): screen = p - view(+0x60,+0x64) + rect(+0x78,+0x7C);
+// ui = screen / zoom (float area+0xA14, divss at 1401A5BDD).
+inline constexpr uint8_t kVisibleAreaBytes[] = {0x48, 0x8B, 0x88, 0xC8, 0x10, 0x00, 0x00, 0x0F, 0xB6, 0x81,
+                                                0x78, 0xA1, 0x00, 0x00, 0x48, 0x8B, 0xBC, 0xC1, 0x80, 0xA1,
+                                                0x00, 0x00, 0x48, 0x8D, 0x8F, 0xD8, 0x05, 0x00, 0x00};
+inline constexpr uint8_t kScreenCoordsBytes[] = {0x44, 0x8B, 0x51, 0x78, 0x44, 0x2B, 0x51, 0x60,
+                                                 0x44, 0x8B, 0x59, 0x7C, 0x45, 0x03, 0xD0, 0x49,
+                                                 0xC1, 0xE8, 0x20, 0x44, 0x2B, 0x41, 0x64};
+inline constexpr uint8_t kZoomBytes[] = {0xF3, 0x0F, 0x5E, 0x87, 0x14, 0x0A, 0x00, 0x00};
+constexpr uint32_t kRvaVisibleArea = 0x1A5B94, kRvaScreenCoords = 0x305AB0, kRvaZoom = 0x1A5BDD;
+constexpr uint32_t kOffGameVisibleIdx = 0xA178, kOffGameAreas = 0xA180, kOffAreaInfinity = 0x5D8;
+constexpr uint32_t kOffAreaZoom = 0xA14, kOffInfView = 0x60, kOffInfRect = 0x78;
+
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 inline constexpr Symbol kAll[] = {
     PSTF_SYM("entry", kEntryRva, kEntryBytes, "PE AddressOfEntryPoint"),
@@ -307,6 +366,23 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CGameSprite::Enemy", kRvaEnemy, kEnemyBytes, "lin 4AEA80 / win 140408B00"),
     PSTF_SYM("FloatingHP.hp", kRvaHp, kHpBytes, "lin 571E90 / win 14043A900"),
     PSTF_SYM("luaL_loadstring", kRvaLuaLoadString, kLuaLoadStringBytes, "lin 6A58A0 / win 1400E7380"),
+    PSTF_SYM("uiLoadMenu.copyText", kRvaMenuCopyCall, kMenuCopyCallBytes, "lin 581790 / win 140459EC3"),
+    PSTF_SYM("CString::CString(char const*)", kRvaCStringCtor, kCStringCtorBytes,
+             "lin 69BED0 / win 140484330"),
+    PSTF_SYM("AnimPst.ctor.vtbl", kRvaAnimVtblLea, kAnimVtblLeaBytes, "lin 48FCB0 / win 14038042C"),
+    PSTF_SYM("AnimPst.ctor.bestiary", kRvaAnimBestiary, kAnimBestiaryBytes, "win 140380487"),
+    PSTF_SYM("GetTargetShareType.anim", kRvaSpriteAnim, kSpriteAnimBytes, "lin 184490 / win 14017358E"),
+    PSTF_SYM("FloatingHP.maxhp", kRvaMaxHp, kMaxHpBytes, "lin 571E90 / win 14043A908"),
+    PSTF_SYM("GetNameRef.strref", kRvaNameRef, kNameRefBytes, "lin 521CB0 / win 1403C93F4"),
+    PSTF_SYM("AIUpdateWalk.path", kRvaPathPtr, kPathPtrBytes, "lin 51FFA0 / win 1403B718E"),
+    PSTF_SYM("AIUpdateWalk.pathIndex", kRvaPathIndex, kPathIndexBytes, "win 1403B71FA"),
+    PSTF_SYM("AIUpdateWalk.gridX", kRvaGridX, kGridXBytes, "win 1403B72E8"),
+    PSTF_SYM("AIUpdateWalk.gridY", kRvaGridY, kGridYBytes, "win 1403B72EF"),
+    PSTF_SYM("AIUpdateWalk.gridSx", kRvaGridSx, kGridSxBytes, "win 1403B72FF"),
+    PSTF_SYM("AreaNotes.visibleArea", kRvaVisibleArea, kVisibleAreaBytes, "lin 1C1920 / win 1401A5B94"),
+    PSTF_SYM("CInfinity::GetScreenCoordinates", kRvaScreenCoords, kScreenCoordsBytes,
+             "lin 3A8110 / win 140305AB0"),
+    PSTF_SYM("AreaNotes.zoom", kRvaZoom, kZoomBytes, "win 1401A5BDD"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.

@@ -36,6 +36,8 @@ $text = (($lines + $line) -join "`r`n") + "`r`n"
 [IO.File]::WriteAllText($ini, $text, (New-Object Text.UTF8Encoding $false))
 
 $log = Join-Path $Game 'pst_forever\logs\pst_forever.log'
+# A stale log from the previous run would satisfy -Until before the game rewrites it.
+if (Test-Path $log) { Remove-Item $log -Confirm:$false }
 $env:PSTF_AUTOLOAD = '1'
 $env:PSTF_RUN_LUA = ''
 if ($Lua) {

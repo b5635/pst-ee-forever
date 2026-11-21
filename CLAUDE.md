@@ -88,7 +88,8 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 
 - When you repeat a multi-step check or search twice, turn it into a script or `re.py` subcommand and list it here.
 - Prefer `re.py code X --lines` slices over whole functions; prefer `xref`/`find` over reading code.
-- Probes so far: runtime log above (`voice: examine strref N (ms) played`).
+- Probes so far: runtime log above (`voice: examine strref N (ms) played`; `tbc: X: stop (...)`, `ends turn (... ft left)`, `menu: UI.MENU ... bytes`).
+- HUD check: add `PSTF_SHOT_DIR`/`PSTF_SHOT_EVERY_MS` to the fight test and look at a shot (cards, panel, dots).
 - Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest/Screen`, with tbc on also
   `PSTF_TbcState/EndTurn/MakeEnemyNearest/SpritePos`,
   callable from the in-game console (Ctrl+Space, needs `Cheats` or `Debug Mode` in Baldur.lua) or from a

@@ -23,7 +23,8 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   } else {
     pstf::Log("voice: examine voice disabled in ini");
   }
-  if (pstf::IniBool(ini, "dev.lua", false)) {
+  // The tbc HUD and End Turn button call PSTF_* functions, so tbc needs the Lua bridge too.
+  if (pstf::IniBool(ini, "dev.lua", false) || pstf::IniBool(ini, "tbc.enabled", false)) {
     pstf::dev::InstallLuaBridge();
   } else {
     pstf::Log("dev: Lua bridge disabled in ini");

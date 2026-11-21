@@ -31,6 +31,7 @@
 #include "core/patch.h"
 #include "core/tick.h"
 #include "engine/lua.h"
+#include "engine/menu.h"
 #include "engine/screens.h"
 #include "engine/sprites.h"
 #include "engine/symbols.h"
@@ -38,6 +39,9 @@
 #include "modules/dev/lua_bridge.h"
 #include "modules/tbc/census.h"
 #include "modules/tbc/director.h"
+#include "modules/tbc/economy.h"
+#include "modules/tbc/hud.h"
+#include "modules/tbc/path_line.h"
 #include "modules/tbc/turn_clock.h"
 
 namespace pstf::tbc {
@@ -53,7 +57,14 @@ struct State {
   std::vector<int32_t> in;        // ids in the fight
   std::vector<int32_t> party;     // party ids (last scan)
   int32_t current = -1;           // whose ProcessAI may run
-  TurnClock clock;
+  TurnClock clock;                // kept for the log line format (busy ticks)
+  Economy econ;                   // the active creature's action + movement
+  bool hold_current = false;      // its movement is spent: no AIUpdateWalk
+  int last_x = 0, last_y = 0;     // its position last frame
+  double move_feet = 31.0;        // [tbc] move_feet
+  bool hud = false;               // [tbc] hud: the menu was added to UI.MENU
+  std::string notice;             // HUD notice and when it expires (world ticks)
+  uint32_t notice_until = 0;
   uint32_t last_time = 0;
   bool have_time = false;
   uint64_t area = 0;              // party area identity (compare only)
@@ -77,7 +88,9 @@ void __fastcall HookProcessAI(void* sprite) {
   g_process_ai(sprite);
 }
 void __fastcall HookWalk(void* sprite) {
-  if (Held(engine::SpriteIdOf(sprite))) return;
+  const int32_t id = engine::SpriteIdOf(sprite);
+  if (Held(id)) return;
+  if (g.running && id == g.current && g.hold_current) return;  // movement spent this turn
   g_walk(sprite);
 }
 
@@ -114,6 +127,12 @@ void EndFight(const char* why) {
   g.in.clear();
   g.current = -1;
   g.dir.reset();
+  g.hold_current = false;
+  if (g.hud) {
+    const std::string err = engine::LuaDoString(
+        "pstfTbc = {on=false,cards={},dots={},rdots={}} if pstfTbcOpen then Infinity_PopMenu('PSTF_TBC') end");
+    if (!err.empty()) Log("tbc: hud close failed: %s", err.c_str());
+  }
   Say("Combat over: back to real time");
 }
 
@@ -191,6 +210,12 @@ void OnTurnChange(int32_t prev, int32_t next) {
   const bool party = c && c->r.side == Side::Party;
   const int slot = PartySlot(next);
   g.clock = TurnClock(g.round_ticks, slot >= 0 && !g.auto_party);
+  g.econ = Economy(g.move_feet, g.round_ticks, slot >= 0 && !g.auto_party);
+  g.hold_current = false;
+  {
+    engine::SpriteInfo s0;
+    if (engine::GetSprite(next, &s0)) g.last_x = s0.x, g.last_y = s0.y;
+  }
   if (slot >= 0 && g.auto_party) {
     // Party AI: the engine's own console path (CLUAConsole::Eval) queues the action on that slot.
     const std::string err = engine::LuaDoString(
@@ -212,6 +237,59 @@ bool OurWindowFocused() {
   DWORD pid = 0;
   GetWindowThreadProcessId(GetForegroundWindow(), &pid);
   return pid == GetCurrentProcessId();
+}
+
+void UpdateHud(uint32_t now) {
+  if (!g.hud || !g.running) return;
+  HudView v;
+  v.on = true;
+  v.round = g.dir->Round();
+  for (int32_t id : g.dir->Order()) {
+    engine::SpriteInfo o;
+    if (!engine::GetSprite(id, &o)) continue;
+    const Combatant* c = g.dir->Find(id);
+    HudCard card;
+    card.id = id;
+    card.bestiary = o.bestiary;
+    card.name_ref = o.name_ref;
+    card.name = Who(id);
+    card.hp = o.hp;
+    card.max_hp = o.max_hp;
+    card.foe = c && c->r.side == Side::Hostile;
+    card.active = id == g.current;
+    card.done = c && c->done_this_round;
+    v.cards.push_back(card);
+  }
+  v.party_turn = PartySlot(g.current) >= 0;  // also with party AI (tests, demos)
+  v.move_ft = g.econ.move_ft;
+  v.max_ft = g.econ.max_ft;
+  v.action_used = g.econ.action_used;
+  v.acting = g.econ.acting;
+  if (now < g.notice_until) v.msg = g.notice;
+  engine::SpriteInfo me;
+  if (g.current != -1 && engine::GetSprite(g.current, &me)) {
+    std::vector<Pt> nodes;
+    for (const auto& p : engine::PathPoints(g.current)) nodes.push_back({p.first, p.second});
+    if (!nodes.empty()) {
+      const Pt from{me.x, me.y};
+      for (const Dot& d : PathDots(from, nodes, g.econ.move_ft, 1.5, kHudDots)) {
+        int ux = 0, uy = 0;
+        if (!engine::WorldToUi(d.p.x, d.p.y, &ux, &uy)) continue;
+        auto& list = d.reachable ? v.dots : v.red_dots;
+        list.push_back(ux);
+        list.push_back(uy);
+      }
+      v.path_ft = static_cast<int>(PathFeet(from, nodes) + 0.5);
+      engine::WorldToUi(nodes.back().x, nodes.back().y, &v.label_x, &v.label_y);
+    }
+  }
+  const std::string code = BuildHudLua(v) +
+                           " if not pstfTbcOpen then Infinity_PushMenu('PSTF_TBC') end pstfTbcLayout()";
+  const std::string err = engine::LuaDoString(code.c_str());
+  if (!err.empty()) {
+    static int reported = 0;
+    if (reported++ < 5) Log("tbc: hud update failed: %s", err.c_str());
+  }
 }
 
 void OnTick(uint64_t frame) {
@@ -237,7 +315,7 @@ void OnTick(uint64_t frame) {
 
   // End Turn key (edge), only for party turns and only when the game window has focus.
   const bool down = (GetAsyncKeyState(g.end_turn_vk) & 0x8000) != 0 && OurWindowFocused();
-  if (down && !g.key_down && g.clock.party) g.end_requested = true;
+  if (down && !g.key_down && g.econ.party) g.end_requested = true;
   g.key_down = down;
 
   engine::SpriteInfo s;
@@ -245,20 +323,40 @@ void OnTick(uint64_t frame) {
     g.dir->Remove(cur);
     return;
   }
-  const TurnEnd e = g.clock.Feed(dt, s.busy);
-  if (e != TurnEnd::No || g.end_requested) {
-    static const char* kWhy[] = {"key", "budget", "idle", "cap"};
+  const double moved = FeetBetween(g.last_x, g.last_y, s.x, s.y);
+  g.last_x = s.x, g.last_y = s.y;
+  g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
+  const EconomyStep st = g.econ.Feed(dt, moved, s.has_path, s.action);
+  g.hold_current = st.hold_walk;
+  if (st.stop != Stop::None) {
+    static const char* kStop[] = {"", "Can't get there this turn: no movement left",
+                                  "No action left this turn", "Attack round done"};
+    Log("tbc: %s: stop (%s), action %u, %.1f/%.1f ft left", Who(cur).c_str(),
+        kStop[static_cast<int>(st.stop)], s.action, g.econ.move_ft, g.econ.max_ft);
+    engine::ClearAI(cur);
+    engine::DropPath(cur);
+    if (g.econ.party && st.stop != Stop::RoundDone) {
+      g.notice = kStop[static_cast<int>(st.stop)];
+      g.notice_until = now + 45;
+    }
+  }
+  if (st.end_turn || g.end_requested) {
     std::string hps;
     for (int32_t id : g.in) {
       engine::SpriteInfo o;
       if (engine::GetSprite(id, &o)) hps += " " + Who(id) + "=" + std::to_string(o.hp);
     }
-    Log("tbc: %s ends turn (%s, busy %u/%u ticks, total %u) hp:%s", Who(cur).c_str(),
-        g.end_requested ? "End key" : kWhy[static_cast<int>(e)], g.clock.busy, g.clock.budget,
-        g.clock.total, hps.c_str());
+    Log("tbc: %s ends turn (%s, action %s, %.1f/%.1f ft left, busy %u ticks, total %u) hp:%s",
+        Who(cur).c_str(), g.end_requested ? "End Turn" : "economy",
+        g.econ.action_used ? "used" : "unused", g.econ.move_ft, g.econ.max_ft, g.clock.busy,
+        g.econ.total, hps.c_str());
     g.dir->EndTurn(cur);
-    if (!g.dir->Running()) EndFight("one side is gone");
+    if (!g.dir->Running()) {
+      EndFight("one side is gone");
+      return;
+    }
   }
+  UpdateHud(now);
 }
 
 // --- Lua probes -------------------------------------------------------------------------------
@@ -278,7 +376,7 @@ int __cdecl LuaState(engine::LuaState* L) {
   return 1;
 }
 int __cdecl LuaEndTurn(engine::LuaState* L) {
-  const bool ok = g.running && g.clock.party;
+  const bool ok = g.running && g.econ.party;
   if (ok) g.end_requested = true;
   Log("lua: PSTF_EndTurn -> %d", ok ? 1 : 0);
   engine::LuaPushBool(L, ok);
@@ -340,6 +438,10 @@ bool InstallTbc(const IniMap& ini) {
   g.end_turn_vk = IniInt(ini, "tbc.end_turn_key", VK_END);
   g.auto_party = IniBool(ini, "tbc.auto_party", false);
   {
+    const int feet = IniInt(ini, "tbc.move_feet", 31);
+    g.move_feet = feet > 0 ? feet : 31;
+  }
+  {
     char* v = nullptr;
     size_t n = 0;
     if (_dupenv_s(&v, &n, "PSTF_TBC_AUTOPARTY") == 0 && v) g.auto_party = v[0] == '1';
@@ -379,12 +481,22 @@ bool InstallTbc(const IniMap& ini) {
   g_walk = reinterpret_cast<SpriteFn>(walk1);
   g_process_ai = reinterpret_cast<SpriteFn>(pai);
   if (!AddTickHandler(&OnTick)) return false;
+  if (IniBool(ini, "tbc.hud", true)) {
+    if (engine::HudAvailable() && engine::InstallMenuHook()) {
+      engine::AddMenuText(BuildHudMenu());
+      g.hud = true;
+    } else {
+      Log("tbc: HUD functions differ from the manifest; turn-based HUD off (combat still on)");
+    }
+  }
   dev::AddLuaFunction("PSTF_TbcState", &LuaState);
   dev::AddLuaFunction("PSTF_EndTurn", &LuaEndTurn);
   dev::AddLuaFunction("PSTF_MakeEnemyNearest", &LuaMakeEnemyNearest);
   dev::AddLuaFunction("PSTF_SpritePos", &LuaSpritePos);
-  Log("tbc: installed (ProcessAI slot, 2 walk calls, tick); radii %d/%d/%d, end turn key %X%s",
-      g.radii.start, g.radii.join, g.radii.leave, g.end_turn_vk, g.auto_party ? ", auto party" : "");
+  Log("tbc: installed (ProcessAI slot, 2 walk calls, tick); radii %d/%d/%d, end turn key %X%s, "
+      "move %.0f ft, hud %s",
+      g.radii.start, g.radii.join, g.radii.leave, g.end_turn_vk, g.auto_party ? ", auto party" : "",
+      g.move_feet, g.hud ? "on" : "off");
   return true;
 }
 

@@ -303,9 +303,38 @@ An earlier run without staging started when the hostile walked up on its own, an
   ticks of world time, so durations elapse up to N times faster per round. The combat clock and
   handback rebase (section 5.2.3 census) are not done.
 - No opportunity attacks or reaction prompts yet (`Director::Reaction` exists, not wired).
-- No on-screen turn order bar, hit-chance preview or movement preview; feedback is text only.
+- ~~No on-screen turn order bar or movement preview~~: done in section 9. No hit-chance preview yet.
 - Dialogue/cutscenes during a fight are not special-cased. Dialogue pauses world time, so turns
   simply wait, but this is untested.
 - Initiative ignores Dexterity (bonus 0) until the DEX stat offset is confirmed on Windows.
 - The active party member is not auto-selected; click its portrait.
 - Neutral creatures that turn hostile join only once they are within `join_radius`.
+
+---
+
+## 9. Implemented: BG3 action economy + HUD (`[tbc] move_feet=31`, `hud=1`)
+
+### 9.1 Economy (`src/modules/tbc/economy.h`, replaces the 51-busy-tick turn for both sides)
+| Budget | Rule | Engine fact |
+|---|---|---|
+| Movement 31 ft | feet = sqrt((dx/16)^2 + (dy/12)^2) of the per-frame position delta; 0 left -> skip `AIUpdateWalk`, cancel a path that wants more | cell 16x12 px (`GRID_SQUARE_SIZEX/Y` .rdata 14062E588) |
+| One action | a non-move action (ACTION.IDS, move set in `IsMoveAction`) running with no walk path | current action u16 sprite +0x3F0, path +0x4470 |
+| Attack | one round of ticks from the first non-walking tick, then `ClearAI` | `ROUND_LENGTH` 51 |
+| Cast / item | ends when the engine finishes the action | action id back to 0 |
+| End | party: action used + 0 ft, or End Turn (key / HUD button / `PSTF_EndTurn`); AI: also idle or cap | |
+
+### 9.2 HUD (`src/modules/tbc/hud.cpp`, `src/engine/menu.cpp`)
+- Menus are added in memory to the UI.MENU text (`uiLoadMenu` win 140459E00 copies it with
+  `call 1404842C0` at 140459EC3; we return UI.MENU + our text and keep a reference alive).
+- Each fight frame the module runs `pstfTbc = {...}` (BuildHudLua) + `pstfTbcLayout()`, which places
+  every element with `Infinity_SetArea`. The menu is pushed on fight start and popped on fight end.
+- Card picture: animation type (sprite +0x3950, vtable 1406470B0 = PST character) +0x1D0C bestiary
+  index -> Lua `bestiary[k].index` -> `imageKnown` (or the `global`/`iglobal` variant, as
+  `getBestiaryImage`). Name: strref sprite +0x558 via `Infinity_FetchString`. Max HP: derived stats +4.
+- Movement line: path cells from index +0x44F0 to count +0x4478, decoded as `AIUpdateWalk`;
+  world -> UI = (p - view + viewport rect) / zoom, as `CGameAreaNotes::UpdateButtonPositions`.
+
+### 9.3 Open
+- Path preview on hover (before the click): needs `CPathSearch::FindPath` on a snapshot from the
+  game thread; the search thread owns the shared snapshot today.
+- Camera follow on turn start (`CInfinity::SetViewPosition`, win 140309630, unconfirmed).
