@@ -1,1 +1,7 @@
 # win_ea<TAB>linux demangled name   (hand-confirmed; match.py seeds from these, full_dump.py applies them)
+140218DD0	CGameTrigger::OnActionButton(CPoint const&)
+1404A0840	CTlkTable::Fetch(uint,STR_RES &,int)
+140495460	CSound::SetChannel(int,ulong)
+140495610	CSound::SetFireForget(int)
+140494BD0	CSound::Play(int)
+1404949D0	CSound::GetPlayTime(void)

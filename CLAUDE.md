@@ -22,7 +22,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 
 ## Reverse engineering: search, don't read
 
-- **`python tools/re.py <cmd>`** is the way into the dumps (SQLite index `resources/re/index.sqlite`;
+- **`python -P tools/re.py <cmd>`** is the way into the dumps (`-P`: the script name shadows stdlib `re`) (SQLite index `resources/re/index.sqlite`;
   rebuild with `python tools/re.py build` after any dump change):
   - `find REGEX` names in both binaries with the Linux↔Windows mapping
   - `code NAME [--win] [--lines A-B]` pseudocode (Linux is named; `--win` is the hook target)
@@ -53,7 +53,10 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - `python tools\pstf.py CMD` queries a running game over the dev pipe (`lua`, `actors`, `actor ID`, `hooks`, `shot`).
 - RE tooling guards: `python -m pytest tests/tools -q` (exe hashes, dump completeness, key mappings).
 - RE pipeline: `bash tools/re_pipeline.sh` (see `docs/ARCHITECTURE.md` §2); ~2.5 h, run in the background.
-- (`check.ps1`, `deploy.ps1`, `ingame.ps1`, `pstf.py` are created with the C++ project; update this section when they change.)
+- Exist now: `check.ps1`, `deploy.ps1` (`-Remove` = back to vanilla). Not yet: `ingame.ps1`, `pstf.py`.
+- Symbol manifest is compiled in: `src/engine/symbols.h` (shared by the DLL and `pstf_verify`). Unit tests use
+  `tests/unit/mini_test.h` (no doctest dependency).
+- Runtime log: `<game>\pst_forever\logs\pst_forever.log` (hook status, every examine line played).
 
 ## Working rules
 
@@ -73,4 +76,4 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 
 - When you repeat a multi-step check or search twice, turn it into a script or `re.py` subcommand and list it here.
 - Prefer `re.py code X --lines` slices over whole functions; prefer `xref`/`find` over reading code.
-- Probes so far: (none yet)
+- Probes so far: runtime log above (`voice: examine strref N (ms) played`).

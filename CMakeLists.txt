@@ -46,5 +46,5 @@ target_link_libraries(pstf_tests PRIVATE pstf_logic)
 target_include_directories(pstf_tests PRIVATE tests/unit)
 
 # L0 static hook verification against the on-disk Torment.exe
-add_executable(pstf_verify tools/pstf_verify.cpp)
+add_executable(pstf_verify tools/pstf_verify.cpp src/core/version_guard.cpp src/core/log.cpp)
 target_link_libraries(pstf_verify PRIVATE pstf_logic bcrypt)
