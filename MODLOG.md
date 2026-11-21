@@ -174,3 +174,54 @@ around the slab with gold/red split (screenshot). `tbc_fight.lua` (party AI) ful
 5. Chain deploy after a successful check only (`check && deploy`); a failed build left the old DLL running.
 
 **Not done.** Mouse hover not driven by a real mouse in tests (probe instead); End Turn button click untested.
+
+## 2026-11-21: round clock for effects, spells in turns, AI orchestration, BG3 hotbar/hover/dice (module `tbc`)
+
+**Built.**
+- Round clock (`engine/combat.cpp`, `[tbc] round_effects=1 round_seconds=5`): in a fight no combatant's
+  effects move with world time. Persistent effects (poison, regeneration, DoT) are gated in
+  `ProcessEffectList` (call stub at 140425C36 in place of the timer-running `cmp`); timed and delayed
+  effect ticks (+0x24 type 4096/6/7/8, +0x28 tick) and the natural-regeneration stamp (+0x4B6C) move
+  forward with every frame. At its turn start a creature gets exactly 75 ticks: ticks/stamp back by 75,
+  `HandlePersistantEffects(75)` (the engine's own CompressTime catch-up), forced effect re-evaluation.
+- Held creatures run `ProcessEffectList` every AI tick (scripts/actions still held): spells on them land
+  at once. Projectiles (object type 0, caster +0x68) only move in their caster's turn (vtable slot 3 of
+  each projectile class redirected at runtime after checking slot 1 = `GetObjectType`); a turn waits up
+  to 120 ticks for its projectiles and for spell onsets (delays < 1.5 rounds not on a 5-s step, e.g.
+  Cone of Cold's 100 ticks). Delays on 5-s steps (Adder's Kiss' later hits) stay round-clocked.
+- AI: script waits (WaitRandom, Face, SetGlobal, DisplayString...) cost no action; walking up to an
+  attack target is movement, not the 51-tick round (the short enemy moves). An AI turn whose script
+  picks nothing in 1 s gets `Attack(PlayerN)` (nearest party member) queued through `C:Eval` with party
+  slot 0 pointed at it for that call (`EvalAs`), plus SetInterrupt(FALSE) set directly (sprite +0x560
+  bit 31; the engine clears it when the queue is empty).
+- Pacing/presentation: everyone runs (PST character `SetRunning(1)`, others move scale 11), battle song
+  kept (area +0xFC4 counter), quick camera pan to the active creature (`CInfinity::SetViewPosition`),
+  enemy paths hidden.
+- HUD: hotbar with every weapon/spell/quick item/ability (engine action bar states; icon at slot
+  +0x128), hover card (name, HP bar, hit chance = (21 - (THAC0 - AC)) x 5 % clamped 5..95), dice panel
+  (engine-drawn d20; attack rolls from `Hit`'s FeedBack(4), saves from a `CheckSave` inline hook,
+  success/fail WAVs), red damage fill on initiative portraits.
+
+**Verified in game** (Dead Nations save): `tbc_rules.lua` passes: Blur 450,375,300,225,150 one round per
+own turn; Adder's Kiss on an ally: first hit inside the caster's turn (the turn waited for its
+projectile), the delayed hit 1 frame into the victim's turn; the Nameless One (CON 15, HPCONBON
+REGENERATION_RATE_NAMELESS 450 ticks) regenerated 1 HP exactly at his turn start after 6 rounds, never
+in between. Enemy 320032 casts its own spells; its turn waits for them. Ax of Torment, Ice Knife and
+Cone of Cold cast with `ReallyForceSpellLevel` (SPL headers need caster level 5/9). `tbc_bar.lua`: 7
+buttons for Dak'kon, a click enters the engine's cast cursor. `tbc_hud2.lua` screenshots.
+
+**Gotchas.**
+1. `ProcessEffectList`'s per-tick caller is `ProcessAI`: holding `ProcessAI` freezes effects *and*
+   delays spells landing on held creatures. Both are handled now (round clock + `HeldEffectsTick`).
+2. PST:EE `ForceSpell` silently does nothing when the caster is below the SPL header's minimum level;
+   `ReallyForceSpellLevel(target, spell, level)` casts at a given level.
+3. Many Dead Nations creatures only `WaitRandom`: queued orders are replaced by their script in the
+   same tick unless SetInterrupt(FALSE) is set directly.
+4. Projectile caster is +0x68 on Windows (Linux +0x64); the Windows action-bar icon is at +0x128 (the
+   +0x260 RenderIcon argument is something else).
+5. A Python `str.replace('', x)` (empty anchor) inserts x between every character: assert anchors.
+6. TNO's PST death/revival (0 -> full HP) is not regeneration; tests skip it.
+
+**Open.** Cloudkill on Dead Nations undead does nothing (poison/death immune): test it on living foes.
+Ice Knife misses leave its knife hovering until the 120-tick cap. Hotbar shows up to 12 per category
+(the engine's array size).

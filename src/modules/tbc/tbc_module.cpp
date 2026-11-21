@@ -296,6 +296,11 @@ void OnTurnChange(int32_t prev, int32_t next) {
         g.effect_round_ticks, had ? before.hp : -1, static_cast<int>(engine::TimedEffects(next).size()),
         engine::PersistentCount(next));
   }
+  if (g.run) {
+    const uint8_t before = engine::MoveScale(next);
+    engine::ForceRun(next, true, g.run_scale_other);
+    Log("tbc: %s runs: move scale %u -> %u", Who(next).c_str(), before, engine::MoveScale(next));
+  }
   if (g.camera) {
     engine::SpriteInfo t;
     int cx = 0, cy = 0;

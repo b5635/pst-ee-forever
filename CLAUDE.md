@@ -112,3 +112,11 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   callable from the in-game console (Ctrl+Space, needs `Cheats` or `Debug Mode` in Baldur.lua) or from a
   temporary `<game>\luaAuto.cfg` (runs at boot, before LoadOptions). Every call logs `lua: NAME -> value`.
   Details, engine facts and open questions for turn-based combat: `docs/TBC_RESEARCH.md`.
+- Test-driver probes (env `PSTF_TEST_TICK=1`: Lua `pstfTestTick()` runs every frame after the round-clock
+  shift): `PSTF_TbcCurrent()` (id, round, party, used, acting, ft), `PSTF_FightId(i)`, `PSTF_EvalAs(id, bcs[, 1])`
+  (queue BCS on any creature; 1 = take over), `PSTF_MakeEnemy`, `PSTF_SetHp`, `PSTF_Effects/HasEffect(id, op)`,
+  `PSTF_Objects([caster|-3])`, `PSTF_Stats(id)`, `PSTF_HoverAt(x,y)`, `PSTF_RollProbe(kind, ok, roll)`, `PSTF_BarSlots()`.
+  Env `PSTF_FEEDBACK_LOG=1` logs every engine FeedBack (why a cast failed); `PSTF_TBC_NOFIGHT=1` = probes, no fights.
+- In-game suites: `tests\ingame	bc_rules.lua` (round clock: Blur, Adder's Kiss, regen), `tbc_spells.lua`,
+  `tbc_bar.lua` (hotbar), `tbc_hud2.lua` (hover/dice screenshots). After a run: `bash tools/tlog.sh [pattern]`.
+- Spells in tests: `ReallyForceSpellLevel(target, 2xxx, 12)` (ForceSpell fails below the SPL's minimum level).

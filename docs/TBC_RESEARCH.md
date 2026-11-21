@@ -346,3 +346,44 @@ An earlier run without staging started when the hostile walked up on its own, an
 
 ### 9.4 Open
 - Camera follow on turn start (`CInfinity::SetViewPosition`, win 140309630, unconfirmed).
+
+---
+
+## 10. Implemented: round clock, spells in turns, AI orchestration, BG3 HUD (2026-11-21, later)
+
+### 10.1 Effect time in rounds (`engine/combat.cpp`, `round_rules.h`)
+| Engine fact | Evidence | Use |
+|---|---|---|
+| `ProcessEffectList` runs per tick from `ProcessAI` | lin 4FA830 L686/845/972 | held creatures: `HeldEffectsTick` (+0x3A0 tick counter, then the call) |
+| Persistent effects only while the timer runs | win 140425C36 `cmp byte [game+7824h],0` | call stub: also "skip" for combatants |
+| `HandlePersistantEffects(int ticks)` catch-up | lin 4A46D0 (CompressTime), win 140413BF0 | 75 ticks at the owner's turn start |
+| Timed/delayed effects compare world time | ResolveEffect lin 1DFD20: +0x24 type, +0x28 tick | shifted by every frame's dt; -75 at turn start |
+| Natural regeneration | ProcessEffectList win 140423487: (now - [+0x4B6C]) / HPCONBON rate; TNO column REGENERATION_RATE_NAMELESS (ticks; CON 20 = 75) | stamp shifted like effects |
+| Effects re-evaluated at once | +0x48BC = 1 (AIUpdate 1403B43D1) | after the step |
+Rule: a delayed effect seen with `left` ticks: `OnsetResolvesNow(left)` (not on a 75-tick step and < 112)
+runs on world time inside the caster's turn; otherwise round-clocked. After a step, 1..3 ticks left
+become 4 (no expiry during someone else's turn).
+
+### 10.2 Spells and projectiles
+- Projectiles are objects of type 0 with the caster at +0x68 (DeliverEffects win 140282F3F); AIUpdate is
+  vtable slot 3 for every class. `WatchProjectiles` hooks each class met (slot 1 must be
+  `CGameObject::GetObjectType` 140173050); a projectile of a waiting combatant does not move.
+- Turn waits (cap 120 ticks) while the caster has projectiles, while resolving onsets are pending, and
+  25 ticks after its action ends (the projectile appears up to a second after the cast animation).
+- PST:EE `ForceSpell` fails silently below the SPL header's minimum caster level (Ax 5, Cloudkill and
+  Cone of Cold 9); `ReallyForceSpellLevel` casts at a given level. Cloudkill/Ax/CoC hit only enemies of
+  the caster (PST hardcoded projectiles).
+
+### 10.3 AI orchestration
+- Free actions (`IsIdleAction`): 0, 17, 30, 33, 36, 61, 63, 83, 84, 86, 130, 151, 262, 269, 292, 311, 342, 346, 368.
+- Nudge after 15 ticks with nothing chosen: `ClearAI`, `EvalAs(id, "Attack(PlayerN)")` (party slot 0 holds
+  the creature for that synchronous `C:Eval`), SetInterrupt(FALSE) set directly (sprite +0x560 bit 31,
+  ExecuteAction case 86 win 14040CDA9; ProcessAI clears it when the queue is empty). Gives up after 20
+  idle ticks.
+
+### 10.4 HUD
+- Hotbar: `const.ACTIONBAR_STATE_{WEAPONS,SPELLS,ITEMS,SPECIAL_ABILITES}` (115/116/117/...), slot =
+  CInfGame+0x79C0 + 0x2A0 i, icon +0x128, disabled +0x29C; click = SetState + OnLButtonPressed(slot).
+- Hit chance: needs = THAC0 - AC (derived stats +0x10 / +0x06, Hit win 140414888), 5..95 %.
+- Dice: attack = FeedBack(this, 4, total, hit, roll) at 140415759; target from the three Swing -> Hit calls;
+  saves = CheckSave inline hook (flags effect +0x40, bonus +0x44; rolls in the per-type bytes).
