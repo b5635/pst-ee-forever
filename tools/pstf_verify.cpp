@@ -116,6 +116,23 @@ int wmain(int argc, wchar_t** argv) {
   rip(sym::kRvaGLuaLoad, 7, 3, sym::kVaGLua, "g_lua");
   rip(sym::kRvaContinueLoadScreen, 7, 3, sym::kVaBaldurChitin, "OnContinueGame chitin");
 
+  for (const auto& s : sym::kData) {
+    const uint8_t* p = img.At(s.rva, s.len);
+    if (!p || !BytesEqual(p, s.bytes, s.len)) Fail("data bytes differ", s.name);
+  }
+  call_to(0x226240, sym::kImageBase + sym::kRvaLuaLoadString, "LuaInit -> luaL_loadstring");
+  call_to(sym::kRvaWalkCall1, sym::kVaAIUpdateWalk, "AIUpdate -> AIUpdateWalk 1");
+  call_to(sym::kRvaWalkCall2, sym::kVaAIUpdateWalk, "AIUpdate -> AIUpdateWalk 2");
+  rip(sym::kRvaObjArrayLea, 7, 3, sym::kVaObjArray, "m_pArray");
+  rip(sym::kRvaObjMaxCmp, 7, 3, sym::kVaObjMax, "m_maxArrayIndex");
+  rip(sym::kRvaObjNextCmp, 7, 3, sym::kVaObjNext, "m_nextObjectId");
+  if (sym::kVaSpriteVtable + 35 * 8 != sym::kImageBase + sym::kRvaSlotProcessAI) Fail("slot math", "vtbl");
+  {
+    uint64_t v = 0;
+    std::memcpy(&v, sym::kSlotProcessAIBytes, 8);
+    if (v != sym::kImageBase + sym::kRvaProcessAI) Fail("slot does not hold ProcessAI", "vtbl");
+  }
+
   // Static initialiser of ROUND_LENGTH (.data) is the non-PST default; LoadOptions stores 51.
   if (auto* p = img.At(static_cast<uint32_t>(sym::kVaRoundLength - sym::kImageBase), 4)) {
     uint32_t v = 0;
@@ -123,6 +140,6 @@ int wmain(int argc, wchar_t** argv) {
     if (v != 100) Fail("static ROUND_LENGTH is not 100", "ROUND_LENGTH");
   }
 
-  std::printf("verify: %zu symbols, %d failures\n", std::size(sym::kAll), g_fail);
+  std::printf("verify: %zu symbols, %d failures\n", std::size(sym::kAll) + std::size(sym::kData), g_fail);
   return g_fail ? 1 : 0;
 }

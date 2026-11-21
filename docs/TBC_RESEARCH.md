@@ -5,7 +5,10 @@ Companion to `TURN_BASED_COMBAT_EXTENSION_PLAN.md` (design) for the `tbc` module
 Target: BG3-style turns (initiative order, one action + movement + one reaction per turn, explicit
 End Turn, shared party initiative) on top of PST's own rules.
 
-Status (2026-11-21):
+Status (2026-11-21, later): **turn-based combat runs in the game** (section 8). The notes below
+were written first; section 8 describes what is now implemented and tested.
+
+Status (2026-11-21, first pass):
 - Done: pure core (`src/modules/tbc/`) with 12 unit cases; 12 new manifest entries checked statically;
   a dev Lua bridge (`[dev] lua=1`) verified in the running game.
 - Not wired yet: the director does not take over creatures in game. Section 7 lists the hook points
@@ -251,3 +254,58 @@ lines (expected 15 per second at normal speed, unpaused).
    them on action-done events. Feed `MoveFinished`/`SwingResolved`/`ActionResolved`.
 5. Combat clock + handback rebase (census from 5.2.3).
 6. HUD: Lua `.menu` reading `PSTF_*` snapshots (turn order, budgets), End Turn button.
+
+---
+
+## 8. Implemented: turn-based combat in the game (module `tbc`, `[tbc] enabled=1`)
+
+### 8.1 Model
+- **Start**: a hostile (EA >= 200) within `start_radius` (450) of a living party member, measured
+  with the engine's own isometric ellipse (`dx^2 + 16*dy^2/9 <= r^2`, from `CInfGame::CanRestParty`).
+  Party members, allies (EA <= 30) and hostiles within `join_radius` (650) of the party join.
+  Initiative is rolled once per fight (d10, lower first, party wins ties).
+- **Hold**: only the creature whose turn it is runs `CGameSprite::ProcessAI` (scripts + actions) and
+  `AIUpdateWalk`. For every other combatant the hooks return at once. Animation, effects and incoming
+  triggers keep running, and creatures outside the fight are untouched.
+  - Hooks: vtable slot 35 of `CGameSprite` (win 140649440 -> our function) and the two
+    `call AIUpdateWalk` sites in `CGameSprite::AIUpdate` (1403B6211, 1403B677F).
+- **A turn** is one engine round of the creature's own activity (`turn_clock.h`): `ROUND_LENGTH`
+  (51) ticks of *busy* time, meaning it has a current or queued action.
+  - The engine does the rules and the timing: attack rounds with native APR and weapon speed,
+    casting, walking speed. So movement plus attacks share one round, as in AD&D.
+  - Party turns wait for orders (thinking costs nothing) and end on the budget or the **End** key
+    (`end_turn_key`).
+  - AI turns end when the creature goes idle (after acting, or after 2 s without picking anything),
+    or at a hard cap.
+- **Turn end**: `CGameSprite::ClearAI(0)` + `DropPath`, so no action, path or queue leaks into other
+  turns. Triggers raised while it waits (being hit) arrive afterwards and are read on its next turn.
+- **Join/leave** every frame: newcomers near the party join (they wait for the next round if their
+  slot passed); the dead, those who leave the area and hostiles beyond `leave_radius` (1100) leave.
+  The fight ends when one side is empty, on an area change, or when the world screen goes away.
+- **Feedback**: `Infinity_DisplayString` messages ("Combat!", "Round N: X's turn", "Combat over")
+  and `tbc:` log lines with HP after every turn.
+- **Party AI** (`auto_party=1` or env `PSTF_TBC_AUTOPARTY=1`): party turns queue
+  `Attack(NearestEnemyOf(Myself))` through `C:Eval(text, slot)` and end when idle. Note that
+  `NearestEnemyOf` only finds enemies the creature can see.
+
+### 8.2 Verified in game (2026-11-21)
+`tools\launch.ps1 -Lua tests\ingame\tbc_fight.lua -Env @{PSTF_TBC_AUTOPARTY='1'} -Until 'tbc: fight 1 over' -Close`
+-> exit 0. The log shows:
+1. fight 1 starts, 3 combatants, order "party member 1, enemy 50005, party member 2";
+2. each turn ends on its 51-tick budget, or on idle for the party member with no target in sight;
+3. "enemy 50005 leaves the fight (dead, hp 0)" in round 2, then "Combat over".
+
+Screenshots (`PSTF_SHOT_DIR`) showed the active creature walking while the others stood still.
+An earlier run without staging started when the hostile walked up on its own, and ran 12+ rounds.
+
+### 8.3 Known gaps (next work)
+- Effects and timers run on world time. In a fight with N combatants a round takes about N x 51
+  ticks of world time, so durations elapse up to N times faster per round. The combat clock and
+  handback rebase (section 5.2.3 census) are not done.
+- No opportunity attacks or reaction prompts yet (`Director::Reaction` exists, not wired).
+- No on-screen turn order bar, hit-chance preview or movement preview; feedback is text only.
+- Dialogue/cutscenes during a fight are not special-cased. Dialogue pauses world time, so turns
+  simply wait, but this is untested.
+- Initiative ignores Dexterity (bonus 0) until the DEX stat offset is confirmed on Windows.
+- The active party member is not auto-selected; click its portrait.
+- Neutral creatures that turn hostile join only once they are within `join_radius`.

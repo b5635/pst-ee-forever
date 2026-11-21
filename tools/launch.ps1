@@ -10,6 +10,8 @@ param(
   [string]$Lua = '',                  # Lua file to run in the engine state when the world is ready
   [int]$Timeout = 120,
   [switch]$Close,                     # close the game afterwards (by PID)
+  [string]$Until = '',                # after the script, keep waiting until this regex is in the log
+  [hashtable]$Env = @{},              # extra environment for the game process, e.g. @{PSTF_TBC_AUTOPARTY='1'}
   [string]$Game = 'C:\GOG Games\Planescape Torment - Enhanced Edition',
   [string]$Docs = (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Planescape Torment - Enhanced Edition')
 )
@@ -41,8 +43,10 @@ if ($Lua) {
   if (-not (Test-Path $cand)) { Write-Host "launch: no Lua file $cand"; exit 2 }
   $env:PSTF_RUN_LUA = (Resolve-Path $cand).Path
 }
+foreach ($k in $Env.Keys) { Set-Item -Path "Env:$k" -Value $Env[$k] }
 $p = Start-Process -FilePath (Join-Path $Game 'Torment.exe') -WorkingDirectory $Game -PassThru
 Remove-Item Env:PSTF_AUTOLOAD, Env:PSTF_RUN_LUA -ErrorAction SilentlyContinue
+foreach ($k in $Env.Keys) { Remove-Item -Path "Env:$k" -ErrorAction SilentlyContinue }
 Write-Host "launch: pid $($p.Id), save '$($pick.Name)'"
 
 $deadline = (Get-Date).AddSeconds($Timeout)
@@ -53,9 +57,12 @@ while ((Get-Date) -lt $deadline) {
   if (-not (Test-Path $log)) { continue }
   $t = Get-Content $log -Raw -ErrorAction SilentlyContinue
   if ($t -match 'dev: autoload: FAILED') { $state = 'failed'; break }
-  if ($t -match 'dev: autoload: done') { $state = 'done'; break }
+  if ($t -match 'dev: autoload: done') {
+    if (-not $Until) { $state = 'done'; break }
+    if ($t -match $Until) { $state = 'done'; break }
+  }
 }
-Get-Content $log | Select-String -Pattern ' (dev|lua|tick|manifest|patch): ' | ForEach-Object { Write-Host "  $($_.Line)" }
+Get-Content $log | Select-String -Pattern ' (dev|lua|tick|manifest|patch|tbc): ' | ForEach-Object { Write-Host "  $($_.Line)" }
 $scriptOk = -not (Select-String -Path $log -Pattern 'dev: autorun .*: lua error' -Quiet)
 if ($Close -and -not $p.HasExited) { Stop-Process -Id $p.Id -Confirm:$false; Write-Host "launch: closed pid $($p.Id)" }
 Write-Host "launch: $state"

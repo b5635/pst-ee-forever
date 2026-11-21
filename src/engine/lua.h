@@ -22,5 +22,7 @@ double LuaNumberArg(LuaState* L, int idx, double fallback);  // fallback if abse
 // Runs a Lua file in the engine's global state (g_lua). Returns "" on success, else the error text.
 // Game thread only, outside any engine Lua call (we use it from the frame tick).
 std::string LuaDoFile(const char* path);
+std::string LuaDoString(const char* code);  // same, for a chunk of Lua source (luaL_loadstring)
+std::string LuaQuote(const std::string& s); // "..." Lua string literal
 
 }  // namespace pstf::engine

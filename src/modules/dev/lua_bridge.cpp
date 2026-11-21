@@ -8,6 +8,8 @@
 
 #include <cstdio>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "core/log.h"
 #include "core/patch.h"
@@ -23,6 +25,11 @@ namespace {
 using engine::LuaState;
 using LoadFileFn = int(__fastcall*)(LuaState*, const char*, const char*);
 LoadFileFn g_loadfile = nullptr;
+
+std::vector<std::pair<const char*, engine::LuaCFn>>& Extra() {
+  static std::vector<std::pair<const char*, engine::LuaCFn>> v;
+  return v;
+}
 
 int Ret(LuaState* L, const char* fn, double v) {
   Log("lua: %s -> %g", fn, v);
@@ -92,12 +99,15 @@ int __fastcall LuaAutoLoad(LuaState* L, const char* file, const char* mode) {
                    {"PSTF_TbcSim", TbcSim},           {"PSTF_SelfTest", SelfTest},
                    {"PSTF_Screen", Screen}};
   for (const auto& f : fns) engine::LuaRegister(L, f.name, f.fn);
+  for (const auto& f : Extra()) engine::LuaRegister(L, f.first, f.second);
   Log("dev: %zu PSTF_* Lua functions registered (round length %u, engine mode %d)",
-      sizeof(fns) / sizeof(fns[0]), engine::RoundLengthTicks(), engine::EngineMode());
+      sizeof(fns) / sizeof(fns[0]) + Extra().size(), engine::RoundLengthTicks(), engine::EngineMode());
   return g_loadfile(L, file, mode);
 }
 
 }  // namespace
+
+void AddLuaFunction(const char* name, engine::LuaCFn fn) { Extra().emplace_back(name, fn); }
 
 bool InstallLuaBridge() {
   if (!engine::LuaApiAvailable() || !engine::WorldApiAvailable()) {

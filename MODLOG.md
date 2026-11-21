@@ -79,3 +79,31 @@ its own thread (`SearchThreadMain`). The ported `lua_createtable`/`lua_setfield`
   `PSTF_RoundsForSeconds(15) -> 5`, `PSTF_SelfTest -> ok`, about 3 s from launch to script.
 - Gotchas: the game is killed by PID, so Baldur.lua is not rewritten on that exit (our edits persist).
   The ported name of 140144250 (`__acrt_uninitialize_tmpfile`) is wrong: it is CBaldurChitin::SynchronousUpdate.
+
+## 2026-11-21: turn-based combat in the game (module `tbc`)
+
+**Route.** No parallel rules engine: hold every combatant except the active one by skipping its
+`CGameSprite::ProcessAI` (vtable slot 35, win 140649440) and `AIUpdateWalk` (two call sites in
+`AIUpdate`). The active one runs the engine for one round of busy time (51 ticks), then
+`ClearAI(0)` + `DropPath`. Census, turn clock and director are pure and unit-tested; details are in
+`docs/TBC_RESEARCH.md` section 8.
+
+**Engine facts found.**
+- Windows `CGameSprite` vtable is at 140649328 (found by scanning `.rdata` for the ProcessAI pointer).
+  Slot = Linux slot - 1 near AIUpdate/ProcessAI, but slots 29..34 do not map 1:1.
+- Object array at 14072D860 (16-byte entries); party ids at CInfGame +0xA200.
+- Sprite: +0x0C pos, +0x18 area, +0x38 EA, +0x48 id, +0x348 queue count, +0x3F0 current action,
+  +0x574 HP. Alive is bit 0x800 of the state word chosen by +0x4BBC (+0xFE8 or +0x1C98; Linux +0x1C90).
+- The Windows sprite layout drifts from Linux past about 0x1000.
+
+**Verified.** `tbc_fight.lua` with party AI: the fight starts, turns rotate in initiative order,
+the zombie dies on round 2 to the protagonist's attacks (engine rules), "Combat over", exit 0.
+
+**Gotchas.**
+1. `NearestEnemyOf` needs line of sight. The test therefore walks the protagonist up with
+   `C:Eval('MoveToPoint([x.y])', 0)`.
+2. `C:Eval(text, -1)` runs as the area's script object; `C:Eval(text, slot)` runs as party member `slot`.
+3. Someone clicked examine points during one test run and the game then closed. Fullscreen test runs
+   take the screen, so keep them short or ask first.
+
+**Next.** Combat clock and effect rebase, opportunity attacks, turn order UI, Dexterity initiative.

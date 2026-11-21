@@ -69,4 +69,13 @@ uint64_t RedirectCall(const sym::Symbol& site, void* detour) {
   return *original;
 }
 
+uint64_t ReplacePointer(const sym::Symbol& slot, void* repl) {
+  if (slot.len != 8 || !CheckSymbol(slot)) return 0;
+  uint64_t old = 0;
+  std::memcpy(&old, Va(slot.rva), 8);
+  const uint64_t v = reinterpret_cast<uint64_t>(repl);
+  if (!WriteCode(Va(slot.rva), &v, 8)) return 0;
+  return old;
+}
+
 }  // namespace pstf

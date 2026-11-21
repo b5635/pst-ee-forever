@@ -15,4 +15,8 @@ bool CheckSymbol(const sym::Symbol& s);
 // Verifies the manifest bytes first. Returns the original call target, or 0 on failure.
 uint64_t RedirectCall(const sym::Symbol& site, void* detour);
 
+// Replaces the 8-byte pointer at `slot` (e.g. a vtable entry) after checking the manifest bytes.
+// Returns the old pointer, or 0 on failure.
+uint64_t ReplacePointer(const sym::Symbol& slot, void* repl);
+
 }  // namespace pstf

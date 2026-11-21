@@ -176,6 +176,76 @@ constexpr uint32_t kOffChitinStartScreen = 0x1138;
 constexpr uint32_t kOffChitinWorldScreen = 0x1148;
 constexpr uint32_t kOffChitinLoadScreen = 0x1110;
 
+// --- creatures (turn-based combat) ---------------------------------------------------------------
+// Object array (lin CGameObjectArray::GetDeny 362B80): 16-byte entries {u16 seq, pad, CGameObject* at +8},
+// id = (index << 16) | seq. Windows (CInfGame::CanRestParty win 1402D28B0): m_pArray 14072D860
+// (1402D2910 lea r8), m_maxArrayIndex i16 14072D854 (1402D2965), m_nextObjectId i16 14072D858 (1402D297B).
+// Party: CInfGame +0xA200 i32 ids[6], +0xA218 i16 count (1402D294C, 1402D2917).
+// Sprite (Windows offsets; the CGameSprite layout DRIFTS from Linux past ~0x1000):
+//   +0x0C/+0x10 pos x,y and +0x18 CGameArea* (1402D29CF/1402D29AA); +0x38 EA (CGameSprite::Enemy
+//   140408B14); +0x48 id (140408BED); +0x348 queued-action count (GetNextAction 140172D31);
+//   +0x3F0 current action id, 0 = none (ClearAI 140404BC6..); alive = !(state & 0x800) where
+//   state = *(u32*)(sprite + (*(i32*)(sprite+0x4BBC) ? 0xFE8 : 0x1C98)) (CGameSprite::Animate 1403FB520).
+inline constexpr uint8_t kObjArrayLeaBytes[] = {0x4C, 0x8D, 0x05, 0x49, 0xAF, 0x45, 0x00};
+inline constexpr uint8_t kObjMaxCmpBytes[] = {0x66, 0x39, 0x05, 0xE8, 0xAE, 0x45, 0x00};
+inline constexpr uint8_t kObjNextCmpBytes[] = {0x66, 0x39, 0x0D, 0xD6, 0xAE, 0x45, 0x00};
+inline constexpr uint8_t kPartyCountBytes[] = {0x41, 0x0F, 0xB7, 0x8C, 0x24, 0x18, 0xA2, 0x00, 0x00};
+inline constexpr uint8_t kPartyIdsBytes[] = {0x41, 0x8B, 0x8C, 0x84, 0x00, 0xA2, 0x00, 0x00};
+inline constexpr uint8_t kSpriteAreaBytes[] = {0x49, 0x8B, 0x46, 0x18};
+inline constexpr uint8_t kSpritePosBytes[] = {0x4D, 0x8B, 0x66, 0x0C};
+inline constexpr uint8_t kAnimateBytes[] = {0x83, 0xB9, 0xBC, 0x4B, 0x00, 0x00, 0x00, 0xB8, 0xE8, 0x0F, 0x00,
+                                            0x00, 0xBA, 0x98, 0x1C, 0x00, 0x00, 0x0F, 0x44, 0xC2, 0x8B, 0x04,
+                                            0x08, 0xC1, 0xE8, 0x0B, 0xF7, 0xD0, 0x83, 0xE0, 0x01, 0xC3};
+inline constexpr uint8_t kEnemyEaBytes[] = {0x0F, 0xB6, 0x05, 0x57, 0x67, 0x21, 0x00, 0x48, 0x8B, 0xF9, 0x88, 0x41, 0x38};
+inline constexpr uint8_t kEnemyIdBytes[] = {0x8B, 0x57, 0x48};
+inline constexpr uint8_t kQueueCountBytes[] = {0x44, 0x39, 0xA1, 0x48, 0x03, 0x00, 0x00};
+inline constexpr uint8_t kClearAICurActionBytes[] = {0x0F, 0xB7, 0x05, 0xD3, 0x75, 0x32, 0x00, 0x48, 0x8D, 0x8F, 0xF8,
+                                                     0x03, 0x00, 0x00, 0x66, 0x89, 0x87, 0xF0, 0x03, 0x00, 0x00};
+constexpr uint32_t kRvaObjArrayLea = 0x2D2910, kRvaObjMaxCmp = 0x2D2965, kRvaObjNextCmp = 0x2D297B;
+constexpr uint32_t kRvaPartyCount = 0x2D2917, kRvaPartyIds = 0x2D294C;
+constexpr uint32_t kRvaSpriteArea = 0x2D29AA, kRvaSpritePos = 0x2D29CF;
+constexpr uint32_t kRvaAnimate = 0x3FB520, kRvaEnemyEa = 0x408B0A, kRvaEnemyId = 0x408BED;
+constexpr uint32_t kRvaQueueCount = 0x172D31, kRvaClearAICurAction = 0x404BC6;
+constexpr uint64_t kVaObjArray = 0x14072D860ull, kVaObjMax = 0x14072D854ull, kVaObjNext = 0x14072D858ull;
+constexpr uint32_t kOffGamePartyIds = 0xA200, kOffGamePartyCount = 0xA218;
+constexpr uint32_t kOffSpritePos = 0x0C, kOffSpriteArea = 0x18, kOffSpriteEa = 0x38, kOffSpriteId = 0x48;
+constexpr uint32_t kOffSpriteQueueCount = 0x348, kOffSpriteCurAction = 0x3F0;
+constexpr uint32_t kOffSpriteStatsSel = 0x4BBC, kOffSpriteStatsA = 0xFE8, kOffSpriteStatsB = 0x1C98;
+constexpr uint32_t kStateDead = 0x800;
+// Current HP i16 at sprite+0x574 (CGameSprite::FloatingHP "%d/%d": lin this+698*2, win 14043A900).
+inline constexpr uint8_t kHpBytes[] = {0x44, 0x0F, 0xBF, 0x86, 0x74, 0x05, 0x00, 0x00};
+constexpr uint32_t kRvaHp = 0x43A900, kOffSpriteHp = 0x574;
+
+// CGameSprite vtable (win 140649328; lin _ZTV11CGameSprite E57298). Windows slot = Linux slot - 1
+// around AIUpdate/ProcessAI (one MSVC deleting dtor vs two GCC dtors); slots 29..34 do NOT map 1:1.
+//   slot 3 AIUpdate 1403B4330, slot 35 (+0x118, VA 140649440) ProcessAI 140421830 (lin slot 36).
+constexpr uint64_t kVaSpriteVtable = 0x140649328ull;
+inline constexpr uint8_t kSlotProcessAIBytes[] = {0x30, 0x18, 0x42, 0x40, 0x01, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaSlotProcessAI = 0x649440;
+inline constexpr uint8_t kProcessAIBytes[] = {0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x55, 0x48,
+                                              0x8D, 0x6C, 0x24, 0xF0, 0x48, 0x81, 0xEC, 0x10};
+constexpr uint32_t kRvaProcessAI = 0x421830;
+// CGameSprite::AIUpdate calls CGameSprite::AIUpdateWalk (lin 51FFA0, win 1403B6D20) at two sites; void.
+inline constexpr uint8_t kWalkCall1Bytes[] = {0xE8, 0x0A, 0x0B, 0x00, 0x00};
+inline constexpr uint8_t kWalkCall2Bytes[] = {0xE8, 0x9C, 0x05, 0x00, 0x00};
+constexpr uint32_t kRvaWalkCall1 = 0x3B6211, kRvaWalkCall2 = 0x3B677F;
+constexpr uint64_t kVaAIUpdateWalk = 0x1403B6D20ull;
+// CGameSprite::ClearAI(uchar) lin 4A5320, win 140404B90 (vtable slot 31): ClearActions(0) via +0xC8,
+//   ClearTriggers, SetCurrAction(NULL_ACTION 14072C1A0) via +0x120, resets +0x3F0.
+inline constexpr uint8_t kClearAIBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83,
+                                            0xEC, 0x20, 0x48, 0x8B, 0x01, 0x0F, 0xB6, 0xDA};
+// CGameSprite::DropPath lin 505F80, win 1403C4280: frees the path at +0x4470 (lin +0x4458).
+inline constexpr uint8_t kDropPathBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B,
+                                             0xD9, 0x48, 0x8B, 0x89, 0x70, 0x44, 0x00, 0x00};
+// CGameSprite::Enemy (action Enemy()) lin 4AEA80, win 140408B00: EA := ENEMY the engine's way.
+inline constexpr uint8_t kEnemyBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83,
+                                          0xEC, 0x40, 0x0F, 0xB6, 0x05, 0x57, 0x67, 0x21};
+constexpr uint32_t kRvaClearAI = 0x404B90, kRvaDropPath = 0x3C4280, kRvaEnemy = 0x408B00;
+// luaL_loadstring lin 6A58A0, win 1400E7380 (LuaInit calls it at 140226240 for "C = CLUAConsole:new()").
+inline constexpr uint8_t kLuaLoadStringBytes[] = {0x48, 0x83, 0xEC, 0x58, 0x48, 0x8B, 0x05, 0x4D,
+                                                  0x1C, 0x64, 0x00, 0x48, 0x33, 0xC4, 0x48, 0x89};
+constexpr uint32_t kRvaLuaLoadString = 0x0E7380;
+
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 inline constexpr Symbol kAll[] = {
     PSTF_SYM("entry", kEntryRva, kEntryBytes, "PE AddressOfEntryPoint"),
@@ -217,6 +287,32 @@ inline constexpr Symbol kAll[] = {
              "lin 40F4C0 / win 1403459C5"),
     PSTF_SYM("CScreenStart::OnContinueGame", kRvaOnContinueGame, kOnContinueGameBytes,
              "lin 40F4C0 / win 1403459A0"),
+    PSTF_SYM("CanRestParty.objArray", kRvaObjArrayLea, kObjArrayLeaBytes, "lin 37AD20 / win 1402D2910"),
+    PSTF_SYM("CanRestParty.objMax", kRvaObjMaxCmp, kObjMaxCmpBytes, "win 1402D2965"),
+    PSTF_SYM("CanRestParty.objNext", kRvaObjNextCmp, kObjNextCmpBytes, "win 1402D297B"),
+    PSTF_SYM("CanRestParty.partyCount", kRvaPartyCount, kPartyCountBytes, "win 1402D2917"),
+    PSTF_SYM("CanRestParty.partyIds", kRvaPartyIds, kPartyIdsBytes, "win 1402D294C"),
+    PSTF_SYM("CanRestParty.spriteArea", kRvaSpriteArea, kSpriteAreaBytes, "win 1402D29AA"),
+    PSTF_SYM("CanRestParty.spritePos", kRvaSpritePos, kSpritePosBytes, "win 1402D29CF"),
+    PSTF_SYM("CGameSprite::Animate", kRvaAnimate, kAnimateBytes, "lin 4A2030 / win 1403FB520"),
+    PSTF_SYM("Enemy.ea", kRvaEnemyEa, kEnemyEaBytes, "lin 4AEA80 / win 140408B0A"),
+    PSTF_SYM("Enemy.id", kRvaEnemyId, kEnemyIdBytes, "win 140408BED"),
+    PSTF_SYM("GetNextAction.queueCount", kRvaQueueCount, kQueueCountBytes, "lin 183B00 / win 140172D31"),
+    PSTF_SYM("ClearAI.curAction", kRvaClearAICurAction, kClearAICurActionBytes, "win 140404BC6"),
+    PSTF_SYM("CGameSprite::ProcessAI", kRvaProcessAI, kProcessAIBytes, "lin 4FA830 / win 140421830"),
+    PSTF_SYM("AIUpdate.walk1", kRvaWalkCall1, kWalkCall1Bytes, "lin 53A510 / win 1403B6211"),
+    PSTF_SYM("AIUpdate.walk2", kRvaWalkCall2, kWalkCall2Bytes, "win 1403B677F"),
+    PSTF_SYM("CGameSprite::ClearAI", kRvaClearAI, kClearAIBytes, "lin 4A5320 / win 140404B90"),
+    PSTF_SYM("CGameSprite::DropPath", kRvaDropPath, kDropPathBytes, "lin 505F80 / win 1403C4280"),
+    PSTF_SYM("CGameSprite::Enemy", kRvaEnemy, kEnemyBytes, "lin 4AEA80 / win 140408B00"),
+    PSTF_SYM("FloatingHP.hp", kRvaHp, kHpBytes, "lin 571E90 / win 14043A900"),
+    PSTF_SYM("luaL_loadstring", kRvaLuaLoadString, kLuaLoadStringBytes, "lin 6A58A0 / win 1400E7380"),
+};
+
+// Data-section entries (vtable slots): checked like kAll but not required to be executable.
+inline constexpr Symbol kData[] = {
+    PSTF_SYM("CGameSprite.vtbl.ProcessAI", kRvaSlotProcessAI, kSlotProcessAIBytes,
+             "vtable win 140649328 slot 35 / lin E57298 slot 36"),
 };
 #undef PSTF_SYM
 

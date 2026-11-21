@@ -30,6 +30,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   - `asm NAME [--lin] [--lines A-B]` disassembly + IDA prototype (Windows by default: hook prologues)
   - `data REGEX [--win]` who reads/writes a global · `data FUNC --uses [--win]` globals a function touches
   - `addr NAME` Windows VA/RVA/bytes/unique signature (for the symbol manifest)
+- `python -I tools/vtable.py lin CLASS | win VA [N]`: vtable slots with names (Linux) / ported names (Windows).
 - `python -I tools/exe_bytes.py VA N [--rel32|--u32]`: raw bytes of the on-disk exe at any VA (code or
   `.data`), as C++ array, with rel32/RIP target or dword value. Use it for every manifest entry.
 - The dumps are complete (every function: pseudocode, disassembly, calls, data refs, prototype; proof in
@@ -61,6 +62,9 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - RE tooling guards: `python -m pytest tests/tools -q` (exe hashes, dump completeness, key mappings).
 - RE pipeline: `bash tools/re_pipeline.sh` (see `docs/ARCHITECTURE.md` §2); ~2.5 h, run in the background.
 - Exist now: `check.ps1`, `deploy.ps1` (`-Remove` = back to vanilla), `launch.ps1`. Not yet: `pstf.py` (pipe).
+- **Turn-based fight test**: `tools\launch.ps1 -Lua tests\ingame\tbc_fight.lua -Env @{PSTF_TBC_AUTOPARTY='1'} -Until 'tbc: fight 1 over' -Close`
+  (exit 0 = a full fight ran; `tbc:` log lines carry turns, reasons and HP). Screenshots of the running game:
+  add `PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='5000'` to `-Env` (half-size BMPs from the game's own GL frame).
 - Symbol manifest is compiled in: `src/engine/symbols.h` (shared by the DLL and `pstf_verify`). Unit tests use
   `tests/unit/mini_test.h` (no doctest dependency).
 - Runtime log: `<game>\pst_forever\logs\pst_forever.log` (hook status, every examine line played).
@@ -85,7 +89,8 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - When you repeat a multi-step check or search twice, turn it into a script or `re.py` subcommand and list it here.
 - Prefer `re.py code X --lines` slices over whole functions; prefer `xref`/`find` over reading code.
 - Probes so far: runtime log above (`voice: examine strref N (ms) played`).
-- Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest/Screen`,
+- Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest/Screen`, with tbc on also
+  `PSTF_TbcState/EndTurn/MakeEnemyNearest/SpritePos`,
   callable from the in-game console (Ctrl+Space, needs `Cheats` or `Debug Mode` in Baldur.lua) or from a
   temporary `<game>\luaAuto.cfg` (runs at boot, before LoadOptions). Every call logs `lua: NAME -> value`.
   Details, engine facts and open questions for turn-based combat: `docs/TBC_RESEARCH.md`.

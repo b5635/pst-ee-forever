@@ -241,3 +241,62 @@ TEST_CASE("dev autoload: continue after a stable start screen, script after a st
   c.ContinueFailed();
   CHECK(c.Step(Scr::World) == Act::None);
 }
+
+#include "modules/tbc/census.h"
+#include "modules/tbc/turn_clock.h"
+
+TEST_CASE("tbc census: start, join, leave") {
+  Radii r;  // 450 / 650 / 1100
+  std::vector<Seen> w = {
+      {1, true, 2, true, 1000, 1000},     // party (EA PC)
+      {2, true, 2, true, 1040, 1000},     // party
+      {10, false, 255, true, 1300, 1000}, // hostile 300 px away: inside start radius
+      {11, false, 255, true, 1600, 1000}, // hostile 600: joins, does not start
+      {12, false, 128, true, 1010, 1000}, // neutral next to us: never joins
+      {13, false, 255, false, 1001, 1000},// dead hostile
+      {14, false, 255, true, 3000, 1000}, // far hostile
+  };
+  auto c = Census(w, {}, false, r);
+  CHECK(c.start);
+  std::vector<int32_t> ids;
+  for (auto& s : c.join) ids.push_back(s.id);
+  std::sort(ids.begin(), ids.end());
+  CHECK((ids == std::vector<int32_t>{1, 2, 10, 11}));
+
+  w[2].x = 1600;  // nearest hostile now 600 away: no fight yet
+  CHECK(!Census(w, {}, false, r).start);
+  // vertical distance counts 4/3 more (isometric): 340 px up = 453 on the ellipse
+  CHECK(!Near(0, 0, 0, 340, 450));
+  CHECK(Near(0, 0, 0, 337, 450));
+
+  // running: 10 died, 14 fled out of range was never in; 11 runs off beyond 1100
+  w[2].alive = false;
+  w[3].x = 2200;
+  auto d = Census(w, {1, 2, 10, 11}, true, r);
+  std::sort(d.leave.begin(), d.leave.end());
+  CHECK((d.leave == std::vector<int32_t>{10, 11}));
+  CHECK(d.join.empty());
+  // a party member who left the area (not in the list) leaves too
+  auto e = Census({w[0]}, {1, 2}, true, r);
+  CHECK((e.leave == std::vector<int32_t>{2}));
+}
+
+TEST_CASE("tbc turn clock: budget of busy ticks, AI idle end, party waits") {
+  TurnClock ai(51, false);
+  CHECK(ai.Feed(10, false) == TurnEnd::No);  // thinking
+  CHECK(ai.Feed(10, true) == TurnEnd::No);   // attacking
+  CHECK(ai.Feed(5, false) == TurnEnd::No);
+  CHECK(ai.Feed(3, false) == TurnEnd::Idle); // 8 idle ticks after acting
+  TurnClock lazy(51, false);
+  CHECK(lazy.Feed(29, false) == TurnEnd::No);
+  CHECK(lazy.Feed(1, false) == TurnEnd::Idle);  // nothing chosen in 2 s
+  TurnClock busy(51, false);
+  CHECK(busy.Feed(50, true) == TurnEnd::No);
+  CHECK(busy.Feed(1, true) == TurnEnd::Budget);
+  TurnClock pc(51, true);
+  CHECK(pc.Feed(10000, false) == TurnEnd::No);  // the player thinks for free
+  CHECK(pc.Feed(30, true) == TurnEnd::No);
+  CHECK(pc.Feed(500, false) == TurnEnd::No);   // walked, now waits for more orders
+  CHECK(pc.Feed(21, true) == TurnEnd::Budget);
+  CHECK(pc.busy == 51);
+}

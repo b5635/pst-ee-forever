@@ -16,6 +16,7 @@ using GetTopFn = int(__fastcall*)(LuaState*);
 using LoadFileXFn = int(__fastcall*)(LuaState*, const char*, const char*);
 using PCallKFn = int(__fastcall*)(LuaState*, int, int, int, int, void*);
 using SetTopFn = void(__fastcall*)(LuaState*, int);
+using LoadStringFn = int(__fastcall*)(LuaState*, const char*);
 using ToLStringFn = const char*(__fastcall*)(LuaState*, int, size_t*);
 
 template <class F>
@@ -29,7 +30,8 @@ bool LuaApiAvailable() {
     const uint32_t need[] = {sym::kRvaLuaPushCClosure, sym::kRvaLuaSetGlobal, sym::kRvaLuaPushNumber,
                              sym::kRvaLuaPushString,   sym::kRvaLuaPushBoolean, sym::kRvaLuaToNumberX,
                              sym::kRvaLuaGetTop,       sym::kRvaLuaPCallK,      sym::kRvaLuaSetTop,
-                             sym::kRvaLuaToLString,    sym::kRvaLuaLoadFileX,   sym::kRvaGLuaLoad};
+                             sym::kRvaLuaToLString,    sym::kRvaLuaLoadFileX,   sym::kRvaGLuaLoad,
+                             sym::kRvaLuaLoadString};
     int found = 0;
     for (const auto& s : sym::kAll) {
       for (uint32_t r : need) {
@@ -58,17 +60,36 @@ double LuaNumberArg(LuaState* L, int idx, double fallback) {
   return isnum ? v : fallback;
 }
 
-std::string LuaDoFile(const char* path) {
+namespace {
+std::string Run(bool file, const char* what) {
   if (!LuaApiAvailable()) return "Lua API differs from the manifest";
   LuaState* L = *reinterpret_cast<LuaState* const volatile*>(sym::kVaGLua);
   if (!L) return "no Lua state";
-  int rc = Fn<LoadFileXFn>(sym::kRvaLuaLoadFileX)(L, path, nullptr);
+  int rc = file ? Fn<LoadFileXFn>(sym::kRvaLuaLoadFileX)(L, what, nullptr)
+                : Fn<LoadStringFn>(sym::kRvaLuaLoadString)(L, what);
   if (rc == 0) rc = Fn<PCallKFn>(sym::kRvaLuaPCallK)(L, 0, 0, 0, 0, nullptr);
   if (rc == 0) return "";
   const char* msg = Fn<ToLStringFn>(sym::kRvaLuaToLString)(L, -1, nullptr);
   std::string out = "lua error " + std::to_string(rc) + ": " + (msg ? msg : "?");
   Fn<SetTopFn>(sym::kRvaLuaSetTop)(L, -2);
   return out;
+}
+}  // namespace
+
+std::string LuaDoFile(const char* path) { return Run(true, path); }
+std::string LuaDoString(const char* code) { return Run(false, code); }
+
+std::string LuaQuote(const std::string& s) {
+  std::string q = "\"";
+  for (char c : s) {
+    if (c == '\\' || c == '"') q += '\\';
+    if (c == '\n') {
+      q += "\\n";
+      continue;
+    }
+    q += c;
+  }
+  return q + "\"";
 }
 
 }  // namespace pstf::engine

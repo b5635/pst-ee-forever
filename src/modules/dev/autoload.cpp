@@ -7,10 +7,14 @@
 // Every step is logged ("dev: autoload: ..."), so a script can wait on the log.
 #include "modules/dev/autoload.h"
 
+#include <windows.h>
+
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 
 #include "core/log.h"
+#include "core/shot.h"
 #include "core/tick.h"
 #include "engine/lua.h"
 #include "engine/screens.h"
@@ -22,6 +26,21 @@ namespace {
 Autoload g_auto;
 std::string g_script;
 engine::Screen g_last = engine::Screen::None;
+std::string g_shot_dir;
+uint64_t g_shot_every = 0, g_next_shot = 0;
+int g_shot_n = 0;
+
+void MaybeShot() {
+  if (g_shot_dir.empty() || g_auto.phase != Autoload::Phase::Done) return;
+  const uint64_t now = GetTickCount64();
+  if (now < g_next_shot) return;
+  g_next_shot = now + g_shot_every;
+  char name[32];
+  std::snprintf(name, sizeof name, "\\shot_%03d.bmp", g_shot_n++);
+  const std::string path = g_shot_dir + name;
+  const std::string err = SaveScreenshot(path);
+  Log("dev: shot %s %s", path.c_str(), err.empty() ? "ok" : err.c_str());
+}
 
 Scr Map(engine::Screen s) {
   switch (s) {
@@ -34,6 +53,7 @@ Scr Map(engine::Screen s) {
 }
 
 void OnTick(uint64_t frame) {
+  MaybeShot();
   const engine::Screen s = engine::ActiveScreen();
   if (s != g_last) {
     Log("dev: screen %s -> %s (frame %llu)", engine::ScreenName(g_last), engine::ScreenName(s),
@@ -91,6 +111,11 @@ bool InstallAutoload(const IniMap& ini) {
   if (g_script.empty()) {
     auto it = ini.find("dev.autorun");
     if (it != ini.end()) g_script = it->second;
+  }
+  g_shot_dir = Env("PSTF_SHOT_DIR");
+  {
+    const std::string every = Env("PSTF_SHOT_EVERY_MS");
+    g_shot_every = every.empty() ? 5000 : std::strtoull(every.c_str(), nullptr, 10);
   }
   if (!engine::ScreensAvailable() || !engine::WorldApiAvailable()) {
     Log("dev: autoload: screen/world functions differ from the manifest; off");

@@ -46,6 +46,9 @@ add_library(pst_forever SHARED
   src/modules/dev/autoload.cpp
   src/engine/screens.cpp
   src/core/tick.cpp
+  src/core/shot.cpp
+  src/engine/sprites.cpp
+  src/modules/tbc/tbc_module.cpp
 )
 target_link_libraries(pst_forever PRIVATE pstf_logic bcrypt)
 

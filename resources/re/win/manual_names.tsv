@@ -23,3 +23,10 @@
 1400E4EF0	lua_pcallk
 1400E3B50	lua_settop
 1400E40E0	lua_tolstring
+140421830	CGameSprite::ProcessAI(void)
+140404B90	CGameSprite::ClearAI(uchar)
+1403C4280	CGameSprite::DropPath(void)
+140408B00	CGameSprite::Enemy(void)
+140164E30	CGameAIBase::ClearActions(int)
+1403FB520	CGameSprite::Animate(void)
+1400E7380	luaL_loadstring
