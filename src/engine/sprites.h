@@ -3,6 +3,7 @@
 // callers get ids and plain values. Evidence: src/engine/symbols.h ("creatures").
 #pragma once
 #include <cstdint>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -41,6 +42,7 @@ bool HudAvailable();
 std::vector<std::pair<int, int>> PathPoints(int32_t id);
 // World point of the visible area -> UI (menu) coordinates, as the engine places map notes.
 bool WorldToUi(int x, int y, int* ux, int* uy);
+bool UiToWorld(int ux, int uy, int* x, int* y);  // inverse of WorldToUi (zoom aware)
 
 // Selection, the engine's way (as a portrait click: UnselectAll + SelectCharacter + SelectToolbar).
 bool IsSelected(int32_t id);
@@ -61,6 +63,25 @@ struct CellCoster {
 };
 CellCoster CosterFor(int32_t id);
 void SelectOnly(int32_t id);  // -1: select nobody
+
+// Every live object in the object array that is not a creature (projectiles, doors, ...): for probes
+// and for "the caster's spell is still resolving".
+struct ObjectInfo {
+  int32_t id = -1;
+  uint8_t type = 0;       // CGameObject +8 (GetObjectType)
+  uint64_t vtable = 0;    // compare only
+  uint64_t area = 0;      // compare only
+  int32_t source = -1;    // projectiles: the caster (CProjectile +0x68; DeliverEffects lin 2BAB20 +0x64, win 140282EC0)
+  int32_t target = -1;    // projectiles: +0x6C
+  int x = 0, y = 0;
+  int32_t raw[16] = {};   // probe: dwords +0x50..+0x8C
+};
+std::vector<ObjectInfo> AllObjects();
+
+// Queues BCS actions on any creature through the engine's own console path (CLUAConsole::Eval,
+// lin 27BFE0): Eval(text, slot) inserts the parsed actions into the creature in party slot `slot`;
+// party slot 0 holds `id` for the duration of that one synchronous call. Game thread only.
+bool EvalAs(int32_t id, const std::string& bcs);
 
 
 }  // namespace pstf::engine

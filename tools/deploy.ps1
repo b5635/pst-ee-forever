@@ -31,6 +31,9 @@ foreach ($f in 'version.dll', 'pst_forever.dll') {
 }
 $data = Join-Path $Game 'pst_forever'
 New-Item -ItemType Directory -Force $data | Out-Null
+$sounds = Join-Path $data 'sounds'
+New-Item -ItemType Directory -Force $sounds | Out-Null
+Get-ChildItem (Join-Path $root 'sounds') -Filter *.wav -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName $sounds -Force }
 $ini = Join-Path $data 'pst_forever.ini'
 if ($ResetIni -or -not (Test-Path $ini)) { Copy-Item (Join-Path $root 'data\pst_forever.ini') $ini -Force }
 Write-Host "deploy: ok -> $Game"

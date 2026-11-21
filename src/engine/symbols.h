@@ -365,6 +365,103 @@ inline constexpr uint8_t kMouseStoreBytes[] = {0x48, 0x8B, 0x0F, 0x45, 0x33, 0xE
 constexpr uint32_t kRvaMouseStore = 0x19D8A2, kOffAreaMouse = 0x25C;
 
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
+// --- round clock for effects (turn-based: effects advance one round at their owner's turn) -------
+// CGameSprite::ProcessEffectList (lin 4E21F0, win 1404231E0) runs the persistent effects (poison,
+// regeneration, ...; HandlePersistantEffects inlined at 140425C36) only while the world timer runs:
+//   140425C36 cmp byte [game+7824h],0 ; jz 140425CC3. We turn the cmp into a call to a stub that
+// also answers "skip" (ZF=1) for combatants: their DoT/regen never advance on their own.
+inline constexpr uint8_t kPersistGateBytes[] = {0x80, 0xB9, 0x24, 0x78, 0x00, 0x00, 0x00,
+                                                0x0F, 0x84, 0x80, 0x00, 0x00, 0x00};
+// CGameSprite::HandlePersistantEffects(int ticks) lin 4A46D0, win 140413BF0 (list sprite+0x4768, then
+// CPersistantEffectListRegenerated at +0x18D8). CompressTime calls it with many ticks at once: each
+// effect fires ticks/15 times (CPersistantEffectRegeneration::AIUpdate lin 2252D0 L41-97).
+inline constexpr uint8_t kHandlePersistBytes[] = {0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74,
+                                                  0x24, 0x18, 0x57, 0x41, 0x56, 0x41, 0x57, 0x48};
+// Natural regeneration (ProcessEffectList win 140423487): heal = (now - stamp) / rate, stamp at
+// sprite+0x4B6C ("sub eax,[rsi+4B6Ch]"; "mov [rsi+4B6Ch],eax" at 140423522).
+inline constexpr uint8_t kRegenStampBytes[] = {0x2B, 0x86, 0x6C, 0x4B, 0x00, 0x00};
+// Effect lists checked by ProcessEffectList: timed +0x4718 (1404237D4), equipped +0x46C8 (1404237E4)
+// (lin this+18176/18096: Windows +0x18). CPtrList: head +8, node {next, prev, data +0x10}.
+inline constexpr uint8_t kEffListTimedBytes[] = {0x48, 0x8D, 0x8E, 0x18, 0x47, 0x00, 0x00};
+inline constexpr uint8_t kEffListEquipBytes[] = {0x48, 0x8D, 0x8E, 0xC8, 0x46, 0x00, 0x00};
+// CGameSprite::AIUpdate sets sprite+0x48BC = 1 before ProcessEffectList (1403B43D1): the per-second
+// gate ("tick % 15 == id % 15 || [+0x48BC]", win 1404231E0 L134) lets it run at once.
+inline constexpr uint8_t kForceEffectsBytes[] = {0xC7, 0x83, 0xBC, 0x48, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00};
+// CGameEffect timing (ResolveEffect lin 1DFD20 / win 140209350): +0x24 duration type (4096 = absolute,
+// 6/7/8 = delayed; both compared with the world time), +0x28 tick (140209436 / 14020944D).
+inline constexpr uint8_t kEffTypeStoreBytes[] = {0xC7, 0x43, 0x24, 0x00, 0x10, 0x00, 0x00};
+constexpr uint32_t kRvaPersistGate = 0x425C36, kRvaHandlePersist = 0x413BF0, kRvaRegenStamp = 0x423487;
+constexpr uint32_t kRvaEffListTimed = 0x4237D4, kRvaEffListEquip = 0x4237E4, kRvaForceEffects = 0x3B43D1;
+constexpr uint32_t kRvaEffTypeStore = 0x209436;
+constexpr uint32_t kOffSpriteRegenStamp = 0x4B6C, kOffSpriteEffTimed = 0x4718, kOffSpriteEffEquip = 0x46C8;
+constexpr uint32_t kOffSpriteForceEffects = 0x48BC, kOffEffType = 0x24, kOffEffTick = 0x28;
+constexpr uint32_t kOffEffOpcode = 0x10, kOffEffSpriteSel = 0x4BBC;
+// Held creatures still take effects at once: CGameSprite::ProcessEffectList(int) lin 4E21F0, win 1404231E0
+// (its per-tick caller is ProcessAI, which held creatures skip). Its once-a-second gate compares the
+// AI tick counter sprite+0x3A0 (`mov r8d,[rsi+3A0h]` 14042338C; lin this+232*4, ++ in ProcessAI L653).
+inline constexpr uint8_t kProcessEffectListBytes[] = {0x40, 0x55, 0x56, 0x48, 0x8D, 0xAC, 0x24, 0x58,
+                                                      0xFE, 0xFF, 0xFF, 0x48, 0x81, 0xEC, 0xA8, 0x02};
+inline constexpr uint8_t kAiTickReadBytes[] = {0x44, 0x8B, 0x86, 0xA0, 0x03, 0x00, 0x00};
+constexpr uint32_t kRvaProcessEffectList = 0x4231E0, kRvaAiTickRead = 0x42338C, kOffSpriteAiTick = 0x3A0;
+// SetInterrupt(FALSE) (ACTION 86, CGameSprite::ExecuteAction case 86, win 14040CDA9): bit 31 of sprite
+// +0x560; scripts do not interrupt while it is set, ProcessAI clears it once no action is left (lin L511).
+inline constexpr uint8_t kNoInterruptBytes[] = {0x8B, 0x8F, 0x60, 0x05, 0x00, 0x00};
+constexpr uint32_t kRvaNoInterrupt = 0x40CDA9, kOffSpriteFlags = 0x560, kFlagNoInterrupt = 0x80000000u;
+
+// --- combat presentation and pacing -------------------------------------------------------------
+// Running: CGameAnimationTypePlanescapeCharacter::SetRunning(int run, int) lin 474370, win 1403A4FA0,
+// vtable +0x1F0 (1406472A0); flag +0x1D10, move scale bytes +0x0A/+0x0B = (int) run scale double
+// +0x1CF8 (1403A5022) or walk scale +0x1CF0. Other animations: move scale byte +0x0A (GetMoveScale).
+inline constexpr uint8_t kSetRunningBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x89, 0x91,
+                                               0x10, 0x1D, 0x00, 0x00, 0x48, 0x8B, 0xD9, 0x83};
+inline constexpr uint8_t kRunScaleBytes[] = {0xF2, 0x0F, 0x10, 0x83, 0xF8, 0x1C, 0x00, 0x00};
+inline constexpr uint8_t kSlotSetRunningBytes[] = {0xA0, 0x4F, 0x3A, 0x40, 0x01, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaSetRunning = 0x3A4FA0, kRvaRunScale = 0x3A5022, kRvaSlotSetRunning = 0x6472A0;
+constexpr uint32_t kVtblAnimSetRunning = 0x1F0, kOffAnimRunFlag = 0x1D10, kOffAnimRunScale = 0x1CF8;
+constexpr uint32_t kOffAnimWalkScale = 0x1CF0, kOffAnimMoveScale = 0x0A;
+// Battle music: CGameArea::AIUpdate (lin 1B8840 L1335-1368, win 14018E30B) counts area+0xFC4 down per
+// tick; at 0 the battle song (state word +0xFC2 = 3) ends, above 0 it starts.
+inline constexpr uint8_t kBattleCounterBytes[] = {0x83, 0xBF, 0xC4, 0x0F, 0x00, 0x00, 0x1E};
+constexpr uint32_t kRvaBattleCounter = 0x18E30B, kOffAreaBattleCounter = 0xFC4;
+// Attack roll: CGameSprite::Hit (lin 4C29F0, win 1404147B0) ends with FeedBack(this, 4, total, hit,
+// roll, -1, ...) at 140415759 (lin L639). Swing calls Hit at 140433E8A/140433F90/14043422D.
+inline constexpr uint8_t kHitFeedbackCallBytes[] = {0xE8, 0xC2, 0x93, 0xFF, 0xFF};
+inline constexpr uint8_t kSwingHit1Bytes[] = {0xE8, 0x21, 0x09, 0xFE, 0xFF};
+inline constexpr uint8_t kSwingHit2Bytes[] = {0xE8, 0x1B, 0x08, 0xFE, 0xFF};
+inline constexpr uint8_t kSwingHit3Bytes[] = {0xE8, 0x7E, 0x05, 0xFE, 0xFF};
+constexpr uint32_t kRvaHitFeedbackCall = 0x415759, kRvaSwingHit1 = 0x433E8A, kRvaSwingHit2 = 0x433F90;
+constexpr uint32_t kRvaSwingHit3 = 0x43422D;
+constexpr uint64_t kVaFeedBack = 0x14040EB20ull, kVaHit = 0x1404147B0ull;
+// CGameSprite::FeedBack(uint type, int, int, int, uint, int, CString const&) lin 4BD4E0, win 14040EB20:
+// prologue `mov [rsp+10h],rbx` (5 bytes, no RIP operand) for the debug log of every feedback type.
+inline constexpr uint8_t kFeedBackBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x55, 0x56, 0x57, 0x41, 0x54};
+constexpr uint32_t kRvaFeedBack = 0x40EB20;
+// THAC0 / AC words in the derived stats (Hit 140414888: sel ? +0xFF8 : +0x1CA8 THAC0, +0xFEE/+0x1C9E AC).
+inline constexpr uint8_t kThac0AcBytes[] = {0xBA, 0x9E, 0x1C, 0x00, 0x00, 0xB8, 0xA8, 0x1C, 0x00, 0x00,
+                                            0xB9, 0xF8, 0x0F, 0x00, 0x00};
+constexpr uint32_t kRvaThac0Ac = 0x414888, kOffStatThac0 = 0x10, kOffStatAc = 0x06;
+// Saving throws: CGameEffect::CheckSave(effect, sprite, u8& x6) lin 1FBED0, win 1401EC460; returns
+// 0 = saved. Save flags effect +0x40 (bits 0..4), bonus +0x44 (lin L177/L226).
+inline constexpr uint8_t kCheckSaveBytes[] = {0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55};
+constexpr uint32_t kRvaCheckSave = 0x1EC460, kOffEffSaveFlags = 0x40, kOffEffSaveBonus = 0x44;
+// Action bar: game:GetButtonArray() = CInfGame+0x79C0 (tolua 14046102E); 12 CButtonData of 0x2A0
+// (PreRenderButton lin 3608B0: this + 672 * i); icon resref at +0 (GetQuickSlotData lin 357760).
+inline constexpr uint8_t kButtonArrayBytes[] = {0x48, 0x8D, 0x97, 0xC0, 0x79, 0x00, 0x00};
+constexpr uint32_t kRvaButtonArray = 0x46102E, kOffGameButtonArray = 0x79C0, kButtonDataSize = 0x2A0;
+// Projectiles are objects of type 0 (CGameObject +8) with the caster at +0x68 (DeliverEffects win
+// 140282F3F `mov eax,[rbx+68h]`); every projectile class has AIUpdate at vtable slot 3 (+0x18, e.g.
+// CProjectileAdder::AIUpdate 140261CA0 in vtable 140631510) and CGameObject::GetObjectType
+// (140173050: movzx eax, byte [rcx+8]; ret) at slot 1: the check that a vtable met at runtime is one.
+inline constexpr uint8_t kGetObjectTypeBytes[] = {0x0F, 0xB6, 0x41, 0x08, 0xC3};
+constexpr uint32_t kRvaGetObjectType = 0x173050, kVtblObjAIUpdate = 0x18, kOffProjSource = 0x68;
+
+// Camera: CInfGame::CenterOnGroupLeader (lin 36D7F0, win 1402D31C0) ends with
+// jmp CInfinity::SetViewPosition(inf = area+0x5D8, x - w/2, y - h/2, 1) (lin 3AE2B0, win 140309630).
+inline constexpr uint8_t kSetViewPosBytes[] = {0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x08, 0x44,
+                                               0x89, 0x40, 0x18, 0x89, 0x50, 0x10, 0x57, 0x48};
+inline constexpr uint8_t kCenterLeaderJmpBytes[] = {0xE9, 0xC5, 0x63, 0x03, 0x00};
+constexpr uint32_t kRvaSetViewPos = 0x309630, kRvaCenterLeaderJmp = 0x2D3266;
+
 inline constexpr Symbol kAll[] = {
     PSTF_SYM("entry", kEntryRva, kEntryBytes, "PE AddressOfEntryPoint"),
     PSTF_SYM("CTlkTable::Fetch", kRvaTlkFetch, kTlkFetchBytes, "lin 673C70 / win 1404A0840"),
@@ -458,12 +555,41 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CSearchBitmap::GetCost", kRvaGetCost, kGetCostBytes, "lin 33F3D0 / win 1402ADAB0"),
     PSTF_SYM("SetTarget.impassable", kRvaImpassableCmp, kImpassableCmpBytes, "win 1403E93D8"),
     PSTF_SYM("OnMouseMove.store", kRvaMouseStore, kMouseStoreBytes, "lin 1B1410 / win 14019D8A2"),
+    PSTF_SYM("ProcessEffectList.persistGate", kRvaPersistGate, kPersistGateBytes, "lin 4E21F0 / win 140425C36"),
+    PSTF_SYM("CGameSprite::ProcessEffectList", kRvaProcessEffectList, kProcessEffectListBytes,
+             "lin 4E21F0 / win 1404231E0"),
+    PSTF_SYM("ProcessEffectList.aiTick", kRvaAiTickRead, kAiTickReadBytes, "win 14042338C"),
+    PSTF_SYM("ExecuteAction.SetInterrupt", kRvaNoInterrupt, kNoInterruptBytes, "lin 4FDCC0 / win 14040CDA9"),
+    PSTF_SYM("CGameSprite::HandlePersistantEffects", kRvaHandlePersist, kHandlePersistBytes,
+             "lin 4A46D0 / win 140413BF0"),
+    PSTF_SYM("ProcessEffectList.regenStamp", kRvaRegenStamp, kRegenStampBytes, "win 140423487"),
+    PSTF_SYM("ProcessEffectList.timedList", kRvaEffListTimed, kEffListTimedBytes, "win 1404237D4"),
+    PSTF_SYM("ProcessEffectList.equipList", kRvaEffListEquip, kEffListEquipBytes, "win 1404237E4"),
+    PSTF_SYM("AIUpdate.forceEffects", kRvaForceEffects, kForceEffectsBytes, "lin 53A510 / win 1403B43D1"),
+    PSTF_SYM("ResolveEffect.type", kRvaEffTypeStore, kEffTypeStoreBytes, "lin 1DFD20 / win 140209436"),
+    PSTF_SYM("AnimPst::SetRunning", kRvaSetRunning, kSetRunningBytes, "lin 474370 / win 1403A4FA0"),
+    PSTF_SYM("AnimPst::SetRunning.runScale", kRvaRunScale, kRunScaleBytes, "win 1403A5022"),
+    PSTF_SYM("CGameArea::AIUpdate.battleCounter", kRvaBattleCounter, kBattleCounterBytes,
+             "lin 1B8840 / win 14018E30B"),
+    PSTF_SYM("Hit.feedback4", kRvaHitFeedbackCall, kHitFeedbackCallBytes, "lin 4C29F0 L639 / win 140415759"),
+    PSTF_SYM("CGameSprite::FeedBack", kRvaFeedBack, kFeedBackBytes, "lin 4BD4E0 / win 14040EB20"),
+    PSTF_SYM("Swing.hit1", kRvaSwingHit1, kSwingHit1Bytes, "lin 4EAC10 / win 140433E8A"),
+    PSTF_SYM("Swing.hit2", kRvaSwingHit2, kSwingHit2Bytes, "win 140433F90"),
+    PSTF_SYM("Swing.hit3", kRvaSwingHit3, kSwingHit3Bytes, "win 14043422D"),
+    PSTF_SYM("Hit.thac0ac", kRvaThac0Ac, kThac0AcBytes, "lin 4C29F0 / win 140414888"),
+    PSTF_SYM("CGameEffect::CheckSave", kRvaCheckSave, kCheckSaveBytes, "lin 1FBED0 / win 1401EC460"),
+    PSTF_SYM("tolua.GetButtonArray", kRvaButtonArray, kButtonArrayBytes, "win 14046102E"),
+    PSTF_SYM("CGameObject::GetObjectType", kRvaGetObjectType, kGetObjectTypeBytes, "lin 176FB0 / win 140173050"),
+    PSTF_SYM("CInfinity::SetViewPosition", kRvaSetViewPos, kSetViewPosBytes, "lin 3AE2B0 / win 140309630"),
+    PSTF_SYM("CenterOnGroupLeader.jmp", kRvaCenterLeaderJmp, kCenterLeaderJmpBytes, "lin 36D7F0 / win 1402D3266"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.
 inline constexpr Symbol kData[] = {
     PSTF_SYM("CGameSprite.vtbl.ProcessAI", kRvaSlotProcessAI, kSlotProcessAIBytes,
              "vtable win 140649328 slot 35 / lin E57298 slot 36"),
+    PSTF_SYM("AnimPst.vtbl.SetRunning", kRvaSlotSetRunning, kSlotSetRunningBytes,
+             "vtable win 1406470B0 +0x1F0 / lin slot 63"),
 };
 #undef PSTF_SYM
 

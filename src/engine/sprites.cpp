@@ -3,6 +3,8 @@
 
 #include "core/patch.h"
 #include "engine/symbols.h"
+#include "engine/sprite_ptr.h"
+#include "engine/lua.h"
 
 namespace pstf::engine {
 namespace {
@@ -34,7 +36,14 @@ uint64_t Lookup(int32_t id) {
 }
 
 bool HudOk();
+}  // namespace
 
+// Adapter-internal (engine/sprite_ptr.h): raw lookups for other files of src/engine only.
+uint64_t LookupSprite(int32_t id) { return SpritesAvailable() ? Lookup(id) : 0; }
+uint64_t GameObject() { return Game(); }
+bool PlausiblePtr(uint64_t p) { return Plausible(p); }
+
+namespace {
 SpriteInfo Info(uint64_t p) {
   SpriteInfo s;
   s.id = R<int32_t>(p + sym::kOffSpriteId);
@@ -109,6 +118,19 @@ bool WorldToUi(int x, int y, int* ux, int* uy) {
   const float z = zoom > 0.05f && zoom < 20.f ? zoom : 1.f;
   *ux = static_cast<int>(sx / z);
   *uy = static_cast<int>(sy / z);
+  return true;
+}
+
+bool UiToWorld(int ux, int uy, int* x, int* y) {
+  const uint64_t g = HudAvailable() ? Game() : 0;
+  if (!g) return false;
+  const uint64_t area = R<uint64_t>(g + sym::kOffGameAreas + 8ull * R<uint8_t>(g + sym::kOffGameVisibleIdx));
+  if (!Plausible(area)) return false;
+  const uint64_t inf = area + sym::kOffAreaInfinity;
+  const float zoom = R<float>(area + sym::kOffAreaZoom);
+  const float z = zoom > 0.05f && zoom < 20.f ? zoom : 1.f;
+  *x = static_cast<int>(ux * z) + R<int32_t>(inf + sym::kOffInfView) - R<int32_t>(inf + sym::kOffInfRect);
+  *y = static_cast<int>(uy * z) + R<int32_t>(inf + sym::kOffInfView + 4) - R<int32_t>(inf + sym::kOffInfRect + 4);
   return true;
 }
 
@@ -245,6 +267,41 @@ std::vector<SpriteInfo> AllSprites() {
       out.push_back(Info(p));
   }
   return out;
+}
+
+std::vector<ObjectInfo> AllObjects() {
+  std::vector<ObjectInfo> out;
+  if (!SpritesAvailable()) return out;
+  const int max = R<int16_t>(sym::kVaObjMax);
+  for (int i = 0; i <= max; ++i) {
+    const uint64_t e = sym::kVaObjArray + 16ull * i;
+    const uint64_t p = R<uint64_t>(e + 8);
+    if (!Plausible(p) || IsSprite(p)) continue;
+    if (R<int32_t>(p + sym::kOffSpriteId) != ((i << 16) | R<uint16_t>(e))) continue;
+    ObjectInfo o;
+    o.id = R<int32_t>(p + sym::kOffSpriteId);
+    o.type = R<uint8_t>(p + 8);
+    o.vtable = R<uint64_t>(p);
+    o.area = R<uint64_t>(p + sym::kOffSpriteArea);
+    o.source = R<int32_t>(p + 0x68);
+    o.target = R<int32_t>(p + 0x6C);
+    o.x = R<int32_t>(p + sym::kOffSpritePos);
+    o.y = R<int32_t>(p + sym::kOffSpritePos + 4);
+    for (int k = 0; k < 16; ++k) o.raw[k] = R<int32_t>(p + 0x50 + 4 * k);
+    out.push_back(o);
+  }
+  return out;
+}
+
+bool EvalAs(int32_t id, const std::string& bcs) {
+  const uint64_t g = SpritesAvailable() ? Game() : 0;
+  if (!g || !Lookup(id) || R<int16_t>(g + sym::kOffGamePartyCount) < 1) return false;
+  volatile int32_t* slot0 = reinterpret_cast<volatile int32_t*>(g + sym::kOffGamePartyIds);
+  const int32_t keep = *slot0;
+  *slot0 = id;
+  const std::string err = LuaDoString(("C:Eval(" + LuaQuote(bcs) + ", 0)").c_str());
+  *slot0 = keep;
+  return err.empty();
 }
 
 std::vector<int32_t> PartyIds() {

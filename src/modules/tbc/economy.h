@@ -46,7 +46,18 @@ inline bool IsMoveAction(uint16_t id) {
       return false;
   }
 }
-inline bool IsIdleAction(uint16_t id) { return id == 0 || id == 63 || id == 83; }  // NoAction, Wait, SmallWait
+// Script bookkeeping that costs no action (PST:EE ACTION.IDS): NoAction, Help, SetGlobal, Turn,
+// Continue, StartTimer, Wait, Face, SmallWait, SetInterrupt, RandomTurn, the DisplayString family,
+// WaitRandom.
+inline bool IsIdleAction(uint16_t id) {
+  switch (id) {
+    case 0: case 17: case 30: case 33: case 36: case 61: case 63: case 83: case 84: case 86: case 130:
+    case 151: case 262: case 269: case 292: case 311: case 342: case 346: case 368:
+      return true;
+    default:
+      return false;
+  }
+}
 
 // One search-map cell is 16 x 12 pixels and one foot (Feet2Pixels in GemRB; the engine's own
 // "nearby" ellipse dx^2 + 16 dy^2 / 9 uses the same 4:3 aspect).
@@ -62,12 +73,14 @@ struct EconomyStep {
   Stop stop = Stop::None;  // caller: ClearAI(0) + DropPath, tell the player why
   bool hold_walk = false;  // caller: skip AIUpdateWalk for this creature this frame
   bool end_turn = false;   // nothing left to do (or AI idle / cap)
+  bool nudge = false;      // AI: its own script chose nothing in time; caller orders an attack (once)
 };
 
 struct Economy {
-  static constexpr uint32_t kAiThinkTicks = 30;  // AI: 2 s to pick something
+  static constexpr uint32_t kAiThinkTicks = 15;  // AI: 1 s to pick something
   static constexpr uint32_t kIdleTicks = 8;      // AI: idle this long after doing something = done
   static constexpr double kTeleportFt = 20.0;    // a jump this long in one frame is not walking
+  static constexpr uint32_t kNudgeTicks = 20;    // AI: after a nudge, this long to start acting
 
   double max_ft = 31.0;
   double move_ft = 31.0;
@@ -79,6 +92,7 @@ struct Economy {
   uint32_t total = 0, idle = 0;
   bool did_something = false;
   uint16_t last_action = 0;
+  bool nudged = false;
 
   Economy() = default;
   Economy(double feet, uint32_t round, bool is_party)
@@ -110,7 +124,9 @@ struct Economy {
       }
     }
     if (acting && out.stop == Stop::None) {
-      act_ticks += dt;
+      // Walking up to the target (an attack that first closes in) is movement, not the round:
+      // the round's ticks count only while the creature stands.
+      if (!has_path && !(moved_ft > 0 && moved_ft < kTeleportFt)) act_ticks += dt;
       if (idle_action || walk_action) {
         acting = false;  // the engine finished it (spell cast, item used)
       } else if (act_ticks >= round_ticks) {
@@ -126,9 +142,17 @@ struct Economy {
     if (party) {
       out.end_turn = spent && !has_path;
     } else {
+      if (!did_something && !nudged && total >= kAiThinkTicks) {
+        nudged = true;
+        out.nudge = true;
+        idle = 0;
+      }
+      // Gave up: nudged and still nothing in hand (no action, no path) for kNudgeTicks.
+      const bool gave_up = nudged && !did_something && idle >= kNudgeTicks;
       out.end_turn = (spent && !has_path) || (action_used && !acting && idle >= kIdleTicks) ||
-                     (idle >= kIdleTicks && (did_something || total >= kAiThinkTicks)) ||
-                     (out.stop == Stop::OutOfMove && action_used) || total >= 3 * round_ticks + kAiThinkTicks;
+                     (idle >= kIdleTicks && did_something && !acting) || gave_up ||
+                     (out.stop == Stop::OutOfMove && action_used) ||
+                     total >= 3 * round_ticks + kAiThinkTicks + kNudgeTicks;
     }
     return out;
   }

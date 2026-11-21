@@ -59,13 +59,14 @@ while ((Get-Date) -lt $deadline) {
   if (-not (Test-Path $log)) { continue }
   $t = Get-Content $log -Raw -ErrorAction SilentlyContinue
   if ($t -match 'dev: autoload: FAILED') { $state = 'failed'; break }
+  if ($t -cmatch 'TEST FAIL|test tick error|CRASH [(]') { $state = 'test failed'; break }
   if ($t -match 'dev: autoload: done') {
     if (-not $Until) { $state = 'done'; break }
     if ($t -match $Until) { $state = 'done'; break }
   }
 }
-Get-Content $log | Select-String -Pattern ' (dev|lua|tick|manifest|patch|tbc): ' | ForEach-Object { Write-Host "  $($_.Line)" }
-$scriptOk = -not (Select-String -Path $log -Pattern 'dev: autorun .*: lua error' -Quiet)
+Get-Content $log | Select-String -Pattern ' (dev|lua|lua note|tick|manifest|patch|tbc|combat|render|CRASH[^:]*): ' | ForEach-Object { Write-Host "  $($_.Line)" }
+$scriptOk = -not (Select-String -Path $log -Pattern 'dev: autorun .*: lua error|TEST FAIL|test tick error|CRASH [(]' -CaseSensitive -Quiet)
 if ($Close -and -not $p.HasExited) { Stop-Process -Id $p.Id -Confirm:$false; Write-Host "launch: closed pid $($p.Id)" }
 Write-Host "launch: $state"
 if ($state -eq 'done' -and $scriptOk) { exit 0 } else { exit 1 }

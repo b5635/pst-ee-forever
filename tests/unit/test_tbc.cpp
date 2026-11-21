@@ -303,6 +303,7 @@ TEST_CASE("tbc turn clock: budget of busy ticks, AI idle end, party waits") {
 
 // ---- action economy, movement line, HUD text ---------------------------------------------------
 #include "modules/tbc/economy.h"
+#include "modules/tbc/hover.h"
 #include "modules/tbc/hud.h"
 #include "modules/tbc/path_line.h"
 
@@ -367,12 +368,37 @@ TEST_CASE("tbc economy: AI turns end after acting or idling, never hang") {
   st = a.Feed(8, 0, false, 0);
   CHECK(st.end_turn);
   Economy idle(31, 51, false);
-  CHECK(!idle.Feed(29, 0, false, 0).end_turn);
-  CHECK(idle.Feed(1, 0, false, 0).end_turn);  // 30 ticks of thinking, nothing chosen
+  CHECK(!idle.Feed(14, 0, false, 0).end_turn);
+  auto n = idle.Feed(1, 0, false, 0);  // 15 ticks of thinking, nothing chosen: nudge, once
+  CHECK(n.nudge && !n.end_turn);
+  CHECK(!idle.Feed(19, 0, false, 0).nudge);
+  CHECK(idle.Feed(1, 0, false, 0).end_turn);  // nudged, still nothing after 20 ticks
   Economy stuck(31, 51, false);
   bool ended = false;
   for (int i = 0; i < 200 && !ended; ++i) ended = stuck.Feed(1, 0, true, 23).end_turn;  // path never walked
   CHECK(ended);
+}
+
+TEST_CASE("tbc economy: script waits are free; walking up to attack is movement, not the round") {
+  CHECK(IsIdleAction(368) && IsIdleAction(84) && IsIdleAction(30) && !IsIdleAction(31) && !IsIdleAction(113));
+  Economy w(31, 51, false);
+  auto st = w.Feed(10, 0, false, 368);  // WaitRandom from its script: not an action
+  CHECK(!w.action_used && !w.acting && st.stop == Stop::None);
+  // Enemy attacking from 25 ft away: path search pending (no path, not moving), then it walks.
+  Economy e(31, 51, false);
+  e.Feed(2, 0, false, 3);  // Attack chosen, path not back yet
+  CHECK(e.action_used && e.acting);
+  double walked = 0;
+  for (int i = 0; i < 60; ++i) {  // 60 ticks of walking at 0.4 ft per tick = 24 ft
+    st = e.Feed(1, 0.4, true, 3);
+    walked += 0.4;
+    CHECK(st.stop == Stop::None);
+  }
+  CHECK(e.acting && e.move_ft < 31 - 23.9);  // the walk was not cut by the 51-tick round
+  for (int i = 0; i < 48; ++i) st = e.Feed(1, 0, false, 3);  // swinging: 2 + 49 = 51 standing ticks
+  CHECK(st.stop == Stop::None);
+  st = e.Feed(1, 0, false, 3);
+  CHECK(st.stop == Stop::RoundDone);
 }
 
 TEST_CASE("tbc path line: cells decode as AIUpdateWalk, dots split at the budget") {
@@ -448,4 +474,35 @@ TEST_CASE("tbc preview: A* around a wall, smoothed to turning points") {
   // Uniform cost 5 (the engine's open ground): with min_cost the search stays narrow.
   auto five = [](int, int) { return 5; };
   CHECK(FindCellPath({0, 0}, {60, 40}, five, 200, 100, 100, 5).size() == 2);
+}
+
+TEST_CASE("tbc hover: hit chance from THAC0 and AC, 5..95 %") {
+  CHECK(NeedsToHit(17, 9) == 8);
+  CHECK(HitChancePercent(17, 9) == 65);   // needs 8: faces 8..20 = 13 of 20
+  CHECK(HitChancePercent(12, 2) == 55);   // the 64-HP undead (THAC0 12) against AC 2: needs 10
+  CHECK(HitChancePercent(20, -10) == 5);  // needs 30: only a natural 20
+  CHECK(HitChancePercent(5, 10) == 95);   // needs -5: all but a natural 1
+}
+
+TEST_CASE("tbc hover: the creature under the cursor, nearest body wins") {
+  std::vector<HoverCandidate> c = {{1, 100, 200}, {2, 110, 205}, {3, 400, 400}};
+  CHECK(PickHovered(c, 100, 160) == 1);   // over 1's body
+  CHECK(PickHovered(c, 112, 170) == 2);   // nearer 2
+  CHECK(PickHovered(c, 250, 250) == -1);  // empty ground
+  CHECK(PickHovered(c, 400, 410) == 3);   // at the feet
+  CHECK(PickHovered(c, 400, 415) == -1);  // 15 px below the feet: no
+  CHECK(PickHovered(c, 400, 300) == -1);  // 100 px above: no
+}
+
+TEST_CASE("tbc dice: tumble, land on the roll, verdict, fade") {
+  CHECK(DiceTiming::Face(700, 17) == 17 && DiceTiming::Landed(700) && !DiceTiming::Verdict(700));
+  CHECK(DiceTiming::Face(100, 17) >= 1 && DiceTiming::Face(100, 17) <= 20 && !DiceTiming::Landed(100));
+  CHECK(DiceTiming::Verdict(800) && DiceTiming::Alpha(1000) == 1.0);
+  CHECK(DiceTiming::Alpha(2800) > 0.49 && DiceTiming::Alpha(2800) < 0.51);
+  CHECK(!DiceTiming::Visible(3000) && DiceTiming::Visible(2999));
+}
+
+TEST_CASE("tbc portraits: red share of lost HP") {
+  CHECK(DamageShare(64, 64) == 0.0 && DamageShare(0, 64) == 1.0 && DamageShare(-3, 64) == 1.0);
+  CHECK(DamageShare(48, 64) == 0.25 && DamageShare(5, 0) == 0.0);
 }

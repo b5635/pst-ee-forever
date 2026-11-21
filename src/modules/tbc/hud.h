@@ -40,6 +40,22 @@ struct HudView {
   std::vector<int> red_dots;   // x,y pairs, beyond the movement left
   int path_ft = 0;             // whole path length, shown at its end
   int label_x = -1, label_y = -1;
+  // Hover card (BG3): the creature under the cursor, its HP and, for a foe, the chance to hit it.
+  bool hover = false;
+  int32_t hover_name_ref = -1;
+  std::string hover_name;
+  int hover_hp = 0, hover_max = 0, hover_chance = -1, hover_ac = 0, hover_needs = 0;
+  bool hover_foe = false;
+  // Dice panel: the last attack roll or saving throw.
+  bool dice = false;
+  int dice_kind = 0;           // 0 attack, 1 saving throw
+  int32_t dice_actor_ref = -1, dice_target_ref = -1;  // name strrefs (-1: use the strings)
+  std::string dice_actor, dice_target;
+  int dice_face = 0;           // face shown now (tumbling, then the roll)
+  bool dice_landed = false, dice_verdict = false, dice_good = false;
+  std::string dice_sum;        // "17 + 2 = 19  vs 14"
+  std::string dice_result;     // "Hit" / "Miss" / "Saved" / "Failed"
+  double dice_alpha = 0;
 };
 
 std::string BuildHudMenu();             // menu PSTF_TBC + its Lua helpers

@@ -19,8 +19,10 @@
 #include "modules/tbc/tbc_module.h"
 
 #include <windows.h>
+#include <mmsystem.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <memory>
@@ -30,6 +32,7 @@
 #include "core/log.h"
 #include "core/patch.h"
 #include "core/tick.h"
+#include "engine/combat.h"
 #include "engine/lua.h"
 #include "engine/menu.h"
 #include "engine/render.h"
@@ -42,6 +45,7 @@
 #include "modules/tbc/director.h"
 #include "modules/tbc/economy.h"
 #include "modules/tbc/hud.h"
+#include "modules/tbc/hover.h"
 #include "modules/tbc/path_line.h"
 #include "modules/tbc/path_preview.h"
 #include "modules/tbc/turn_clock.h"
@@ -86,7 +90,42 @@ struct State {
   bool end_requested = false;
   bool auto_party = false;        // party turns: attack nearest enemy, end when idle
   uint32_t fights = 0;
+  // Effects advance one round at their owner's turn start ([tbc] round_effects, round_seconds).
+  bool round_effects = true;
+  uint32_t effect_round_ticks = 75;  // 5 s x 15 ticks
+  bool run = true;                   // [tbc] run: everyone runs in a fight
+  uint8_t run_scale_other = 11;      // move scale for animations without a run sequence
+  bool music = true;                 // [tbc] battle_music: keep the battle song for the whole fight
+  bool camera = true;                // [tbc] camera_follow: centre on whoever's turn it is
+  Pt cam_from{0, 0}, cam_to{0, 0};
+  uint32_t cam_t0 = 0;               // GetTickCount at the pan start; 0 = no pan
+  int32_t step_logged = -1;
+  bool test_tick = false;            // env PSTF_TEST_TICK=1: call Lua pstfTestTick() every frame
+  int32_t nudged = -1;               // AI creature we ordered this turn (its interrupt is restored)
+  bool no_fight = false;             // env PSTF_TBC_NOFIGHT=1: probes only, fights stay real time
+  // Dice panel: the last roll and when it came (GetTickCount), its d20 centre in UI coordinates.
+  bool dice_on = false;
+  engine::RollEvent dice;
+  uint32_t dice_t0 = 0;
+  bool dice_sound = false;           // save result sound still to play (at the verdict)
+  Pt dice_ui{-1, -1};
+  Pt hover_at{-1, -1};               // test probe PSTF_HoverAt: this world point instead of the cursor
+  bool rolls = false;                // the roll hooks are installed
+  std::wstring sound_dir;            // <game>/pst_forever/sounds/
+  uint32_t resolve_ticks = 0;        // world ticks the turn has waited for its spell to land
+  uint32_t since_action = 1000;      // world ticks since its action stopped running
+  bool resolving_logged = false;
 } g;
+
+// The creature's spell is still on its way (a projectile object it cast is in the area): its turn
+// waits, at most one round of world time (persistent clouds keep going on their own).
+constexpr uint32_t kResolveCapTicks = 110;  // Cone of Cold / Ice Knife go off 100 ticks after landing
+int CasterProjectiles(int32_t id, uint64_t area) {
+  int n = 0;
+  for (const auto& o : engine::AllObjects())
+    if (o.source == id && o.area == area && o.type == 0) ++n;  // CProjectile* (type 0, caster +0x68)
+  return n;
+}
 
 bool Contains(const std::vector<int32_t>& v, int32_t id) {
   return std::find(v.begin(), v.end(), id) != v.end();
@@ -95,15 +134,23 @@ bool Contains(const std::vector<int32_t>& v, int32_t id) {
 bool Held(int32_t id) { return g.running && id != g.current && Contains(g.in, id); }
 
 void __fastcall HookProcessAI(void* sprite) {
-  if (Held(engine::SpriteIdOf(sprite))) return;
+  if (Held(engine::SpriteIdOf(sprite))) {
+    // No scripts or actions while it waits, but spells cast on it land now (round clock frozen).
+    if (g.round_effects) engine::HeldEffectsTick(sprite);
+    return;
+  }
   g_process_ai(sprite);
 }
 void __fastcall HookWalk(void* sprite) {
   const int32_t id = engine::SpriteIdOf(sprite);
   if (Held(id)) return;
   if (g.running && id == g.current && g.hold_current) return;  // movement spent this turn
+  if (g.running && g.run && id == g.current) engine::ForceRun(id, true, g.run_scale_other);
   g_walk(sprite);
 }
+
+// Effect round clock: every combatant's persistent effects (DoT, regeneration) wait for its turn.
+bool FrozenCombatant(int32_t id) { return g.running && g.round_effects && Contains(g.in, id); }
 
 void Say(const std::string& text) {
   Log("tbc: %s", text.c_str());
@@ -134,6 +181,9 @@ std::string Who(int32_t id) {
 void EndFight(const char* why) {
   if (!g.running) return;
   Log("tbc: fight %u over (%s) after %u rounds", g.fights, why, g.dir ? g.dir->Round() : 0);
+  if (g.run)
+    for (int32_t id : g.in) engine::ForceRun(id, false, g.run_scale_other);
+  g.nudged = -1;
   g.running = false;
   g.in.clear();
   g.current = -1;
@@ -202,7 +252,7 @@ void Scan(uint32_t now) {
   }
   const CensusOut c = Census(seen, g.in, g.running, g.radii);
   if (!g.running) {
-    if (c.start) StartFight(c.join, now);
+    if (c.start && !g.no_fight) StartFight(c.join, now);
     return;
   }
   for (int32_t id : c.leave) {
@@ -228,9 +278,30 @@ void OnTurnChange(int32_t prev, int32_t next) {
     engine::ClearAI(prev);  // clean stop: no action, path or queue carried out of its turn
     engine::DropPath(prev);
   }
+  g.nudged = -1;
   g.current = next;
   g.end_requested = false;
+  g.resolve_ticks = 0;
+  g.resolving_logged = false;
+  g.since_action = 1000;
   if (next == -1) return;
+  if (g.round_effects && engine::EffectClockInstalled()) {
+    engine::SpriteInfo before;
+    const bool had = engine::GetSprite(next, &before);
+    engine::StepEffectClock(next, g.effect_round_ticks);
+    Log("tbc: %s turn start: effects step %u ticks (hp %d, %d timed, %d persistent)", Who(next).c_str(),
+        g.effect_round_ticks, had ? before.hp : -1, static_cast<int>(engine::TimedEffects(next).size()),
+        engine::PersistentCount(next));
+  }
+  if (g.camera) {
+    engine::SpriteInfo t;
+    int cx = 0, cy = 0;
+    if (engine::GetSprite(next, &t) && engine::ViewCenter(&cx, &cy)) {
+      g.cam_from = {cx, cy};
+      g.cam_to = {t.x, t.y};
+      g.cam_t0 = GetTickCount() | 1u;
+    }
+  }
   const Combatant* c = g.dir->Find(next);
   const bool party = c && c->r.side == Side::Party;
   const int slot = PartySlot(next);
@@ -386,6 +457,141 @@ void DrawMovementLine() {
   }
 }
 
+
+// --- dice panel and hover card --------------------------------------------------------------------
+uint32_t DiceMs() { return g.dice_on ? GetTickCount() - g.dice_t0 : 0; }
+
+void PlayResultSound(bool good) {
+  if (g.sound_dir.empty()) return;
+  const std::wstring f = g.sound_dir + (good ? L"save_success.wav" : L"save_failed.wav");
+  PlaySoundW(f.c_str(), nullptr, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+}
+
+// New rolls from the engine hooks: the last one involving a combatant goes on the dice panel.
+void TakeRolls() {
+  for (const auto& e : engine::TakeRollEvents()) {
+    if (!g.running || !Contains(g.in, e.actor)) continue;
+    Log("tbc: roll: %s %s d20 %d total %d needs %d -> %s", Who(e.actor).c_str(),
+        e.kind == engine::RollEvent::Attack ? ("attacks " + Who(e.target)).c_str() : "saves", e.roll, e.total, e.needs,
+        e.success ? (e.kind == engine::RollEvent::Attack ? "hit" : "saved") : (e.kind == engine::RollEvent::Attack ? "miss" : "failed"));
+    g.dice = e;
+    g.dice_on = true;
+    g.dice_t0 = GetTickCount();
+    g.dice_sound = e.kind == engine::RollEvent::Save;
+  }
+  if (g.dice_on && g.dice_sound && DiceTiming::Verdict(DiceMs())) {
+    g.dice_sound = false;
+    PlayResultSound(g.dice.success);
+  }
+  if (g.dice_on && !DiceTiming::Visible(DiceMs())) g.dice_on = false;
+}
+
+void FillDice(HudView* v) {
+  if (!g.dice_on) return;
+  const uint32_t ms = DiceMs();
+  const engine::RollEvent& e = g.dice;
+  v->dice = true;
+  v->dice_kind = e.kind == engine::RollEvent::Save ? 1 : 0;
+  engine::SpriteInfo a, t;
+  if (engine::GetSprite(e.actor, &a)) v->dice_actor_ref = a.name_ref;
+  if (engine::GetSprite(e.target, &t)) v->dice_target_ref = t.name_ref;
+  v->dice_actor = Who(e.actor);
+  v->dice_target = Who(e.target);
+  v->dice_face = DiceTiming::Face(ms, e.roll);
+  v->dice_landed = DiceTiming::Landed(ms);
+  v->dice_verdict = DiceTiming::Verdict(ms);
+  v->dice_good = e.success;
+  v->dice_alpha = DiceTiming::Alpha(ms);
+  char b[96];
+  const int mod = e.total - e.roll;
+  if (e.kind == engine::RollEvent::Attack) {
+    std::snprintf(b, sizeof b, "%d %s %d = %d     needs %d", e.roll, mod < 0 ? "-" : "+", mod < 0 ? -mod : mod, e.total,
+                  e.needs);
+    v->dice_result = e.roll == 20 ? "Critical hit!" : e.roll == 1 ? "Critical miss" : e.success ? "Hit" : "Miss";
+  } else {
+    std::snprintf(b, sizeof b, "%d %s %d = %d", e.roll, mod < 0 ? "-" : "+", mod < 0 ? -mod : mod, e.total);
+    v->dice_result = e.success ? "Saved" : "Failed";
+  }
+  v->dice_sum = b;
+}
+
+// The creature under the cursor (combatants only) and, for a foe, the chance that the active party
+// member (or the leader) hits it with the engine's own THAC0 and AC.
+void FillHover(HudView* v) {
+  int wx = 0, wy = 0;
+  if (g.hover_at.x >= 0) {
+    wx = g.hover_at.x, wy = g.hover_at.y;  // test probe PSTF_HoverAt
+  } else if (!engine::CursorWorld(&wx, &wy)) {
+    return;
+  }
+  std::vector<HoverCandidate> cand;
+  for (int32_t id : g.in) {
+    engine::SpriteInfo o;
+    if (engine::GetSprite(id, &o) && o.alive) cand.push_back({id, o.x, o.y});
+  }
+  const int32_t id = PickHovered(cand, wx, wy);
+  if (id == -1) return;
+  engine::SpriteInfo o;
+  if (!engine::GetSprite(id, &o)) return;
+  v->hover = true;
+  v->hover_name_ref = o.name_ref;
+  v->hover_name = Who(id);
+  v->hover_hp = o.hp;
+  v->hover_max = o.max_hp;
+  const Combatant* c = g.dir->Find(id);
+  v->hover_foe = c && c->r.side == Side::Hostile;
+  const int32_t me = PartySlot(g.current) >= 0 ? g.current : (g.party.empty() ? -1 : g.party[0]);
+  engine::CombatStats a, t;
+  if (v->hover_foe && me != -1 && engine::GetCombatStats(me, &a) && engine::GetCombatStats(id, &t)) {
+    v->hover_ac = t.ac;
+    v->hover_needs = NeedsToHit(a.thac0, t.ac);
+    v->hover_chance = HitChancePercent(a.thac0, t.ac);
+  }
+}
+
+// A d20 (icosahedron) tumbling in the dice panel, drawn by the engine in the world pass.
+void DrawDie() {
+  if (!g.dice_on || g.dice_ui.x < 0) return;
+  int cx = 0, cy = 0, ex = 0, ey = 0;
+  if (!engine::UiToWorld(g.dice_ui.x, g.dice_ui.y, &cx, &cy) || !engine::UiToWorld(g.dice_ui.x + 30, g.dice_ui.y, &ex, &ey))
+    return;
+  const double r = ex - cx;  // 30 UI px in world units
+  const uint32_t ms = DiceMs();
+  const double land = DiceTiming::Landed(ms) ? 1.0 : ms / double(DiceTiming::kTumble);
+  const double ang = (1.0 - land) * (1.0 - land) * 11.0 + 0.35;  // slows down as it lands
+  static const double p = 1.6180339887;
+  static const double V[12][3] = {{0, 1, p}, {0, -1, p}, {0, 1, -p}, {0, -1, -p}, {1, p, 0}, {-1, p, 0},
+                                  {1, -p, 0}, {-1, -p, 0}, {p, 0, 1}, {-p, 0, 1}, {p, 0, -1}, {-p, 0, -1}};
+  const double ca = std::cos(ang), sa = std::sin(ang), cb = std::cos(ang * 0.7 + 0.4), sb = std::sin(ang * 0.7 + 0.4);
+  double P[12][3];
+  for (int i = 0; i < 12; ++i) {
+    const double x = V[i][0], y = V[i][1], z = V[i][2];
+    const double x1 = x * ca + z * sa, z1 = -x * sa + z * ca;   // around y
+    const double y2 = y * cb - z1 * sb, z2 = y * sb + z1 * cb;  // around x
+    P[i][0] = x1 / 1.902, P[i][1] = y2 / 1.902, P[i][2] = z2 / 1.902;
+  }
+  const bool verdict = DiceTiming::Verdict(ms);
+  const uint32_t bone = 0xB0D4E2, gold = 0x48D0FF, red = 0x283CC8, ink = 0x0A0E14;
+  const uint32_t edge = !verdict ? bone : g.dice.success ? gold : red;
+  for (int pass = 0; pass < 2; ++pass) {
+    for (int i = 0; i < 12; ++i)
+      for (int j = i + 1; j < 12; ++j) {
+        const double dx = V[i][0] - V[j][0], dy = V[i][1] - V[j][1], dz = V[i][2] - V[j][2];
+        if (std::abs(dx * dx + dy * dy + dz * dz - 4.0) > 0.01) continue;  // icosahedron edge = 2
+        const bool front = P[i][2] + P[j][2] > -0.35;
+        if (!front) continue;
+        engine::DrawWorldLine(cx + static_cast<int>(P[i][0] * r), cy - static_cast<int>(P[i][1] * r),
+                              cx + static_cast<int>(P[j][0] * r), cy - static_cast<int>(P[j][1] * r),
+                              pass ? edge : ink, pass ? 1.3f : 2.6f);
+      }
+  }
+}
+
+void DrawOverlay() {
+  DrawMovementLine();
+  DrawDie();
+}
+
 // Only the party member whose turn it is may be selected (none on other turns): the engine's own
 // selection calls, every frame, undo a click on another portrait or creature.
 void LockSelection() {
@@ -421,6 +627,8 @@ void UpdateHud(uint32_t now) {
     v.cards.push_back(card);
   }
   v.party_turn = PartySlot(g.current) >= 0;  // also with party AI (tests, demos)
+  FillHover(&v);
+  FillDice(&v);
   v.slot = PartySlot(g.current);
   v.move_ft = g.econ.move_ft;
   v.max_ft = g.econ.max_ft;
@@ -433,6 +641,7 @@ void UpdateHud(uint32_t now) {
     for (const auto& p : engine::PathPoints(g.current)) nodes.push_back({p.first, p.second});
     g.line_preview = false;
     g.unreachable = false;
+    if (!v.party_turn) nodes.clear();  // enemies' and allies' paths are not shown
     if (nodes.empty() && g.econ.party && g.econ.MoveLeft() && !g.econ.acting) nodes = HoverPreview(me);
     const Pt from{me.x, me.y};
     g.line.clear();
@@ -452,7 +661,17 @@ void UpdateHud(uint32_t now) {
   }
 }
 
+void TestTick() {
+  if (!g.test_tick) return;
+  const std::string e = engine::LuaDoString("if pstfTestTick then pstfTestTick() end");
+  if (!e.empty()) {
+    Log("tbc: test tick error: %s", e.c_str());
+    engine::LuaDoString("pstfTestTick = nil");
+  }
+}
+
 void OnTick(uint64_t frame) {
+  if (!g.running) TestTick();
   if (engine::ActiveScreen() != engine::Screen::World) {
     EndFight("left the world screen");
     g.have_time = false;
@@ -469,9 +688,25 @@ void OnTick(uint64_t frame) {
   if (frame % 4 == 0 || g.running) Scan(now);
   if (!g.running) return;
 
+  // Effect round clock: nobody's timed effects or natural regeneration move with world time.
+  if (g.round_effects && engine::EffectClockInstalled() && dt > 0 && dt < 1000)
+    for (int32_t id : g.in) engine::ShiftEffectClock(id, static_cast<int32_t>(dt));
+  if (g.music && !g.party.empty()) engine::KeepBattleMusic(g.party[0], 150);
+  if (g.round_effects) engine::WatchProjectiles();
+  TestTick();  // after the clock shift: tests read the same remaining ticks the engine compares
+  if (!g.running) return;
+
   const int32_t cur = g.dir->Current();
   if (cur != g.current) OnTurnChange(g.current, cur);
   if (cur == -1) return;
+  if (g.cam_t0) {
+    // A quick pan (about a quarter second, eased) to whoever's turn it is.
+    const double t = std::min(1.0, (GetTickCount() - g.cam_t0) / 260.0);
+    const double e = t * t * (3 - 2 * t);
+    engine::CenterView(g.cam_from.x + static_cast<int>((g.cam_to.x - g.cam_from.x) * e),
+                       g.cam_from.y + static_cast<int>((g.cam_to.y - g.cam_from.y) * e));
+    if (t >= 1.0) g.cam_t0 = 0;
+  }
 
   // End Turn key (edge), only for party turns and only when the game window has focus.
   const bool down = (GetAsyncKeyState(g.end_turn_vk) & 0x8000) != 0 && OurWindowFocused();
@@ -483,11 +718,42 @@ void OnTick(uint64_t frame) {
     g.dir->Remove(cur);
     return;
   }
+  if (cur == g.nudged) {
+    static uint16_t last = 0xFFFF;
+    static bool path = false;
+    if (s.action != last || s.has_path != path)
+      Log("tbc: %s after the order: action %u path %d at %d,%d", Who(cur).c_str(), s.action, s.has_path ? 1 : 0, s.x, s.y);
+    last = s.action, path = s.has_path;
+  }
   const double moved = FeetBetween(g.last_x, g.last_y, s.x, s.y);
   g.last_x = s.x, g.last_y = s.y;
   g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
   const EconomyStep st = g.econ.Feed(dt, moved, s.has_path, s.action);
   g.hold_current = st.hold_walk;
+  if (st.nudge) {
+    // Its own script picked nothing (many creatures only wait or wander): the engine's attack on the
+    // nearest enemy it can see, as a real-time fight would have it retaliate.
+    // Hostiles go for the nearest living party member (PlayerN needs no line of sight, unlike
+    // NearestEnemyOf); allies for the nearest enemy they can see.
+    std::string order = "Attack(NearestEnemyOf(Myself))";
+    const Combatant* me = g.dir->Find(cur);
+    if (me && me->r.side == Side::Hostile) {
+      long long best = -1;
+      for (size_t i = 0; i < g.party.size(); ++i) {
+        engine::SpriteInfo p;
+        if (!engine::GetSprite(g.party[i], &p) || !p.alive || p.area != s.area) continue;
+        const long long dx = p.x - s.x, dy = p.y - s.y, d = dx * dx + dy * dy;
+        if (best < 0 || d < best) best = d, order = "Attack(Player" + std::to_string(i + 1) + ")";
+      }
+    }
+    engine::ClearAI(cur);  // its script's WaitRandom would hold the order back
+    g.nudged = cur;
+    const bool ok = engine::EvalAs(cur, order);
+    // Its own script must not replace the order with its waits (SetInterrupt(FALSE), set directly:
+    // a queued SetInterrupt would itself be replaced). The engine lifts it when the queue is empty.
+    engine::SetNoInterrupt(cur);
+    Log("tbc: %s idle on its turn: ordered %s (%s)", Who(cur).c_str(), order.c_str(), ok ? "ok" : "failed");
+  }
   if (st.stop != Stop::None) {
     static const char* kStop[] = {"", "Can't get there this turn: no movement left",
                                   "No action left this turn", "Attack round done"};
@@ -500,7 +766,22 @@ void OnTick(uint64_t frame) {
       g.notice_until = now + 45;
     }
   }
-  if (st.end_turn || g.end_requested) {
+  g.since_action = g.econ.acting ? 0 : g.since_action + dt;
+  bool wait_spell = false;
+  if ((st.end_turn || g.end_requested) && g.resolve_ticks < kResolveCapTicks) {
+    const int n = CasterProjectiles(cur, s.area);
+    // A projectile appears up to a second after the cast animation ends: give it 25 ticks.
+    if (n > 0 || (g.econ.action_used && g.since_action < 25)) {
+      wait_spell = true;
+      g.resolve_ticks += dt;
+      if (!g.resolving_logged) {
+        g.resolving_logged = true;
+        if (n > 0) Log("tbc: %s: turn waits for its spell (%d projectile%s)", Who(cur).c_str(), n, n == 1 ? "" : "s");
+        else g.resolving_logged = false;
+      }
+    }
+  }
+  if ((st.end_turn || g.end_requested) && !wait_spell) {
     std::string hps;
     for (int32_t id : g.in) {
       engine::SpriteInfo o;
@@ -517,6 +798,7 @@ void OnTick(uint64_t frame) {
     }
   }
   LockSelection();
+  if (g.rolls) TakeRolls();
   UpdateHud(now);
 }
 
@@ -563,12 +845,13 @@ int __cdecl LuaMakeEnemyNearest(engine::LuaState* L) {
   return 1;
 }
 
-// PSTF_SpritePos(id) -> x, y, hp, ea (or -1 if no such creature).
+// PSTF_SpritePos(id[, quiet]) -> x, y, hp, ea (or -1 if no such creature).
 int __cdecl LuaSpritePos(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
   engine::SpriteInfo s;
   const bool ok = engine::GetSprite(id, &s);
-  Log("lua: PSTF_SpritePos(%X) -> %d,%d hp %d ea %u", static_cast<unsigned>(id), s.x, s.y, s.hp, s.ea);
+  if (engine::LuaNumberArg(L, 2, 0) == 0)
+    Log("lua: PSTF_SpritePos(%X) -> %d,%d hp %d ea %u", static_cast<unsigned>(id), s.x, s.y, s.hp, s.ea);
   engine::LuaPushNumber(L, ok ? s.x : -1);
   engine::LuaPushNumber(L, ok ? s.y : -1);
   engine::LuaPushNumber(L, ok ? s.hp : -1);
@@ -626,6 +909,189 @@ int __cdecl LuaWalkCost(engine::LuaState* L) {
   return 1;
 }
 
+
+// --- effect / roll / action bar probes (tests) -------------------------------------------------
+// PSTF_Effects(id) -> "op:type:left;..." of its timed and equipped effects (left = ticks to expiry).
+int __cdecl LuaEffects(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  std::string s;
+  for (const auto& e : engine::TimedEffects(id)) {
+    char b[48];
+    std::snprintf(b, sizeof b, "%d:%u:%d;", e.opcode, e.type, e.left);
+    s += b;
+  }
+  Log("lua: PSTF_Effects(%X) -> %s persistent=%d", static_cast<unsigned>(id), s.c_str(), engine::PersistentCount(id));
+  engine::LuaPushString(L, s.c_str());
+  return 1;
+}
+// PSTF_HasEffect(id, opcode) -> ticks left of the first such effect (-1: none, 0: not timed).
+int __cdecl LuaHasEffect(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const int op = static_cast<int>(engine::LuaNumberArg(L, 2, -1));
+  int left = -1;
+  for (const auto& e : engine::TimedEffects(id))
+    if (e.opcode == op) {
+      left = e.left;
+      break;
+    }
+  if (engine::LuaNumberArg(L, 3, 0) == 0) Log("lua: PSTF_HasEffect(%X, %d) -> %d", static_cast<unsigned>(id), op, left);
+  engine::LuaPushNumber(L, left);
+  return 1;
+}
+// PSTF_Objects([source]) -> number of non-creature objects (of that caster); logs each.
+int __cdecl LuaObjects(engine::LuaState* L) {
+  const auto src = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -2));
+  auto objs = engine::AllObjects();
+  if (src == -3) {
+    // new kinds only: not the area's doors, containers, regions, spawn points... seen at load
+    static const uint8_t kStatic[] = {16, 17, 33, 64, 65, 97, 113};
+    objs.erase(std::remove_if(objs.begin(), objs.end(), [&](const engine::ObjectInfo& o) {
+                 return std::find(std::begin(kStatic), std::end(kStatic), o.type) != std::end(kStatic);
+               }), objs.end());
+  } else if (src != -2) {
+    objs.erase(std::remove_if(objs.begin(), objs.end(), [&](const engine::ObjectInfo& o) { return o.source != src; }), objs.end());
+  }
+  for (const auto& o : objs) {
+    std::string raw;
+    for (int k = 0; k < 16; ++k) {
+      char b[12];
+      std::snprintf(b, sizeof b, " %X", static_cast<unsigned>(o.raw[k]));
+      raw += b;
+    }
+    Log("lua: object %X type %u vtbl %llX src %X tgt %X at %d,%d raw+50:%s", static_cast<unsigned>(o.id), o.type,
+        static_cast<unsigned long long>(o.vtable), static_cast<unsigned>(o.source), static_cast<unsigned>(o.target),
+        o.x, o.y, raw.c_str());
+  }
+  engine::LuaPushNumber(L, static_cast<double>(objs.size()));
+  return 1;
+}
+// PSTF_TbcCurrent() -> id whose turn it is (-1), round, party turn, action used, acting, feet left.
+int __cdecl LuaTbcCurrent(engine::LuaState* L) {
+  engine::LuaPushNumber(L, g.running ? g.current : -1);
+  engine::LuaPushNumber(L, g.running && g.dir ? g.dir->Round() : 0);
+  engine::LuaPushBool(L, g.running && g.econ.party);
+  engine::LuaPushBool(L, g.running && g.econ.action_used);
+  engine::LuaPushBool(L, g.running && g.econ.acting);
+  engine::LuaPushNumber(L, g.running ? g.econ.move_ft : 0);
+  return 6;
+}
+// PSTF_FightId(i) -> id of the i-th combatant (1-based, initiative order), -1 past the end.
+int __cdecl LuaFightId(engine::LuaState* L) {
+  const int i = static_cast<int>(engine::LuaNumberArg(L, 1, 0));
+  int32_t id = -1;
+  if (g.running && g.dir) {
+    const auto order = g.dir->Order();
+    if (i >= 1 && i <= static_cast<int>(order.size())) id = order[i - 1];
+  }
+  engine::LuaPushNumber(L, id);
+  return 1;
+}
+// PSTF_MakeEnemy(id) -> the engine's Enemy() on that creature.
+int __cdecl LuaMakeEnemy(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const bool ok = engine::MakeEnemy(id);
+  Log("lua: PSTF_MakeEnemy(%X) -> %d", static_cast<unsigned>(id), ok ? 1 : 0);
+  engine::LuaPushBool(L, ok);
+  return 1;
+}
+// PSTF_EvalAs(id, bcs[, takeover]) -> queues BCS actions on any creature (engine console path, engine/sprites.h).
+int __cdecl LuaEvalAs(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const std::string text = engine::LuaStringArg(L, 2);
+  const bool takeover = engine::LuaNumberArg(L, 3, 0) != 0;  // clear its actions first, scripts wait
+  if (takeover) engine::ClearAI(id);
+  const bool ok = engine::EvalAs(id, text);
+  if (takeover) engine::SetNoInterrupt(id);
+  Log("lua: PSTF_EvalAs(%X, %s) -> %d", static_cast<unsigned>(id), text.c_str(), ok ? 1 : 0);
+  engine::LuaPushBool(L, ok);
+  return 1;
+}
+// PSTF_SetHp(id, hp): test helper (keeps a target alive across a spell suite).
+int __cdecl LuaSetHp(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const int hp = static_cast<int>(engine::LuaNumberArg(L, 2, -1));
+  const bool ok = engine::SetHpForTest(id, hp);
+  Log("lua: PSTF_SetHp(%X, %d) -> %d", static_cast<unsigned>(id), hp, ok ? 1 : 0);
+  return 0;
+}
+// PSTF_HoverAt(x, y): the hover card uses this world point instead of the cursor (-1,-1: cursor).
+int __cdecl LuaHoverAt(engine::LuaState* L) {
+  g.hover_at = {static_cast<int>(engine::LuaNumberArg(L, 1, -1)), static_cast<int>(engine::LuaNumberArg(L, 2, -1))};
+  return 0;
+}
+// PSTF_DiceAt(x, y): the HUD layout tells where the dice panel's d20 sits (UI coordinates).
+int __cdecl LuaDiceAt(engine::LuaState* L) {
+  g.dice_ui = {static_cast<int>(engine::LuaNumberArg(L, 1, -1)), static_cast<int>(engine::LuaNumberArg(L, 2, -1))};
+  return 0;
+}
+// PSTF_RollProbe(kind, success, roll): test probe, puts a roll on the dice panel (and plays the
+// save sound) as if the engine had rolled it for the active creature.
+int __cdecl LuaRollProbe(engine::LuaState* L) {
+  engine::RollEvent e;
+  e.kind = engine::LuaNumberArg(L, 1, 0) == 1 ? engine::RollEvent::Save : engine::RollEvent::Attack;
+  e.success = engine::LuaNumberArg(L, 2, 0) != 0;
+  e.roll = static_cast<int>(engine::LuaNumberArg(L, 3, 10));
+  e.total = e.roll + 2;
+  e.needs = 12;
+  e.actor = g.current;
+  e.target = g.party.empty() ? -1 : g.party[0];
+  g.dice = e;
+  g.dice_on = g.running;
+  g.dice_t0 = GetTickCount();
+  g.dice_sound = e.kind == engine::RollEvent::Save;
+  Log("lua: PSTF_RollProbe -> %s", g.dice_on ? "shown" : "no fight");
+  return 0;
+}
+// PSTF_WorldTicks() -> the world clock.
+int __cdecl LuaWorldTicks(engine::LuaState* L) {
+  uint32_t t = 0;
+  bool r = false;
+  engine::WorldTime(&t, &r);
+  engine::LuaPushNumber(L, t);
+  return 1;
+}
+// PSTF_Near(radius) -> logs every creature within radius px of the party leader (id, ea, hp, pos, name).
+int __cdecl LuaNear(engine::LuaState* L) {
+  const double r = engine::LuaNumberArg(L, 1, 1500);
+  const auto party = engine::PartyIds();
+  engine::SpriteInfo me;
+  int n = 0;
+  if (!party.empty() && engine::GetSprite(party[0], &me)) {
+    for (const auto& s : engine::AllSprites()) {
+      if (s.area != me.area) continue;
+      const double dx = s.x - me.x, dy = s.y - me.y;
+      if (dx * dx + dy * dy > r * r) continue;
+      ++n;
+      Log("lua: near %X ea %u hp %d/%d alive %d at %d,%d name %d best %d", static_cast<unsigned>(s.id), s.ea, s.hp,
+          s.max_hp, s.alive ? 1 : 0, s.x, s.y, s.name_ref, s.bestiary);
+    }
+  }
+  engine::LuaPushNumber(L, n);
+  return 1;
+}
+// PSTF_Stats(id) -> thac0, ac, hp, maxhp
+int __cdecl LuaStats(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  engine::CombatStats c;
+  const bool ok = engine::GetCombatStats(id, &c);
+  Log("lua: PSTF_Stats(%X) -> thac0 %d ac %d hp %d/%d move %u active %s", static_cast<unsigned>(id), c.thac0, c.ac, c.hp,
+      c.max_hp, engine::MoveScale(id), engine::ActiveFlags(id).c_str());
+  engine::LuaPushNumber(L, ok ? c.thac0 : -1);
+  engine::LuaPushNumber(L, ok ? c.ac : -1);
+  engine::LuaPushNumber(L, ok ? c.hp : -1);
+  engine::LuaPushNumber(L, ok ? c.max_hp : -1);
+  return 4;
+}
+// PSTF_Bar() -> logs the 12 action bar slots as the engine has them now.
+int __cdecl LuaBar(engine::LuaState* L) {
+  std::string s;
+  for (const auto& b : engine::ActionBarButtons()) s += b.icon + "/" + std::to_string(b.count) + " ";
+  Log("lua: PSTF_Bar -> %s", s.c_str());
+  for (int i = 0; i < 2; ++i) Log("lua: bar slot %d: %s", i, engine::ActionBarHex(i, 96).c_str());
+  engine::LuaPushString(L, s.c_str());
+  return 1;
+}
+
 int IniInt(const IniMap& ini, const char* key, int fallback) {
   auto it = ini.find(key);
   if (it == ini.end() || it->second.empty()) return fallback;
@@ -648,6 +1114,15 @@ bool InstallTbc(const IniMap& ini) {
   g.radii.leave = IniInt(ini, "tbc.leave_radius", g.radii.leave);
   g.end_turn_vk = IniInt(ini, "tbc.end_turn_key", VK_END);
   g.auto_party = IniBool(ini, "tbc.auto_party", false);
+  g.round_effects = IniBool(ini, "tbc.round_effects", true);
+  {
+    const int secs = IniInt(ini, "tbc.round_seconds", 5);
+    g.effect_round_ticks = static_cast<uint32_t>(secs > 0 ? secs : 5) * 15u;
+  }
+  g.run = IniBool(ini, "tbc.run", true);
+  g.run_scale_other = static_cast<uint8_t>(IniInt(ini, "tbc.run_scale", 11));
+  g.music = IniBool(ini, "tbc.battle_music", true);
+  g.camera = IniBool(ini, "tbc.camera_follow", true);
   {
     const int feet = IniInt(ini, "tbc.move_feet", 31);
     g.move_feet = feet > 0 ? feet : 31;
@@ -657,6 +1132,19 @@ bool InstallTbc(const IniMap& ini) {
     size_t n = 0;
     if (_dupenv_s(&v, &n, "PSTF_TBC_AUTOPARTY") == 0 && v) g.auto_party = v[0] == '1';
     free(v);
+    v = nullptr;
+    if (_dupenv_s(&v, &n, "PSTF_TEST_TICK") == 0 && v) g.test_tick = v[0] == '1';
+    free(v);
+    v = nullptr;
+    if (_dupenv_s(&v, &n, "PSTF_TBC_NOFIGHT") == 0 && v) g.no_fight = v[0] == '1';
+    free(v);
+  }
+  {
+    wchar_t exe[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    std::wstring dir(exe);
+    dir = dir.substr(0, dir.find_last_of(L"\\/") + 1);
+    g.sound_dir = dir + L"pst_forever\\sounds\\";
   }
   if (!engine::SpritesAvailable() || !engine::ScreensAvailable() || !engine::WorldApiAvailable()) {
     Log("tbc: engine functions differ from the manifest; turn-based combat off");
@@ -692,11 +1180,21 @@ bool InstallTbc(const IniMap& ini) {
   g_walk = reinterpret_cast<SpriteFn>(walk1);
   g_process_ai = reinterpret_cast<SpriteFn>(pai);
   if (!AddTickHandler(&OnTick)) return false;
+  if (g.round_effects && !engine::InstallEffectClock(&FrozenCombatant)) g.round_effects = false;
+  // A spell's projectile (a flying knife, a cloud) moves only in its caster's turn.
+  if (g.round_effects) engine::SetProjectileHold([](int32_t caster) { return Held(caster); });
+  {
+    char* v = nullptr;
+    size_t n = 0;
+    if (_dupenv_s(&v, &n, "PSTF_FEEDBACK_LOG") == 0 && v && v[0] == '1') engine::InstallFeedbackLog();
+    free(v);
+  }
   if (IniBool(ini, "tbc.hud", true)) {
     if (engine::HudAvailable() && engine::InstallMenuHook()) {
       engine::AddMenuText(BuildHudMenu());
       g.hud = true;
-      g.draw = engine::InstallWorldDraw(&DrawMovementLine);
+      g.draw = engine::InstallWorldDraw(&DrawOverlay);
+      g.rolls = engine::InstallRollHooks();
       if (!g.draw) Log("tbc: world overlay not installed; no movement line");
     } else {
       Log("tbc: HUD functions differ from the manifest; turn-based HUD off (combat still on)");
@@ -711,6 +1209,21 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_Note", &LuaNote);
   dev::AddLuaFunction("PSTF_PathFt", &LuaPathFt);
   dev::AddLuaFunction("PSTF_WalkCost", &LuaWalkCost);
+  dev::AddLuaFunction("PSTF_Effects", &LuaEffects);
+  dev::AddLuaFunction("PSTF_HasEffect", &LuaHasEffect);
+  dev::AddLuaFunction("PSTF_Objects", &LuaObjects);
+  dev::AddLuaFunction("PSTF_Stats", &LuaStats);
+  dev::AddLuaFunction("PSTF_Bar", &LuaBar);
+  dev::AddLuaFunction("PSTF_Near", &LuaNear);
+  dev::AddLuaFunction("PSTF_TbcCurrent", &LuaTbcCurrent);
+  dev::AddLuaFunction("PSTF_MakeEnemy", &LuaMakeEnemy);
+  dev::AddLuaFunction("PSTF_WorldTicks", &LuaWorldTicks);
+  dev::AddLuaFunction("PSTF_EvalAs", &LuaEvalAs);
+  dev::AddLuaFunction("PSTF_FightId", &LuaFightId);
+  dev::AddLuaFunction("PSTF_SetHp", &LuaSetHp);
+  dev::AddLuaFunction("PSTF_DiceAt", &LuaDiceAt);
+  dev::AddLuaFunction("PSTF_HoverAt", &LuaHoverAt);
+  dev::AddLuaFunction("PSTF_RollProbe", &LuaRollProbe);
   Log("tbc: installed (ProcessAI slot, 2 walk calls, tick); radii %d/%d/%d, end turn key %X%s, "
       "move %.0f ft, hud %s",
       g.radii.start, g.radii.join, g.radii.leave, g.end_turn_vk, g.auto_party ? ", auto party" : "",

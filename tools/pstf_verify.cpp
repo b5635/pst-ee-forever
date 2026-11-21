@@ -157,6 +157,27 @@ int wmain(int argc, wchar_t** argv) {
     if (p[0] != 0xFF) Fail("COST_IMPASSABLE is not 0xFF", "COST_IMPASSABLE");
   }
 
+  // Effect round clock and combat presentation.
+  call_to(sym::kRvaHitFeedbackCall, sym::kVaFeedBack, "Hit -> FeedBack(4)");
+  call_to(sym::kRvaSwingHit1, sym::kVaHit, "Swing -> Hit 1");
+  call_to(sym::kRvaSwingHit2, sym::kVaHit, "Swing -> Hit 2");
+  call_to(sym::kRvaSwingHit3, sym::kVaHit, "Swing -> Hit 3");
+  if (sym::kVaAnimPstVtable + sym::kVtblAnimSetRunning != sym::kImageBase + sym::kRvaSlotSetRunning)
+    Fail("slot math", "SetRunning vtbl");
+  {
+    uint64_t v = 0;
+    std::memcpy(&v, sym::kSlotSetRunningBytes, 8);
+    if (v != sym::kImageBase + sym::kRvaSetRunning) Fail("slot does not hold SetRunning", "SetRunning vtbl");
+  }
+  call_to(sym::kRvaCenterLeaderJmp, sym::kImageBase + sym::kRvaSetViewPos, "CenterOnGroupLeader -> SetViewPosition");
+  // The persistent-effects gate: cmp byte [rcx+7824h] (the world timer's running flag, +4 after the
+  // tick at +0x7820) and the jz over the inlined HandlePersistantEffects lands right after it.
+  if (auto* p = img.At(sym::kRvaPersistGate, 13)) {
+    int32_t rel = 0;
+    std::memcpy(&rel, p + 9, 4);
+    if (sym::kRvaPersistGate + 13 + rel != 0x425CC3) Fail("jz target differs", "persist gate");
+  }
+
   // Static initialiser of ROUND_LENGTH (.data) is the non-PST default; LoadOptions stores 51.
   if (auto* p = img.At(static_cast<uint32_t>(sym::kVaRoundLength - sym::kImageBase), 4)) {
     uint32_t v = 0;
