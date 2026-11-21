@@ -137,6 +137,7 @@ function pstfTbcLayout()
 		if d[2 * i] then area('pstfRDot' .. i, d[2 * i - 1] - 3, d[2 * i] - 3, 7, 7) end
 	end
 	if pstfPathLabelOn() then area('pstfPathLabel', pstfTbc.lx - 40, pstfTbc.ly - 30, 80, 20) end
+	pstfBarLayout(sw, py)
 	-- hover card under the title (BG3: name, HP bar, hit chance)
 	local hw, hx, hy = 300, math.floor(sw / 2) - 150, 8 + ah + 32
 	area('pstfHoverBg', hx, hy, hw, 58)
@@ -156,6 +157,67 @@ function pstfTbcLayout()
 	area('pstfDiceResult', dx + 104, dy + 64, 218, 26)
 	area('pstfDiceResultBad', dx + 104, dy + 64, 218, 26)
 	if PSTF_DiceAt then PSTF_DiceAt(dx + 50, dy + 62) end
+end
+-- BG3 hotbar: all weapons, spells, quick items and abilities of the active party member at once.
+pstfBar = {}
+pstfBarRows = {{'Weapons', 'ACTIONBAR_STATE_WEAPONS'}, {'Spells', 'ACTIONBAR_STATE_SPELLS'},
+	{'Items', 'ACTIONBAR_STATE_ITEMS'}, {'Abilities', 'ACTIONBAR_STATE_SPECIAL_ABILITES'}}
+function pstfBarCollect()
+	local bar = {}
+	local ba = game:GetButtonArray()
+	for r, row in ipairs(pstfBarRows) do
+		local st = const and const[row[2]]
+		if st then
+			ba:SetState(st)
+			local i = 0
+			for icon, on in string.gmatch(PSTF_BarSlots(), '([^:;]*):(%d);') do
+				if icon ~= '' then
+					table.insert(bar, {row = r, state = st, slot = i, icon = icon, on = on == '1', tip = actionBarTooltip and actionBarTooltip[i]})
+				end
+				i = i + 1
+			end
+		end
+	end
+	pstfBar = bar
+end
+function pstfBarEntry(k) return pstfTbc.on and pstfTbc.party and pstfBar[k] or nil end
+function pstfBarOn(k) return pstfBarEntry(k) ~= nil end
+function pstfBarIcon(k) local e = pstfBarEntry(k) return e and e.icon or '' end
+function pstfBarTip(k) local e = pstfBarEntry(k) return e and e.tip or nil end
+function pstfBarUsable(k) local e = pstfBarEntry(k) return e ~= nil and e.on and not pstfTbc.used end
+function pstfBarClick(k)
+	local e = pstfBarEntry(k)
+	if not e or not e.on then return end
+	game:GetButtonArray():SetState(e.state)
+	game:GetButtonArray():OnLButtonPressed(e.slot)
+end
+function pstfBarLayout(sw, py)
+	-- one row (BG3), a wider gap between weapons, spells, items and abilities; wraps past 18
+	local size, gap, sep = 40, 4, 14
+	local n = #pstfBar
+	local perRow = 18
+	local rows = math.max(1, math.ceil(n / perRow))
+	local placed = {}
+	for row = 0, rows - 1 do
+		local first, last = row * perRow + 1, math.min(n, (row + 1) * perRow)
+		local width = 0
+		for k = first, last do
+			width = width + size + gap
+			if k > first and pstfBar[k].row ~= pstfBar[k - 1].row then width = width + sep end
+		end
+		local x = math.floor(sw / 2 - (width - gap) / 2)
+		local y = py - 8 - (rows - row) * (size + gap)
+		for k = first, last do
+			if k > first and pstfBar[k].row ~= pstfBar[k - 1].row then x = x + sep end
+			Infinity_SetArea('pstfBarBg' .. k, x - 2, y - 2, size + 4, size + 4)
+			Infinity_SetArea('pstfBarBtn' .. k, x, y, size, size)
+			placed[k] = true
+			x = x + size + gap
+		end
+	end
+	for k = 1, PSTF_BAR do
+		if not placed[k] then Infinity_SetArea('pstfBarBtn' .. k, -100, -100, 1, 1) Infinity_SetArea('pstfBarBg' .. k, -100, -100, 1, 1) end
+	end
 end
 function pstfHoverOn() return pstfTbc.on and pstfTbc.hover end
 function pstfHoverName()
@@ -189,7 +251,7 @@ std::string Label(const std::string& name, const std::string& enabled, const std
 }  // namespace
 
 std::string BuildHudMenu() {
-  std::string m = "`\nPSTF_CARDS = " + std::to_string(kHudCards) + "\nPSTF_DOTS = " +
+  std::string m = "`\nPSTF_BAR = " + std::to_string(kHudBar) + "\nPSTF_CARDS = " + std::to_string(kHudCards) + "\nPSTF_DOTS = " +
                   std::to_string(kHudDots) + "\n" + kLua + "`\n";
   m += "menu\n{\n\tname 'PSTF_TBC'\n\talign left top\n\tignoreEsc\n";
   m += "\tonopen \"pstfTbcOpen = true\"\n\tonclose \"pstfTbcOpen = false\"\n";
@@ -232,6 +294,13 @@ std::string BuildHudMenu() {
   m += Label("pstfMsg", "pstfMsgOn()",
              "\t\ttext lua \"pstfMsg()\"\n\t\ttext style \"label\"\n\t\talign center center\n");
   m += Label("pstfPanel", "pstfParty()", "\t\tfill 12 10 8 210\n");
+  for (int i = 1; i <= kHudBar; ++i) {
+    const std::string n = std::to_string(i);
+    m += Label("pstfBarBg" + n, "pstfBarOn(" + n + ")", "\t\tfill 60 44 24 230\n");
+    m += "\tbutton\n\t{\n\t\tname \"pstfBarBtn" + n + "\"\n\t\tarea 0 0 1 1\n\t\tenabled \"pstfBarOn(" + n +
+         ")\"\n\t\tbam lua \"pstfBarIcon(" + n + ")\"\n\t\tgreyscale lua \"not pstfBarUsable(" + n +
+         ")\"\n\t\ttooltip lua \"pstfBarTip(" + n + ")\"\n\t\taction \"pstfBarClick(" + n + ")\"\n\t}\n";
+  }
   m += Label("pstfActionPip", "pstfActionReady()", "\t\tfill 90 200 90 255\n");
   m += Label("pstfActionPipUsed", "pstfActionUsed()", "\t\tfill 70 60 50 255\n");
   m += Label("pstfActionText", "pstfParty()",

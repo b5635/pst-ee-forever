@@ -448,6 +448,14 @@ constexpr uint32_t kRvaCheckSave = 0x1EC460, kOffEffSaveFlags = 0x40, kOffEffSav
 // (PreRenderButton lin 3608B0: this + 672 * i); icon resref at +0 (GetQuickSlotData lin 357760).
 inline constexpr uint8_t kButtonArrayBytes[] = {0x48, 0x8D, 0x97, 0xC0, 0x79, 0x00, 0x00};
 constexpr uint32_t kRvaButtonArray = 0x46102E, kOffGameButtonArray = 0x79C0, kButtonDataSize = 0x2A0;
+// CInfButtonArray::PostRenderButton (lin 3602F0, win 1402C8000): slot = array + 0x2A0 * i (1402C808C),
+// icon CResRef at slot +0x128 (`lea rbx,[rsi+128h]` compared with "STONSPEL", 1402C82F5; count word
+// +0x294 for CIcon::RenderIcon at 1402C82D9), disabled flag at slot +0x29C (1402C8097). Measured in
+// game: weapons II232, spells SP093..SP096, items II175 at +0x128 + 0x2A0 * i.
+inline constexpr uint8_t kBarIconBytes[] = {0x48, 0x8D, 0x9E, 0x28, 0x01, 0x00, 0x00};
+inline constexpr uint8_t kBarDisabledBytes[] = {0x8B, 0x86, 0x9C, 0x02, 0x00, 0x00};
+constexpr uint32_t kRvaBarIcon = 0x2C82F5, kRvaBarDisabled = 0x2C8097, kOffBarIcon = 0x128, kOffBarDisabled = 0x29C;
+constexpr uint32_t kOffBarCount = 0x294;
 // Projectiles are objects of type 0 (CGameObject +8) with the caster at +0x68 (DeliverEffects win
 // 140282F3F `mov eax,[rbx+68h]`); every projectile class has AIUpdate at vtable slot 3 (+0x18, e.g.
 // CProjectileAdder::AIUpdate 140261CA0 in vtable 140631510) and CGameObject::GetObjectType
@@ -579,6 +587,8 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("Hit.thac0ac", kRvaThac0Ac, kThac0AcBytes, "lin 4C29F0 / win 140414888"),
     PSTF_SYM("CGameEffect::CheckSave", kRvaCheckSave, kCheckSaveBytes, "lin 1FBED0 / win 1401EC460"),
     PSTF_SYM("tolua.GetButtonArray", kRvaButtonArray, kButtonArrayBytes, "win 14046102E"),
+    PSTF_SYM("PostRenderButton.icon", kRvaBarIcon, kBarIconBytes, "lin 3602F0 / win 1402C82F5"),
+    PSTF_SYM("PostRenderButton.disabled", kRvaBarDisabled, kBarDisabledBytes, "win 1402C8097"),
     PSTF_SYM("CGameObject::GetObjectType", kRvaGetObjectType, kGetObjectTypeBytes, "lin 176FB0 / win 140173050"),
     PSTF_SYM("CInfinity::SetViewPosition", kRvaSetViewPos, kSetViewPosBytes, "lin 3AE2B0 / win 140309630"),
     PSTF_SYM("CenterOnGroupLeader.jmp", kRvaCenterLeaderJmp, kCenterLeaderJmpBytes, "lin 36D7F0 / win 1402D3266"),

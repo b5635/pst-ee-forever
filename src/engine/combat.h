@@ -17,6 +17,12 @@ bool EffectClockInstalled();
 // Keeps a creature's own timers where they are while `ticks` of world time pass: absolute and
 // delayed effect ticks and the natural-regeneration stamp move forward by `ticks`.
 void ShiftEffectClock(int32_t id, int32_t ticks);
+// Delayed effects that `resolves_now(ticks to onset)` says are part of the spell resolving keep running
+// on world time (never shifted) until they fire; ResolvingOnsets counts those still pending.
+using OnsetFn = bool (*)(int32_t left);
+void SetOnsetRule(OnsetFn resolves_now);
+int ResolvingOnsets(int32_t id);
+void ForgetOnsets();  // fight over
 // One round of the creature's own time passes now (at its turn start): timed effects come `ticks`
 // closer to their end, natural regeneration accrues `ticks`, persistent effects run `ticks` at once
 // (the engine's own catch-up, as CompressTime does), and the effect list is re-evaluated at once.
@@ -80,13 +86,14 @@ bool GetCombatStats(int32_t id, CombatStats* out);
 
 // --- action bar ----------------------------------------------------------------------------------
 struct BarButton {
-  std::string icon;  // BAM resref
-  int count = -1;
+  std::string icon;  // BAM resref ("" = empty slot)
+  bool disabled = false;
 };
 // The 12 slots of the engine's action bar as they are now (after CInfButtonArray::SetState).
 std::vector<BarButton> ActionBarButtons();
 std::string ActionBarHex(int slot, int bytes);  // probe
 std::string ActiveFlags(int32_t id);
+std::string ScanBarStrings();                    // probe: resref-like strings in the button array
 bool SetHpForTest(int32_t id, int hp);          // test probe only (PSTF_SetHp)            // probe: sprite +0x3904..+0x3910 (Spell's target check)
 
 }  // namespace pstf::engine

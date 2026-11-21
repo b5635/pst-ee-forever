@@ -46,6 +46,7 @@
 #include "modules/tbc/economy.h"
 #include "modules/tbc/hud.h"
 #include "modules/tbc/hover.h"
+#include "modules/tbc/round_rules.h"
 #include "modules/tbc/path_line.h"
 #include "modules/tbc/path_preview.h"
 #include "modules/tbc/turn_clock.h"
@@ -111,6 +112,7 @@ struct State {
   Pt dice_ui{-1, -1};
   Pt hover_at{-1, -1};               // test probe PSTF_HoverAt: this world point instead of the cursor
   bool rolls = false;                // the roll hooks are installed
+  uint32_t bar_t0 = 0;               // GetTickCount of the last hotbar collection (0 = due)
   std::wstring sound_dir;            // <game>/pst_forever/sounds/
   uint32_t resolve_ticks = 0;        // world ticks the turn has waited for its spell to land
   uint32_t since_action = 1000;      // world ticks since its action stopped running
@@ -119,7 +121,7 @@ struct State {
 
 // The creature's spell is still on its way (a projectile object it cast is in the area): its turn
 // waits, at most one round of world time (persistent clouds keep going on their own).
-constexpr uint32_t kResolveCapTicks = 110;  // Cone of Cold / Ice Knife go off 100 ticks after landing
+constexpr uint32_t kResolveCapTicks = 120;  // Cone of Cold / Ice Knife go off 100 ticks after landing
 int CasterProjectiles(int32_t id, uint64_t area) {
   int n = 0;
   for (const auto& o : engine::AllObjects())
@@ -185,6 +187,7 @@ void EndFight(const char* why) {
     for (int32_t id : g.in) engine::ForceRun(id, false, g.run_scale_other);
   g.nudged = -1;
   g.running = false;
+  engine::ForgetOnsets();
   g.in.clear();
   g.current = -1;
   g.dir.reset();
@@ -310,6 +313,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.hold_current = false;
   g.preview_goal = {-1, -1};
   if (slot >= 0 && !g.auto_party) engine::ClearAI(next);  // nothing queued while it waited: player orders only
+  g.bar_t0 = 0;  // the hotbar is collected again for whoever acts now
   {
     engine::SpriteInfo s0;
     if (engine::GetSprite(next, &s0)) g.last_x = s0.x, g.last_y = s0.y;
@@ -652,7 +656,15 @@ void UpdateHud(uint32_t now) {
       engine::WorldToUi(nodes.back().x, nodes.back().y, &v.label_x, &v.label_y);
     }
   }
-  const std::string code = BuildHudLua(v) +
+  // BG3 hotbar: every weapon, spell, quick item and ability of the active party member, collected from
+  // the engine's own action bar states (selection is locked to it) at the turn start and every 1.5 s.
+  std::string bar;
+  if (v.party_turn && (g.bar_t0 == 0 || GetTickCount() - g.bar_t0 > 1500)) {
+    g.bar_t0 = GetTickCount() | 1u;
+    bar = " pstfBarCollect()";
+  }
+  if (!v.party_turn) bar = " pstfBar = {}";
+  const std::string code = BuildHudLua(v) + bar +
                            " if not pstfTbcOpen then Infinity_PushMenu('PSTF_TBC') end pstfTbcLayout()";
   const std::string err = engine::LuaDoString(code.c_str());
   if (!err.empty()) {
@@ -769,14 +781,15 @@ void OnTick(uint64_t frame) {
   g.since_action = g.econ.acting ? 0 : g.since_action + dt;
   bool wait_spell = false;
   if ((st.end_turn || g.end_requested) && g.resolve_ticks < kResolveCapTicks) {
-    const int n = CasterProjectiles(cur, s.area);
+    int n = CasterProjectiles(cur, s.area);
+    for (int32_t id : g.in) n += engine::ResolvingOnsets(id);  // e.g. Cone of Cold's 100-tick onset
     // A projectile appears up to a second after the cast animation ends: give it 25 ticks.
     if (n > 0 || (g.econ.action_used && g.since_action < 25)) {
       wait_spell = true;
       g.resolve_ticks += dt;
       if (!g.resolving_logged) {
         g.resolving_logged = true;
-        if (n > 0) Log("tbc: %s: turn waits for its spell (%d projectile%s)", Who(cur).c_str(), n, n == 1 ? "" : "s");
+        if (n > 0) Log("tbc: %s: turn waits for its spell (%d projectile%s or onsets)", Who(cur).c_str(), n, n == 1 ? "" : "s");
         else g.resolving_logged = false;
       }
     }
@@ -1085,9 +1098,22 @@ int __cdecl LuaStats(engine::LuaState* L) {
 // PSTF_Bar() -> logs the 12 action bar slots as the engine has them now.
 int __cdecl LuaBar(engine::LuaState* L) {
   std::string s;
-  for (const auto& b : engine::ActionBarButtons()) s += b.icon + "/" + std::to_string(b.count) + " ";
+  for (const auto& b : engine::ActionBarButtons()) s += b.icon + (b.disabled ? "(x) " : " ");
   Log("lua: PSTF_Bar -> %s", s.c_str());
-  for (int i = 0; i < 2; ++i) Log("lua: bar slot %d: %s", i, engine::ActionBarHex(i, 96).c_str());
+  engine::LuaPushString(L, s.c_str());
+  return 1;
+}
+// PSTF_BarHex(slot): logs the 0x2A0 bytes of an action bar slot (probe).
+int __cdecl LuaBarHex(engine::LuaState* L) {
+  const int slot = static_cast<int>(engine::LuaNumberArg(L, 1, 0));
+  (void)slot;
+  Log("lua: bar strings: %s", engine::ScanBarStrings().c_str());
+  return 0;
+}
+// PSTF_BarSlots() -> "ICON:1;ICON:0;:0;..." the 12 slots after a SetState (1 = usable), for the HUD bar.
+int __cdecl LuaBarSlots(engine::LuaState* L) {
+  std::string s;
+  for (const auto& b : engine::ActionBarButtons()) s += b.icon + (b.disabled ? ":0;" : ":1;");
   engine::LuaPushString(L, s.c_str());
   return 1;
 }
@@ -1181,6 +1207,7 @@ bool InstallTbc(const IniMap& ini) {
   g_process_ai = reinterpret_cast<SpriteFn>(pai);
   if (!AddTickHandler(&OnTick)) return false;
   if (g.round_effects && !engine::InstallEffectClock(&FrozenCombatant)) g.round_effects = false;
+  if (g.round_effects) engine::SetOnsetRule(&OnsetResolvesNow);
   // A spell's projectile (a flying knife, a cloud) moves only in its caster's turn.
   if (g.round_effects) engine::SetProjectileHold([](int32_t caster) { return Held(caster); });
   {
@@ -1215,6 +1242,8 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_Stats", &LuaStats);
   dev::AddLuaFunction("PSTF_Bar", &LuaBar);
   dev::AddLuaFunction("PSTF_Near", &LuaNear);
+  dev::AddLuaFunction("PSTF_BarSlots", &LuaBarSlots);
+  dev::AddLuaFunction("PSTF_BarHex", &LuaBarHex);
   dev::AddLuaFunction("PSTF_TbcCurrent", &LuaTbcCurrent);
   dev::AddLuaFunction("PSTF_MakeEnemy", &LuaMakeEnemy);
   dev::AddLuaFunction("PSTF_WorldTicks", &LuaWorldTicks);

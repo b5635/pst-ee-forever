@@ -16,6 +16,7 @@
 namespace pstf::tbc {
 
 constexpr int kHudCards = 12;
+constexpr int kHudBar = 48;   // hotbar buttons (4 rows x up to 12 engine action-bar slots)
 constexpr int kHudDots = 0;  // the line is drawn in the world pass now (engine DrawLine2d)
 
 struct HudCard {

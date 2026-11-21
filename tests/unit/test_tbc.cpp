@@ -304,6 +304,7 @@ TEST_CASE("tbc turn clock: budget of busy ticks, AI idle end, party waits") {
 // ---- action economy, movement line, HUD text ---------------------------------------------------
 #include "modules/tbc/economy.h"
 #include "modules/tbc/hover.h"
+#include "modules/tbc/round_rules.h"
 #include "modules/tbc/hud.h"
 #include "modules/tbc/path_line.h"
 
@@ -505,4 +506,11 @@ TEST_CASE("tbc dice: tumble, land on the roll, verdict, fade") {
 TEST_CASE("tbc portraits: red share of lost HP") {
   CHECK(DamageShare(64, 64) == 0.0 && DamageShare(0, 64) == 1.0 && DamageShare(-3, 64) == 1.0);
   CHECK(DamageShare(48, 64) == 0.25 && DamageShare(5, 0) == 0.0);
+}
+
+TEST_CASE("tbc onsets: 5-second steps are damage over time, other short delays resolve now") {
+  CHECK(!OnsetResolvesNow(75) && !OnsetResolvesNow(74) && !OnsetResolvesNow(150));  // Adder's Kiss hits
+  CHECK(OnsetResolvesNow(100) && OnsetResolvesNow(99));  // Cone of Cold onset
+  CHECK(OnsetResolvesNow(20) && OnsetResolvesNow(0));    // impact a moment later
+  CHECK(!OnsetResolvesNow(113) && !OnsetResolvesNow(500));  // a round and a half or more: clocked
 }

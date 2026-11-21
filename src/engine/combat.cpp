@@ -2,8 +2,10 @@
 #include "engine/combat.h"
 
 #include <cstdio>
+#include <cctype>
 #include <cstring>
 #include <map>
+#include <unordered_map>
 
 #include <windows.h>
 
@@ -46,6 +48,8 @@ uint64_t Stats(uint64_t p) {
 
 // --- round clock ---------------------------------------------------------------------------------
 FrozenFn g_frozen = nullptr;
+OnsetFn g_onset = nullptr;
+std::unordered_map<uint64_t, bool> g_onsets;  // delayed effect -> resolves now (seen once)
 bool g_clock = false;
 
 extern "C" bool __cdecl PstfPersistFrozen(void* sprite) {
@@ -132,12 +136,44 @@ void HeldEffectsTick(void* sprite) {
   reinterpret_cast<PelFn>(Va(sym::kRvaProcessEffectList))(p, 1);
 }
 
+void SetOnsetRule(OnsetFn resolves_now) { g_onset = resolves_now; }
+void ForgetOnsets() { g_onsets.clear(); }
+
+int ResolvingOnsets(int32_t id) {
+  const uint64_t p = g_clock ? LookupSprite(id) : 0;
+  if (!p) return 0;
+  int n = 0;
+  ForEachEffect(p, [&](uint64_t eff) {
+    const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
+    if (type < 6 || type > 8) return;
+    const auto it = g_onsets.find(eff);
+    if (it != g_onsets.end() && it->second) ++n;
+  });
+  return n;
+}
+
 void ShiftEffectClock(int32_t id, int32_t ticks) {
   const uint64_t p = g_clock && ticks ? LookupSprite(id) : 0;
   if (!p) return;
+  const uint64_t g = GameObject();
+  const uint32_t now = g ? R<uint32_t>(g + 0x7820) : 0;
   ForEachEffect(p, [&](uint64_t eff) {
-    if (!ClockedType(R<uint32_t>(eff + sym::kOffEffType))) return;
+    const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
+    if (!ClockedType(type)) return;
     const uint32_t t = R<uint32_t>(eff + sym::kOffEffTick);
+    if (type >= 6 && type <= 8 && g_onset && ticks > 0) {
+      auto it = g_onsets.find(eff);
+      if (it == g_onsets.end()) {
+        const bool now_ = g_onset(static_cast<int32_t>(t - now));
+        it = g_onsets.emplace(eff, now_).first;
+        if (now_) Log("combat: %X: onset in %d ticks resolves now (opcode %d)", static_cast<unsigned>(id),
+                      static_cast<int32_t>(t - now), R<int32_t>(eff + sym::kOffEffOpcode));
+      }
+      if (it->second) {  // the spell resolving: world time, and its list is checked every tick
+        W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
+        return;
+      }
+    }
     if (t >= 0xF0000000u) return;  // "forever" style values stay
     W<uint32_t>(eff + sym::kOffEffTick, t + static_cast<uint32_t>(ticks));
   });
@@ -468,6 +504,30 @@ bool SetHpForTest(int32_t id, int hp) {
   return true;
 }
 
+std::string ScanBarStrings() {
+  const uint64_t g = GameObject();
+  if (!g) return "";
+  const uint64_t a = g + sym::kOffGameButtonArray;
+  std::string out;
+  for (uint32_t off = 0; off + 8 <= 0x2400; ++off) {
+    int n = 0;
+    while (n < 8) {
+      const char c = R<char>(a + off + n);
+      if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || (c >= 'a' && c <= 'z'))) break;
+      ++n;
+    }
+    if (n >= 5 && (off == 0 || !isalnum(static_cast<unsigned char>(R<char>(a + off - 1))))) {
+      char b[40];
+      std::snprintf(b, sizeof b, "+%X:", off);
+      out += b;
+      for (int k = 0; k < n; ++k) out += R<char>(a + off + k);
+      out += ' ';
+      off += n;
+    }
+  }
+  return out;
+}
+
 std::string ActiveFlags(int32_t id) {
   const uint64_t p = LookupSprite(id);
   if (!p) return "";
@@ -491,7 +551,7 @@ bool GetCombatStats(int32_t id, CombatStats* out) {
 
 std::vector<BarButton> ActionBarButtons() {
   std::vector<BarButton> out;
-  static const int ok = AllOk({sym::kRvaButtonArray}) ? 1 : 0;
+  static const int ok = AllOk({sym::kRvaButtonArray, sym::kRvaBarIcon, sym::kRvaBarDisabled}) ? 1 : 0;
   const uint64_t g = ok ? GameObject() : 0;
   if (!g) return out;
   const uint64_t arr = g + sym::kOffGameButtonArray;
@@ -500,12 +560,16 @@ std::vector<BarButton> ActionBarButtons() {
     BarButton bb;
     char ref[9] = {};
     for (int k = 0; k < 8; ++k) {
-      const char c = R<char>(b + k);
+      const char c = R<char>(b + sym::kOffBarIcon + k);
       if (!c) break;
-      ref[k] = (c >= 32 && c < 127) ? c : '?';
+      if (c < 33 || c > 126) {
+        ref[0] = 0;  // not a resref
+        break;
+      }
+      ref[k] = c;
     }
     bb.icon = ref;
-    bb.count = R<int16_t>(b + 24);
+    bb.disabled = R<int32_t>(b + sym::kOffBarDisabled) != 0;
     out.push_back(bb);
   }
   return out;
@@ -514,7 +578,7 @@ std::vector<BarButton> ActionBarButtons() {
 std::string ActionBarHex(int slot, int bytes) {
   static const int ok = AllOk({sym::kRvaButtonArray}) ? 1 : 0;
   const uint64_t g = ok ? GameObject() : 0;
-  if (!g || slot < 0 || slot > 11 || bytes > 672) return "";
+  if (!g || slot < 0 || slot > 11 || bytes > 0x2A0) return "";
   const uint64_t b = g + sym::kOffGameButtonArray + static_cast<uint64_t>(sym::kButtonDataSize) * slot;
   std::string s;
   char t[4];

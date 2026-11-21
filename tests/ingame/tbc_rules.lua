@@ -4,8 +4,9 @@
 --     never otherwise;
 --   * Blur (SPWI216) cast by party member 2 counts down 75 ticks (one round) per own turn start and
 --     stays the same in between;
---   * Adder's Kiss (SPWI201) by party member 3: the enemy loses HP only during the caster's turn (the
---     first hit) or right at the start of its own turn (the delayed hits);
+--   * Adder's Kiss (SPWI201) cast by party member 2 on party member 3 (the user's example): the victim
+--     loses HP from it only during the caster's turn (the first hit, the turn waits for the spell) or
+--     right at the start of its own turns (the delayed hits); enemy melee on it is told apart by turn;
 --   * the caster's turn does not end before its spell has resolved (no projectile of it left).
 -- Run: tools\launch.ps1 -Lua tests\ingame\tbc_rules.lua -Env @{PSTF_TEST_TICK='1'} -Until 'TEST PASS|TEST FAIL' -Close -Timeout 400
 local tno, a, b = PSTF_PartyId(0), PSTF_PartyId(1), PSTF_PartyId(2)
@@ -26,6 +27,7 @@ local waitFrames = 0
 local retried = false
 local adderTurn = -1
 local adderHit = false
+local adderDot = 0
 local function window(id) return cur == id and frames - turnStart <= 45 end
 function pstfTestTick()
 	frames = frames + 1
@@ -51,7 +53,7 @@ function pstfTestTick()
 		PSTF_Note(string.format('turn %d round %d: tno %d, enemy %d', id, r, hp(tno), hp(enemy)))
 	end
 	-- HP watch: who changed when
-	for _, w in ipairs({tno, enemy}) do
+	for _, w in ipairs({tno, enemy, b}) do
 		local h = hp(w)
 		if started and lastHp[w] and h ~= lastHp[w] then
 			PSTF_Note(string.format('hp %d %d -> %d (turn of %d, %d frames in, round %d)', w, lastHp[w], h, cur, frames - turnStart, round))
@@ -59,9 +61,11 @@ function pstfTestTick()
 				if not window(tno) then return fail('TNO regenerated outside the start of his turn') end
 				regen[#regen + 1] = h - lastHp[w]
 			end
-			if w == enemy and h < lastHp[w] and cur == a and acted.adder then adderHit = true end
-			if w == enemy and h < lastHp[w] and h > 0 then
-				if not (cur == a or cur == b or window(enemy)) then return fail('enemy lost HP outside the caster turn and its own turn start') end
+			if w == b and h < lastHp[w] and acted.adder then
+				if cur == a then adderHit = true
+				elseif window(b) then adderDot = adderDot + 1
+				elseif cur == tno then return fail('Adder victim lost HP in the turn of party member 1') end
+				-- enemy turns: their melee
 			end
 		end
 		lastHp[w] = h
@@ -73,8 +77,7 @@ function pstfTestTick()
 	if id ~= -1 and party and frames - turnStart > 4 then
 		if issued == -1 then
 			if id == a and not acted[a] then C:Eval('ForceSpell(Myself,2216)', 1) acted[a] = true issued = frames
-			elseif id == a and acted[a] and not acted.adder then C:Eval('ForceSpell(NearestEnemyOf(Myself),2201)', 1) acted.adder = true issued = frames adderTurn = frames
-			elseif id == b and not acted[b] then C:Eval('Attack(NearestEnemyOf(Myself))', 2) acted[b] = true issued = frames
+			elseif id == a and acted[a] and not acted.adder then C:Eval('ForceSpell(Player3,2201)', 1) acted.adder = true issued = frames adderTurn = frames
 			else issued = 0 end
 		elseif issued > 0 then
 			if (frames - issued) % 6 == 0 and frames - issued <= 90 then
@@ -82,10 +85,7 @@ function pstfTestTick()
 				if n > 0 then PSTF_Note('caster ' .. tostring(id) .. ' objects: ' .. n .. ' at +' .. (frames - issued)) end
 			end
 			-- NearestEnemyOf needs the caster to have seen the enemy: retry with the EA object
-			if id == a and acted.adder and not used and frames - issued == 30 and not retried then
-				retried = true
-				PSTF_Note('Adder retry with [ENEMY]') C:Eval('ForceSpell([ENEMY],2201)', 1) issued = frames
-			end
+
 		end
 		if issued ~= -1 and not acting and (issued == 0 or frames - issued > 45) then
 			waitFrames = waitFrames + 1
@@ -101,7 +101,7 @@ function pstfTestTick()
 		end
 		if acted.adder and not adderHit then return fail("Adder's Kiss did not hit in the caster's own turn") end
 		for _, g in ipairs(regen) do if g ~= 1 then return fail('TNO regenerated ' .. g .. ' at once') end end
-		PSTF_Note('TEST PASS: regen ' .. #regen .. ' x 1 HP, adder hit in turn ' .. tostring(adderHit) .. ', blur ' .. table.concat(blurAt, ','))
+		PSTF_Note('TEST PASS: regen ' .. #regen .. ' x 1 HP, adder first hit in caster turn ' .. tostring(adderHit) .. ', later hits at victim turn start ' .. adderDot .. ', blur ' .. table.concat(blurAt, ','))
 		pstfTestTick = nil
 	end
 end
