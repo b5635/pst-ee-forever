@@ -1,0 +1,2024 @@
+[
+ {
+  "res": "SPIN101.spl",
+  "proj": 204,
+  "gemrb": "LITANY",
+  "gemrb_file": true,
+  "ee_proj": [
+   204
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPIN102.spl",
+  "proj": 216,
+  "gemrb": "SKMOB",
+  "gemrb_file": true,
+  "ee_proj": [
+   216
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPIN103.spl",
+  "proj": 205,
+  "gemrb": "STORIES",
+  "gemrb_file": true,
+  "ee_proj": [
+   205
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPIN106.spl",
+  "proj": 269,
+  "gemrb": "FEARAURA",
+  "gemrb_file": true,
+  "ee_proj": [
+   269
+  ],
+  "ee_name": [
+   "spin106"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPIN107.spl",
+  "proj": 288,
+  "gemrb": "KISS",
+  "gemrb_file": true,
+  "ee_proj": [
+   288
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPIN108.spl",
+  "proj": 268,
+  "gemrb": "RDEAD",
+  "gemrb_file": true,
+  "ee_proj": [
+   268
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPPR101.spl",
+  "proj": 256,
+  "gemrb": "BLESSED",
+  "gemrb_file": true,
+  "ee_proj": [
+   256
+  ],
+  "ee_name": [
+   "sppr101"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPPR103.spl",
+  "proj": 257,
+  "gemrb": "CURSED",
+  "gemrb_file": true,
+  "ee_proj": [
+   257
+  ],
+  "ee_name": [
+   "sppr103"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPPR105.spl",
+  "proj": 259,
+  "gemrb": "FFIRE",
+  "gemrb_file": true,
+  "ee_proj": [
+   259
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPPR204.spl",
+  "proj": 260,
+  "gemrb": "SHAMMER",
+  "gemrb_file": true,
+  "ee_proj": [
+   260
+  ],
+  "ee_name": [
+   "sppr204"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPPR301.spl",
+  "proj": 261,
+  "gemrb": "CALLIH",
+  "gemrb_file": true,
+  "ee_proj": [
+   261
+  ],
+  "ee_name": [
+   "sppr301"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPPR304.spl",
+  "proj": 205,
+  "gemrb": "STORIES",
+  "gemrb_file": true,
+  "ee_proj": [
+   205
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPPR502.spl",
+  "proj": 268,
+  "gemrb": "RDEAD",
+  "gemrb_file": true,
+  "ee_proj": [
+   268
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI001.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   271
+  ],
+  "ee_name": [
+   "spwi001"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI002.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   291
+  ],
+  "ee_name": [
+   "spwi002"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI003.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   292
+  ],
+  "ee_name": [
+   "spwi003"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI004.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   293
+  ],
+  "ee_name": [
+   "spwi004"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI005.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   294
+  ],
+  "ee_name": [
+   "spwi005"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI006.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   295
+  ],
+  "ee_name": [
+   "spwi006"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI007.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   296
+  ],
+  "ee_name": [
+   "spwi007"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI008.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   297
+  ],
+  "ee_name": [
+   "spwi008"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI009.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   298
+  ],
+  "ee_name": [
+   "spwi009"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI010.spl",
+  "proj": 271,
+  "gemrb": "",
+  "gemrb_file": false,
+  "ee_proj": [
+   299
+  ],
+  "ee_name": [
+   "spwi010"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI101.spl",
+  "proj": 24,
+  "gemrb": "CHROMORB",
+  "gemrb_file": true,
+  "ee_proj": [
+   24
+  ],
+  "ee_name": [
+   "spwi101"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI103.spl",
+  "proj": 289,
+  "gemrb": "EMBALM",
+  "gemrb_file": true,
+  "ee_proj": [
+   289
+  ],
+  "ee_name": [
+   "spwi103"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI107.spl",
+  "proj": 206,
+  "gemrb": "MMISS",
+  "gemrb_file": true,
+  "ee_proj": [
+   206,
+   207,
+   208,
+   209,
+   210
+  ],
+  "ee_name": [
+   "magicmis",
+   "spwi107",
+   "spwi107",
+   "spwi107",
+   "spwi107"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI107.spl",
+  "proj": 207,
+  "gemrb": "MMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   206,
+   207,
+   208,
+   209,
+   210
+  ],
+  "ee_name": [
+   "magicmis",
+   "spwi107",
+   "spwi107",
+   "spwi107",
+   "spwi107"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI107.spl",
+  "proj": 208,
+  "gemrb": "MMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   206,
+   207,
+   208,
+   209,
+   210
+  ],
+  "ee_name": [
+   "magicmis",
+   "spwi107",
+   "spwi107",
+   "spwi107",
+   "spwi107"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI107.spl",
+  "proj": 209,
+  "gemrb": "MMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   206,
+   207,
+   208,
+   209,
+   210
+  ],
+  "ee_name": [
+   "magicmis",
+   "spwi107",
+   "spwi107",
+   "spwi107",
+   "spwi107"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI107.spl",
+  "proj": 210,
+  "gemrb": "MMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   206,
+   207,
+   208,
+   209,
+   210
+  ],
+  "ee_name": [
+   "magicmis",
+   "spwi107",
+   "spwi107",
+   "spwi107",
+   "spwi107"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI108.spl",
+  "proj": 222,
+  "gemrb": "PACIFY",
+  "gemrb_file": true,
+  "ee_proj": [
+   222
+  ],
+  "ee_name": [
+   "spwi108"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI113.spl",
+  "proj": 238,
+  "gemrb": "LMISS",
+  "gemrb_file": true,
+  "ee_proj": [
+   238
+  ],
+  "ee_name": [
+   "spwi113"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI116.spl",
+  "proj": 273,
+  "gemrb": "IMISS",
+  "gemrb_file": true,
+  "ee_proj": [
+   273,
+   274,
+   275,
+   276,
+   277
+  ],
+  "ee_name": [
+   "imiss",
+   "spwi116",
+   "spwi116",
+   "spwi116",
+   "spwi116"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI116.spl",
+  "proj": 274,
+  "gemrb": "IMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   273,
+   274,
+   275,
+   276,
+   277
+  ],
+  "ee_name": [
+   "imiss",
+   "spwi116",
+   "spwi116",
+   "spwi116",
+   "spwi116"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI116.spl",
+  "proj": 275,
+  "gemrb": "IMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   273,
+   274,
+   275,
+   276,
+   277
+  ],
+  "ee_name": [
+   "imiss",
+   "spwi116",
+   "spwi116",
+   "spwi116",
+   "spwi116"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI116.spl",
+  "proj": 276,
+  "gemrb": "IMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   273,
+   274,
+   275,
+   276,
+   277
+  ],
+  "ee_name": [
+   "imiss",
+   "spwi116",
+   "spwi116",
+   "spwi116",
+   "spwi116"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI116.spl",
+  "proj": 277,
+  "gemrb": "IMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   273,
+   274,
+   275,
+   276,
+   277
+  ],
+  "ee_name": [
+   "imiss",
+   "spwi116",
+   "spwi116",
+   "spwi116",
+   "spwi116"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI117.spl",
+  "proj": 257,
+  "gemrb": "CURSED",
+  "gemrb_file": true,
+  "ee_proj": [
+   257
+  ],
+  "ee_name": [
+   "sppr103"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI118.spl",
+  "proj": 256,
+  "gemrb": "BLESSED",
+  "gemrb_file": true,
+  "ee_proj": [
+   256
+  ],
+  "ee_name": [
+   "sppr101"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI121.spl",
+  "proj": 282,
+  "gemrb": "AMISS",
+  "gemrb_file": true,
+  "ee_proj": [
+   282,
+   283,
+   284,
+   285,
+   286
+  ],
+  "ee_name": [
+   "amiss",
+   "spwi121",
+   "spwi121",
+   "spwi121",
+   "spwi121"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI121.spl",
+  "proj": 283,
+  "gemrb": "AMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   282,
+   283,
+   284,
+   285,
+   286
+  ],
+  "ee_name": [
+   "amiss",
+   "spwi121",
+   "spwi121",
+   "spwi121",
+   "spwi121"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI121.spl",
+  "proj": 284,
+  "gemrb": "AMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   282,
+   283,
+   284,
+   285,
+   286
+  ],
+  "ee_name": [
+   "amiss",
+   "spwi121",
+   "spwi121",
+   "spwi121",
+   "spwi121"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI121.spl",
+  "proj": 285,
+  "gemrb": "AMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   282,
+   283,
+   284,
+   285,
+   286
+  ],
+  "ee_name": [
+   "amiss",
+   "spwi121",
+   "spwi121",
+   "spwi121",
+   "spwi121"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI121.spl",
+  "proj": 286,
+  "gemrb": "AMISS2",
+  "gemrb_file": true,
+  "ee_proj": [
+   282,
+   283,
+   284,
+   285,
+   286
+  ],
+  "ee_name": [
+   "amiss",
+   "spwi121",
+   "spwi121",
+   "spwi121",
+   "spwi121"
+  ],
+  "ee_hard": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "ee_file": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "res": "SPWI204.spl",
+  "proj": 226,
+  "gemrb": "BBRIDGE",
+  "gemrb_file": true,
+  "ee_proj": [
+   226
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI205.spl",
+  "proj": 289,
+  "gemrb": "EMBALM",
+  "gemrb_file": true,
+  "ee_proj": [
+   289
+  ],
+  "ee_name": [
+   "spwi103"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI207.spl",
+  "proj": 221,
+  "gemrb": "IKNIFE",
+  "gemrb_file": true,
+  "ee_proj": [
+   221
+  ],
+  "ee_name": [
+   "spwi207"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI211.spl",
+  "proj": 223,
+  "gemrb": "STRENGTH",
+  "gemrb_file": true,
+  "ee_proj": [
+   223
+  ],
+  "ee_name": [
+   "spwi211"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI212.spl",
+  "proj": 218,
+  "gemrb": "ISWARM",
+  "gemrb_file": true,
+  "ee_proj": [
+   218
+  ],
+  "ee_name": [
+   "spwi212"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI213.spl",
+  "proj": 235,
+  "gemrb": "HORROR",
+  "gemrb_file": true,
+  "ee_proj": [
+   235
+  ],
+  "ee_name": [
+   "spwi213"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI215.spl",
+  "proj": 236,
+  "gemrb": "KNOCK",
+  "gemrb_file": true,
+  "ee_proj": [
+   236
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI217.spl",
+  "proj": 278,
+  "gemrb": "ITERROR",
+  "gemrb_file": true,
+  "ee_proj": [
+   278
+  ],
+  "ee_name": [
+   "spwi217"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI218.spl",
+  "proj": 279,
+  "gemrb": "IGNUSORB",
+  "gemrb_file": true,
+  "ee_proj": [
+   279
+  ],
+  "ee_name": [
+   "spwi218"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI219.spl",
+  "proj": 287,
+  "gemrb": "POONE",
+  "gemrb_file": true,
+  "ee_proj": [
+   287
+  ],
+  "ee_name": [
+   "spwi219"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI305.spl",
+  "proj": 239,
+  "gemrb": "ELYTEAR",
+  "gemrb_file": true,
+  "ee_proj": [
+   239
+  ],
+  "ee_name": [
+   "spwi305"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI307.spl",
+  "proj": 237,
+  "gemrb": "HOLDUND",
+  "gemrb_file": true,
+  "ee_proj": [
+   237
+  ],
+  "ee_name": [
+   "spwi307"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI308.spl",
+  "proj": 240,
+  "gemrb": "TLAUGH",
+  "gemrb_file": true,
+  "ee_proj": [
+   240
+  ],
+  "ee_name": [
+   "spwi308"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI309.spl",
+  "proj": 263,
+  "gemrb": "VTOUCH",
+  "gemrb_file": true,
+  "ee_proj": [
+   263
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI310.spl",
+  "proj": 241,
+  "gemrb": "AOTORM",
+  "gemrb_file": true,
+  "ee_proj": [
+   241
+  ],
+  "ee_name": [
+   "spwi310"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI313.spl",
+  "proj": 280,
+  "gemrb": "FRAIN",
+  "gemrb_file": true,
+  "ee_proj": [
+   280
+  ],
+  "ee_name": [
+   "spwi313"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI401.spl",
+  "proj": 242,
+  "gemrb": "BSPHERE",
+  "gemrb_file": false,
+  "ee_proj": [
+   301
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI402.spl",
+  "proj": 264,
+  "gemrb": "CONFUS",
+  "gemrb_file": true,
+  "ee_proj": [
+   264
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI405.spl",
+  "proj": 227,
+  "gemrb": "FMISS",
+  "gemrb_file": true,
+  "ee_proj": [
+   227
+  ],
+  "ee_name": [
+   "spwi405"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI406.spl",
+  "proj": 228,
+  "gemrb": "ISTR",
+  "gemrb_file": true,
+  "ee_proj": [
+   228
+  ],
+  "ee_name": [
+   "spwi406"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI408.spl",
+  "proj": 229,
+  "gemrb": "SSHADOW",
+  "gemrb_file": true,
+  "ee_proj": [
+   229
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI410.spl",
+  "proj": 281,
+  "gemrb": "ESTRIKE",
+  "gemrb_file": true,
+  "ee_proj": [
+   281
+  ],
+  "ee_name": [
+   "spwi410"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI501.spl",
+  "proj": 230,
+  "gemrb": "CLOUDKIL",
+  "gemrb_file": true,
+  "ee_proj": [
+   230
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI502.spl",
+  "proj": 243,
+  "gemrb": "COCOLD",
+  "gemrb_file": true,
+  "ee_proj": [
+   243
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI505.spl",
+  "proj": 244,
+  "gemrb": "DHELL",
+  "gemrb_file": true,
+  "ee_proj": [
+   244
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI506.spl",
+  "proj": 245,
+  "gemrb": "FIREICE",
+  "gemrb_file": true,
+  "ee_proj": [
+   245
+  ],
+  "ee_name": [
+   "spwi506"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI602.spl",
+  "proj": 266,
+  "gemrb": "GOINVUL",
+  "gemrb_file": true,
+  "ee_proj": [
+   266
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI603.spl",
+  "proj": 231,
+  "gemrb": "HOPAND",
+  "gemrb_file": true,
+  "ee_proj": [
+   231
+  ],
+  "ee_name": [
+   "spwi603"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "SPWI604.spl",
+  "proj": 246,
+  "gemrb": "LSTORM",
+  "gemrb_file": true,
+  "ee_proj": [
+   246
+  ],
+  "ee_name": [
+   "spwi604"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI701.spl",
+  "proj": 247,
+  "gemrb": "ASTORM",
+  "gemrb_file": true,
+  "ee_proj": [
+   247
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI702.spl",
+  "proj": 232,
+  "gemrb": "BSTORM",
+  "gemrb_file": true,
+  "ee_proj": [
+   232
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI705.spl",
+  "proj": 248,
+  "gemrb": "ISTORM",
+  "gemrb_file": true,
+  "ee_proj": [
+   248
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI802.spl",
+  "proj": 249,
+  "gemrb": "MSWARM",
+  "gemrb_file": true,
+  "ee_proj": [
+   249
+  ],
+  "ee_name": [
+   "spwi802"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI803.spl",
+  "proj": 250,
+  "gemrb": "DBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   250
+  ],
+  "ee_name": [
+   "spwi803"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI804.spl",
+  "proj": 251,
+  "gemrb": "IFURY",
+  "gemrb_file": true,
+  "ee_proj": [
+   251
+  ],
+  "ee_name": [
+   "spwi804"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI805.spl",
+  "proj": 252,
+  "gemrb": "PWBLIND",
+  "gemrb_file": true,
+  "ee_proj": [
+   252
+  ],
+  "ee_name": [
+   "spwi805"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI807.spl",
+  "proj": 253,
+  "gemrb": "MCANNON",
+  "gemrb_file": true,
+  "ee_proj": [
+   253
+  ],
+  "ee_name": [
+   "spwi807"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI901.spl",
+  "proj": 254,
+  "gemrb": "CHOST",
+  "gemrb_file": true,
+  "ee_proj": [
+   254
+  ],
+  "ee_name": [
+   "spwi901"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI902.spl",
+  "proj": 270,
+  "gemrb": "CONFLAG",
+  "gemrb_file": true,
+  "ee_proj": [
+   270
+  ],
+  "ee_name": [
+   "spwi902"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI905.spl",
+  "proj": 233,
+  "gemrb": "ELYFIRE",
+  "gemrb_file": true,
+  "ee_proj": [
+   233
+  ],
+  "ee_name": [
+   "spwi905"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI909.spl",
+  "proj": 265,
+  "gemrb": "PWKILL",
+  "gemrb_file": true,
+  "ee_proj": [
+   265
+  ],
+  "ee_name": [
+   "spwi909"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI912.spl",
+  "proj": 234,
+  "gemrb": "FURY",
+  "gemrb_file": false,
+  "ee_proj": [
+   234
+  ],
+  "ee_name": [
+   "spwi912"
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "SPWI914.spl",
+  "proj": 255,
+  "gemrb": "ROTORM",
+  "gemrb_file": true,
+  "ee_proj": [
+   300
+  ],
+  "ee_name": [
+   ""
+  ],
+  "ee_hard": [
+   true
+  ],
+  "ee_file": [
+   false
+  ]
+ },
+ {
+  "res": "BOLT01.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "BOLT02.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "BOLT03.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "BOLT04.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "BOLT05.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "BOLT06.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "BOLT07.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "BOLT08.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "BOLT09.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "IGNUSFI.itm",
+  "proj": 272,
+  "gemrb": "FBYELLO",
+  "gemrb_file": true,
+  "ee_proj": [
+   272
+  ],
+  "ee_name": [
+   "ignusfi"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "NORDBOLT.itm",
+  "proj": 267,
+  "gemrb": "NBOLT",
+  "gemrb_file": true,
+  "ee_proj": [
+   267
+  ],
+  "ee_name": [
+   "bolt01"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ },
+ {
+  "res": "NTOKEN.itm",
+  "proj": 190,
+  "gemrb": "HOLD",
+  "gemrb_file": true,
+  "ee_proj": [
+   190
+  ],
+  "ee_name": [
+   "ntoken"
+  ],
+  "ee_hard": [
+   false
+  ],
+  "ee_file": [
+   true
+  ]
+ }
+]

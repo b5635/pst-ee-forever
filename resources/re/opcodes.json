@@ -1,0 +1,2477 @@
+[
+ {
+  "op": 0,
+  "name": "ACVsDamageTypeModifier",
+  "func": "fx_ac_vs_damage_type_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 83,
+  "files": 73,
+  "example": [
+   "AEGIS.itm",
+   "AMBEAR.itm",
+   "AVEST.itm",
+   "AXASC.itm",
+   "AXOFT.spl",
+   "BKARACH2.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1,
+   2,
+   4,
+   16,
+   131072
+  ],
+  "res": [
+   "NEG"
+  ]
+ },
+ {
+  "op": 1,
+  "name": "AttacksPerRoundModifier",
+  "func": "fx_attacks_per_round_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPWI504.spl"
+  ],
+  "stub": "",
+  "p2": [
+   2
+  ],
+  "res": []
+ },
+ {
+  "op": 3,
+  "name": "State:Berserk",
+  "func": "fx_set_berserk_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 4,
+  "example": [
+   "FDAG.itm",
+   "HATEGIFT.itm",
+   "JESTER.itm",
+   "PDAG.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 6,
+  "name": "CharismaModifier",
+  "func": "fx_charisma_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 21,
+  "files": 20,
+  "example": [
+   "ANEAR1.itm",
+   "AXASC.itm",
+   "DRATCHRM.itm",
+   "ENLIGHT.itm",
+   "EVISCERA.itm",
+   "EYEKALEM.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 8,
+  "name": "Color:SetRGBGlobal",
+  "func": "fx_set_color_rgb_global",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 4,
+  "example": [
+   "PACIFY.spl",
+   "SPWI104.spl",
+   "SPWI114.spl",
+   "SPWI311.spl"
+  ],
+  "stub": "",
+  "p2": [
+   2,
+   5
+  ],
+  "res": []
+ },
+ {
+  "op": 9,
+  "name": "Color:PulseRGBGlobal",
+  "func": "fx_set_color_pulse_rgb_global",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 46,
+  "files": 41,
+  "example": [
+   "ASTORM.spl",
+   "BANDAGE.itm",
+   "BLOOCHRM.itm",
+   "BLOODFLY.itm",
+   "BONECHRM.itm",
+   "CEREPARA.itm"
+  ],
+  "stub": "",
+  "p2": [
+   5,
+   65541,
+   1048576,
+   1310725,
+   1310740,
+   1572867,
+   1572869,
+   2621445
+  ],
+  "res": [
+   "S056FTRL"
+  ]
+ },
+ {
+  "op": 10,
+  "name": "ConstitutionModifier",
+  "func": "fx_constitution_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 9,
+  "files": 9,
+  "example": [
+   "AEGIS.itm",
+   "EVISCERA.itm",
+   "JESTER.itm",
+   "RATCHARM.itm",
+   "SALITEAR.itm",
+   "TTCON1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 11,
+  "name": "Cure:Poison",
+  "func": "fx_cure_poisoned_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "PSCHARM.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 12,
+  "name": "Damage",
+  "func": "fx_damage",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 249,
+  "files": 94,
+  "example": [
+   "ADDER.spl",
+   "AMACE.itm",
+   "ASTORM.spl",
+   "AXASC.itm",
+   "AXOFT.spl",
+   "BACKBTR.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   65536,
+   131072,
+   262144,
+   524288,
+   1048576,
+   2097152,
+   4194304
+  ],
+  "res": [
+   "NEG"
+  ]
+ },
+ {
+  "op": 13,
+  "name": "Death",
+  "func": "fx_death",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 18,
+  "files": 3,
+  "example": [
+   "SPWI501.spl",
+   "SPWI803.spl",
+   "SPWI909.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   4
+  ],
+  "res": []
+ },
+ {
+  "op": 15,
+  "name": "DexterityModifier",
+  "func": "fx_dexterity_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 11,
+  "files": 11,
+  "example": [
+   "EVISCERA.itm",
+   "JESTER.itm",
+   "SAVANT.itm",
+   "SPWI101.spl",
+   "TTANNAH1.itm",
+   "TTDEX1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 16,
+  "name": "State:Hasted",
+  "func": "fx_set_hasted_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "ANTAT.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 17,
+  "name": "CurrentHPModifier",
+  "func": "fx_current_hp_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 15,
+  "files": 15,
+  "example": [
+   "BANDAGE.itm",
+   "BLOOCHRM.itm",
+   "BLOODFLY.itm",
+   "CLOTCHRM.itm",
+   "DLEGACY2.itm",
+   "EMBALM.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1,
+   2
+  ],
+  "res": []
+ },
+ {
+  "op": 18,
+  "name": "MaximumHPModifier",
+  "func": "fx_maximum_hp_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 13,
+  "files": 13,
+  "example": [
+   "AEGIS.itm",
+   "INTEST2.itm",
+   "LENS12.itm",
+   "SAVANT.itm",
+   "THIEF1.itm",
+   "TTDESANN.itm"
+  ],
+  "stub": "says-unimplemented",
+  "p2": [
+   3
+  ],
+  "res": []
+ },
+ {
+  "op": 19,
+  "name": "IntelligenceModifier",
+  "func": "fx_intelligence_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 15,
+  "files": 14,
+  "example": [
+   "CEREPARA.itm",
+   "CRATCHRM.itm",
+   "EVISCERA.itm",
+   "EYEVECNA.itm",
+   "JESTER.itm",
+   "THIEF1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 20,
+  "name": "State:Invisible",
+  "func": "fx_set_invisible_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "DRATCHRM.itm",
+   "SNEAK.spl"
+  ],
+  "stub": "todo",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 21,
+  "name": "LoreModifier",
+  "func": "fx_lore_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 9,
+  "files": 9,
+  "example": [
+   "CRATCHRM.itm",
+   "LENS03.itm",
+   "LENS08.itm",
+   "LENS10.itm",
+   "LORE.itm",
+   "QUILL.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 22,
+  "name": "LuckModifier",
+  "func": "fx_luck_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 12,
+  "files": 11,
+  "example": [
+   "CLIPCOP.itm",
+   "EYEVECNA.itm",
+   "JESTER.itm",
+   "LENS11.itm",
+   "MOOPUNCH.itm",
+   "SPWI214.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 23,
+  "name": "MoraleModifier",
+  "func": "fx_morale_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "BARDSONG.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 24,
+  "name": "State:Panic",
+  "func": "fx_set_panic_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 5,
+  "files": 5,
+  "example": [
+   "FEATHER.itm",
+   "PANIC.spl",
+   "SPIN106.spl",
+   "SPWI213.spl",
+   "SPWI217.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 25,
+  "name": "State:Poisoned",
+  "func": "fx_set_poisoned_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 10,
+  "files": 10,
+  "example": [
+   "CLUB2.itm",
+   "FDAG.itm",
+   "IRON3.itm",
+   "JESTER.itm",
+   "PCHEESE.itm",
+   "SPLINTER.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   2,
+   3
+  ],
+  "res": []
+ },
+ {
+  "op": 26,
+  "name": "RemoveCurse",
+  "func": "fx_remove_curse",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 3,
+  "files": 3,
+  "example": [
+   "SPIN013.spl",
+   "SPPR307.spl",
+   "SPWI409.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 27,
+  "name": "AcidResistanceModifier",
+  "func": "fx_acid_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "GULLET.itm",
+   "TTDV.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 28,
+  "name": "ColdResistanceModifier",
+  "func": "fx_cold_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 5,
+  "files": 5,
+  "example": [
+   "DUSTEAR.itm",
+   "EYEKALEM.itm",
+   "FTEETH.itm",
+   "OBLIVION.itm",
+   "TTWEEP.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 29,
+  "name": "ElectricityResistanceModifier",
+  "func": "fx_electricity_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "FTEETH.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 30,
+  "name": "FireResistanceModifier",
+  "func": "fx_fire_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 10,
+  "files": 10,
+  "example": [
+   "BRIMHAM.itm",
+   "CHARCHRM.itm",
+   "CHCHAR.itm",
+   "CRIMSEAR.itm",
+   "DUSTEAR.itm",
+   "EYEKALEM.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 32,
+  "name": "Cure:Death",
+  "func": "fx_cure_dead_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "SPIN108.spl",
+   "SPPR502.spl"
+  ],
+  "stub": "",
+  "p2": [
+   100
+  ],
+  "res": []
+ },
+ {
+  "op": 33,
+  "name": "SaveVsDeathModifier",
+  "func": "fx_save_vs_death_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 21,
+  "files": 20,
+  "example": [
+   "DSUPRING.itm",
+   "DUSTEAR.itm",
+   "DWEDRING.itm",
+   "EYEKAL.itm",
+   "EYEVECNA.itm",
+   "GEARRING.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 34,
+  "name": "SaveVsWandsModifier",
+  "func": "fx_save_vs_wands_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 12,
+  "files": 11,
+  "example": [
+   "DSUPRING.itm",
+   "DWEDRING.itm",
+   "EYEKAL.itm",
+   "GEARRING.itm",
+   "INDEPEAR.itm",
+   "LENS13.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 35,
+  "name": "SaveVsPolyModifier",
+  "func": "fx_save_vs_poly_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 12,
+  "files": 11,
+  "example": [
+   "DSUPRING.itm",
+   "DWEDRING.itm",
+   "EYEKAL.itm",
+   "GEARRING.itm",
+   "INDEPEAR.itm",
+   "LENS13.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 36,
+  "name": "SaveVsBreathModifier",
+  "func": "fx_save_vs_breath_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 12,
+  "files": 11,
+  "example": [
+   "DSUPRING.itm",
+   "DWEDRING.itm",
+   "EYEKAL.itm",
+   "GEARRING.itm",
+   "INDEPEAR.itm",
+   "LENS13.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 37,
+  "name": "SaveVsSpellsModifier",
+  "func": "fx_save_vs_spell_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 16,
+  "files": 15,
+  "example": [
+   "DSUPRING.itm",
+   "DWEDRING.itm",
+   "EYEKAL.itm",
+   "FDAG.itm",
+   "GEARRING.itm",
+   "INDEPEAR.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 38,
+  "name": "State:Silenced",
+  "func": "fx_set_silenced_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "IRON3.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 39,
+  "name": "State:Helpless",
+  "func": "fx_set_unconscious_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 3,
+  "files": 2,
+  "example": [
+   "ORB.spl",
+   "SPWI401.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 41,
+  "name": "Sparkle",
+  "func": "fx_sparkle",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 3,
+  "files": 3,
+  "example": [
+   "CHARCHRM.itm",
+   "CHCHAR.itm",
+   "DUMMY.spl"
+  ],
+  "stub": "todo",
+  "p2": [
+   1,
+   2
+  ],
+  "res": []
+ },
+ {
+  "op": 42,
+  "name": "WizardSpellSlotsModifier",
+  "func": "fx_bonus_wizard_spells",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 27,
+  "files": 15,
+  "example": [
+   "AMBEAR.itm",
+   "BKARACH.itm",
+   "BKARACH2.itm",
+   "BKARACH3.itm",
+   "EYEVECNA.itm",
+   "GKARACH.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1,
+   2,
+   4,
+   8,
+   16,
+   32,
+   64
+  ],
+  "res": []
+ },
+ {
+  "op": 44,
+  "name": "StrengthModifier",
+  "func": "fx_strength_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 17,
+  "files": 17,
+  "example": [
+   "EVISCERA.itm",
+   "FTEETH.itm",
+   "HEAVEN.itm",
+   "NOFEAR.itm",
+   "RATCHARM.itm",
+   "SHADOW1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 45,
+  "name": "State:Stun",
+  "func": "fx_set_stun_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 4,
+  "example": [
+   "DDMACE.itm",
+   "HOWL.spl",
+   "ORB.spl",
+   "SPIN101.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 49,
+  "name": "WisdomModifier",
+  "func": "fx_wisdom_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 19,
+  "files": 18,
+  "example": [
+   "BELL.itm",
+   "CEREPARA.itm",
+   "EVISCERA.itm",
+   "EYEKALEM.itm",
+   "EYEVECNA.itm",
+   "GORDKNOT.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 51,
+  "name": "Color:DarkenRGB",
+  "func": "fx_darken_rgb",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "PWB.spl"
+  ],
+  "stub": "",
+  "p2": [
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 54,
+  "name": "ToHitModifier",
+  "func": "fx_to_hit_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 93,
+  "files": 92,
+  "example": [
+   "ADDAGGER.itm",
+   "AMACE.itm",
+   "AX2.itm",
+   "AXASC.itm",
+   "AXMAG.itm",
+   "BACKBTR.itm"
+  ],
+  "stub": "todo",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 59,
+  "name": "StealthModifier",
+  "func": "fx_stealth_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 13,
+  "files": 12,
+  "example": [
+   "BACKBTR.itm",
+   "DRATCHRM.itm",
+   "JER_FS.itm",
+   "OBEAR.itm",
+   "SAVANT.itm",
+   "SSHADOW.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 60,
+  "name": "MiscastMagicModifier",
+  "func": "fx_miscast_magic_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 2,
+  "example": [
+   "SPWI104.spl",
+   "SPWI212.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 62,
+  "name": "PriestSpellSlotsModifier",
+  "func": "fx_bonus_priest_spells",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 8,
+  "files": 2,
+  "example": [
+   "BELL.itm",
+   "BOD_GP.itm"
+  ],
+  "stub": "",
+  "p2": [
+   1,
+   2,
+   4,
+   8,
+   16,
+   32
+  ],
+  "res": []
+ },
+ {
+  "op": 65,
+  "name": "State:Blur",
+  "func": "fx_set_blur_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "LENS13.itm",
+   "SPWI216.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 66,
+  "name": "TransparencyModifier",
+  "func": "fx_transparency_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 4,
+  "example": [
+   "CRATCHRM.itm",
+   "LENS13.itm",
+   "RINGAI.itm",
+   "SSHADOW.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 73,
+  "name": "DamageBonusModifier",
+  "func": "fx_damage_bonus_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 15,
+  "files": 15,
+  "example": [
+   "EYEGLAS1.itm",
+   "LENS02.itm",
+   "LENS03.itm",
+   "LENS05.itm",
+   "LENS06.itm",
+   "LENS07.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 74,
+  "name": "State:Blind",
+  "func": "fx_set_blind_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 53,
+  "files": 5,
+  "example": [
+   "AMACE.itm",
+   "LENS07.itm",
+   "PWB.spl",
+   "SPWI115.spl",
+   "SPWI120.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 75,
+  "name": "Cure:Blind",
+  "func": "fx_cure_blind_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPPR601.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 79,
+  "name": "Cure:Disease",
+  "func": "fx_cure_diseased_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPPR601.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 82,
+  "name": "SetAIScript",
+  "func": "fx_set_ai_script",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPIN101.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 83,
+  "name": "Protection:Projectile",
+  "func": "fx_protection_from_projectile",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "NO_CURSE.itm"
+  ],
+  "stub": "",
+  "p2": [
+   203
+  ],
+  "res": []
+ },
+ {
+  "op": 84,
+  "name": "MagicalFireResistanceModifier",
+  "func": "fx_magical_fire_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 8,
+  "files": 8,
+  "example": [
+   "CHARCHRM.itm",
+   "CHCHAR.itm",
+   "CRIMSEAR.itm",
+   "DUSTEAR.itm",
+   "EYEKALEM.itm",
+   "FDTEETH.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 85,
+  "name": "MagicalColdResistanceModifier",
+  "func": "fx_magical_cold_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 4,
+  "example": [
+   "DUSTEAR.itm",
+   "EYEKALEM.itm",
+   "OBLIVION.itm",
+   "TTWEEP.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 86,
+  "name": "SlashingResistanceModifier",
+  "func": "fx_slashing_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 7,
+  "files": 7,
+  "example": [
+   "CELESTI3.itm",
+   "CELESTIA.itm",
+   "CFAXE.itm",
+   "CLOTCHRM.itm",
+   "HEARCHRM.itm",
+   "THIEF1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 87,
+  "name": "CrushingResistanceModifier",
+  "func": "fx_crushing_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 7,
+  "files": 7,
+  "example": [
+   "BONECHRM.itm",
+   "CFCLUB.itm",
+   "CFFIST.itm",
+   "CFHAMMER.itm",
+   "ROCHCHRM.itm",
+   "THIEF1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 88,
+  "name": "PiercingResistanceModifier",
+  "func": "fx_piercing_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 5,
+  "files": 5,
+  "example": [
+   "CFDAGGER.itm",
+   "CLOTCHRM.itm",
+   "HEARCHRM.itm",
+   "THIEF1.itm",
+   "TTSENS1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 89,
+  "name": "MissilesResistanceModifier",
+  "func": "fx_missiles_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 4,
+  "example": [
+   "LENS13.itm",
+   "SPWI603.spl",
+   "THIEF1.itm",
+   "TTSENS1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 90,
+  "name": "OpenLocksModifier",
+  "func": "fx_open_locks_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 6,
+  "files": 6,
+  "example": [
+   "LOCKPICK.itm",
+   "SAVANT.itm",
+   "TTANNAH1.itm",
+   "TTTHF1.itm",
+   "TTTHF2.itm",
+   "UMEI.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 91,
+  "name": "FindTrapsModifier",
+  "func": "fx_find_traps_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 6,
+  "files": 6,
+  "example": [
+   "CRATCHRM.itm",
+   "EYEGLAS2.itm",
+   "SAVANT.itm",
+   "TTANNAH1.itm",
+   "TTTHF2.itm",
+   "UMEI.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 92,
+  "name": "PickPocketsModifier",
+  "func": "fx_pick_pockets_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 7,
+  "files": 6,
+  "example": [
+   "DRATCHRM.itm",
+   "JER_FS.itm",
+   "TTANNAH1.itm",
+   "TTSILENT.itm",
+   "TTTHF1.itm",
+   "TTTHF2.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 93,
+  "name": "FatigueModifier",
+  "func": "fx_fatigue_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "HEARCHRM.itm",
+   "MASLOW.itm"
+  ],
+  "stub": "",
+  "p2": [
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 94,
+  "name": "IntoxicationModifier",
+  "func": "fx_intoxication_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "LENS12.itm",
+   "MASLOW.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 97,
+  "name": "StrengthBonusModifier",
+  "func": "fx_strength_bonus_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "FTEETH.itm"
+  ],
+  "stub": "",
+  "p2": [
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 98,
+  "name": "State:Regenerating",
+  "func": "fx_set_regenerating_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 19,
+  "files": 19,
+  "example": [
+   "BLOODFLY.itm",
+   "BOD_PQ.itm",
+   "JUSTFIER.itm",
+   "REGEN01.itm",
+   "REGEN02.itm",
+   "REGEN03.itm"
+  ],
+  "stub": "",
+  "p2": [
+   3
+  ],
+  "res": []
+ },
+ {
+  "op": 100,
+  "name": "Protection:Creature",
+  "func": "fx_generic_effect",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 3,
+  "files": 1,
+  "example": [
+   "KYNAME.itm"
+  ],
+  "stub": "",
+  "p2": [
+   8
+  ],
+  "res": []
+ },
+ {
+  "op": 101,
+  "name": "Protection:Opcode",
+  "func": "fx_protection_opcode",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 14,
+  "files": 14,
+  "example": [
+   "ANEAR3.itm",
+   "BARDSONG.spl",
+   "BSIDER.itm",
+   "CEREPARA.itm",
+   "IMDEATH.itm",
+   "IMFEAR.itm"
+  ],
+  "stub": "",
+  "p2": [
+   13,
+   24,
+   25,
+   74,
+   109,
+   128
+  ],
+  "res": []
+ },
+ {
+  "op": 102,
+  "name": "Protection:SpellLevel",
+  "func": "fx_protection_spelllevel",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 1,
+  "example": [
+   "SPWI602.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 104,
+  "name": "ExperienceModifier",
+  "func": "fx_experience_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 8,
+  "files": 8,
+  "example": [
+   "TTCUTPUR.itm",
+   "TTLOSTIN.itm",
+   "TTSHADOW.itm",
+   "TTSHATLO.itm",
+   "TTSILENT.itm",
+   "TTSOURCE.itm"
+  ],
+  "stub": "no-op",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 105,
+  "name": "GoldModifier",
+  "func": "fx_gold_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 3,
+  "files": 3,
+  "example": [
+   "CLIPCOP.itm",
+   "TEARRING.itm",
+   "TTCUTPUR.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 109,
+  "name": "State:HoldNoIcon",
+  "func": "fx_hold_creature_no_icon",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 20,
+  "files": 9,
+  "example": [
+   "AXOFT.spl",
+   "HOLDUND.spl",
+   "M3CTEETH.itm",
+   "M3PTEETH.itm",
+   "NTOKEN.itm",
+   "ORB.spl"
+  ],
+  "stub": "",
+  "p2": [
+   2,
+   3,
+   4
+  ],
+  "res": [
+   "NEG"
+  ]
+ },
+ {
+  "op": 110,
+  "name": "RetreatFrom",
+  "func": "fx_retreat_from",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 6,
+  "files": 2,
+  "example": [
+   "SPWI505.spl",
+   "TURN.spl"
+  ],
+  "stub": "",
+  "p2": [
+   4,
+   7
+  ],
+  "res": []
+ },
+ {
+  "op": 120,
+  "name": "Protection:Weapons",
+  "func": "fx_immune_to_weapon",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 22,
+  "files": 13,
+  "example": [
+   "P1SF.itm",
+   "P1SFCF.itm",
+   "P2SF.itm",
+   "P2SFCF.itm",
+   "P3SF.itm",
+   "P3SFCF.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   4,
+   5,
+   11
+  ],
+  "res": []
+ },
+ {
+  "op": 124,
+  "name": "DimensionDoor",
+  "func": "fx_dimension_door",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "AXOFT.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": [
+   "NEG"
+  ]
+ },
+ {
+  "op": 125,
+  "name": "Unlock",
+  "func": "fx_knock",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPWI215.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 128,
+  "name": "State:Confused",
+  "func": "fx_set_confused_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 7,
+  "files": 7,
+  "example": [
+   "HOWL.spl",
+   "IRON3.itm",
+   "ISTORM.spl",
+   "JESTER.itm",
+   "NETTLES.itm",
+   "SPWI402.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 129,
+  "name": "AidNonCumulative",
+  "func": "fx_set_aid_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 23,
+  "files": 1,
+  "example": [
+   "SPPR201.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 130,
+  "name": "Bless",
+  "func": "fx_bless",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "SPPR101.spl",
+   "SPWI118.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 134,
+  "name": "State:Petrification",
+  "func": "fx_set_petrified_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "AXOFT.spl",
+   "SPWI101.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   2
+  ],
+  "res": [
+   "NEG"
+  ]
+ },
+ {
+  "op": 138,
+  "name": "AnimationStateChange",
+  "func": "fx_animation_stance",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 30,
+  "files": 20,
+  "example": [
+   "BANDAGE.itm",
+   "BLOOCHRM.itm",
+   "BLOODFLY.itm",
+   "CHARCHRM.itm",
+   "CHCHAR.itm",
+   "CLIPCOP.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   2,
+   4,
+   27,
+   32
+  ],
+  "res": []
+ },
+ {
+  "op": 139,
+  "name": "DisplayString",
+  "func": "fx_display_string",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "LITANY.spl"
+  ],
+  "stub": "",
+  "p2": [
+   255
+  ],
+  "res": [
+   "MRTTAUNT"
+  ]
+ },
+ {
+  "op": 141,
+  "name": "VisualSpellHit",
+  "func": "fx_visual_spell_hit",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "PANIC.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 142,
+  "name": "Icon:Display",
+  "func": "fx_display_portrait_icon",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "BARDSONG.spl",
+   "PANIC.spl"
+  ],
+  "stub": "",
+  "p2": [
+   36,
+   40
+  ],
+  "res": []
+ },
+ {
+  "op": 146,
+  "name": "Spell:Cast",
+  "func": "fx_cast_spell",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 98,
+  "files": 97,
+  "example": [
+   "ADDRTEAR.itm",
+   "ANEAR2.itm",
+   "BBCHRM.itm",
+   "BBSEED.itm",
+   "BBWAND.itm",
+   "BREAST1.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": [
+   "MFMISS5B",
+   "SPIN104",
+   "SPPR101",
+   "SPPR102",
+   "SPPR104",
+   "SPPR106"
+  ]
+ },
+ {
+  "op": 147,
+  "name": "Spell:Learn",
+  "func": "fx_learn_spell",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 84,
+  "files": 84,
+  "example": [
+   "BBSEED.itm",
+   "BREAST1.itm",
+   "BREAST2.itm",
+   "BREAST3.itm",
+   "BREAST4.itm",
+   "CIRCLE02.itm"
+  ],
+  "stub": "no-op",
+  "p2": [
+   0,
+   2
+  ],
+  "res": [
+   "SPIN101",
+   "SPWI101",
+   "SPWI102",
+   "SPWI103",
+   "SPWI104",
+   "SPWI105"
+  ]
+ },
+ {
+  "op": 148,
+  "name": "Spell:CastPoint",
+  "func": "fx_cast_spell_point",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 40,
+  "files": 40,
+  "example": [
+   "ACID.itm",
+   "ANEAR4.itm",
+   "CFLYCHRM.itm",
+   "C_2212.itm",
+   "C_2501.itm",
+   "LENS11.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": [
+   "SPPR101",
+   "SPPR103",
+   "SPPR105",
+   "SPPR301",
+   "SPWI108",
+   "SPWI212"
+  ]
+ },
+ {
+  "op": 150,
+  "name": "FindTraps",
+  "func": "fx_find_traps",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "DETECT.spl",
+   "FINDTRAP.spl"
+  ],
+  "stub": "todo",
+  "p2": [
+   1,
+   3
+  ],
+  "res": []
+ },
+ {
+  "op": 152,
+  "name": "PlayMovie",
+  "func": "fx_play_movie",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 5,
+  "files": 5,
+  "example": [
+   "CHOST.spl",
+   "CONFLAG.spl",
+   "MCANNON.spl",
+   "MSWARM.spl",
+   "RUNE.spl"
+  ],
+  "stub": "no-op",
+  "p2": [
+   0
+  ],
+  "res": [
+   "CANNON",
+   "CONFLAG",
+   "DRAGON",
+   "METEOR",
+   "RUNE"
+  ]
+ },
+ {
+  "op": 159,
+  "name": "MirrorImageModifier",
+  "func": "fx_mirror_image_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "MIRIMAG.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 161,
+  "name": "Cure:Panic",
+  "func": "fx_cure_panic_state",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "BARDSONG.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 166,
+  "name": "MagicResistanceModifier",
+  "func": "fx_magic_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 8,
+  "files": 8,
+  "example": [
+   "BELL.itm",
+   "EYEKAL.itm",
+   "EYEVECNA.itm",
+   "GEARRING.itm",
+   "RBLADE.itm",
+   "SPUNCH.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 171,
+  "name": "Spell:Add",
+  "func": "fx_add_innate",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 6,
+  "files": 6,
+  "example": [
+   "SPIN001.spl",
+   "SPIN003.spl",
+   "SPIN005.spl",
+   "SPIN007.spl",
+   "SPIN009.spl",
+   "SPIN014.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": [
+   "SPIN101",
+   "SPIN102",
+   "SPIN103",
+   "SPIN104",
+   "SPIN107",
+   "SPIN108"
+  ]
+ },
+ {
+  "op": 172,
+  "name": "Spell:Remove",
+  "func": "fx_remove_spell",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 7,
+  "files": 7,
+  "example": [
+   "LITANY.spl",
+   "SPIN002.spl",
+   "SPIN004.spl",
+   "SPIN006.spl",
+   "SPIN008.spl",
+   "SPIN010.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": [
+   "SPIN101",
+   "SPIN102",
+   "SPIN103",
+   "SPIN104",
+   "SPIN107",
+   "SPIN108"
+  ]
+ },
+ {
+  "op": 173,
+  "name": "PoisonResistanceModifier",
+  "func": "fx_poison_resistance_modifier",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 4,
+  "files": 4,
+  "example": [
+   "FTEETH.itm",
+   "MORTEP.itm",
+   "VTEETH.itm",
+   "WIDMKR.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 174,
+  "name": "PlaySound",
+  "func": "fx_playsound",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 172,
+  "files": 91,
+  "example": [
+   "AXOFT.spl",
+   "BANDAGE.itm",
+   "BLOOCHRM.itm",
+   "BLOODFLY.itm",
+   "BONECHRM.itm",
+   "BSTORM2.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": [
+   "ACIDS05",
+   "ACT_06",
+   "AID03",
+   "ARMOR05",
+   "AURA09",
+   "AXOFT05"
+  ]
+ },
+ {
+  "op": 177,
+  "name": "ApplyEffect",
+  "func": "fx_apply_effect",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "STORIES.spl"
+  ],
+  "stub": "todo",
+  "p2": [
+   2
+  ],
+  "res": [
+   "SPEAK"
+  ]
+ },
+ {
+  "op": 186,
+  "name": "SetStatus",
+  "func": "fx_set_status",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 6,
+  "files": 6,
+  "example": [
+   "ASTORM.spl",
+   "BOLT01.itm",
+   "BOLT06.itm",
+   "LENS11.itm",
+   "SPWI311.spl",
+   "SPWI504.spl"
+  ],
+  "stub": "",
+  "p2": [
+   8,
+   16384,
+   65536,
+   4194304
+  ],
+  "res": []
+ },
+ {
+  "op": 187,
+  "name": "PlayBAM1",
+  "func": "fx_play_bam_blended",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 282,
+  "files": 75,
+  "example": [
+   "AXOFT.spl",
+   "BLOOCHRM.itm",
+   "BLOODFLY.itm",
+   "BONECHRM.itm",
+   "CEREPARA.itm",
+   "CLIPCOP.itm"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1,
+   2
+  ],
+  "res": [
+   "D005DICE",
+   "I001ZZZZ",
+   "Itemspll",
+   "REMVCURS",
+   "S001ANGR",
+   "S001CUSS"
+  ]
+ },
+ {
+  "op": 188,
+  "name": "PlayBAM2",
+  "func": "fx_play_bam_not_blended",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 8,
+  "files": 3,
+  "example": [
+   "BSTORM2.spl",
+   "DHELL.spl",
+   "SPWI212.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   4096,
+   131088,
+   135184,
+   200720
+  ],
+  "res": [
+   "EF01TPRT",
+   "S030SWAT",
+   "S030SWEN",
+   "S030SWEX",
+   "S030SWFM",
+   "S030SWGR"
+  ]
+ },
+ {
+  "op": 189,
+  "name": "PlayBAM3",
+  "func": "fx_play_bam_not_blended",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 41,
+  "files": 5,
+  "example": [
+   "SPWI202.spl",
+   "SPWI309.spl",
+   "SPWI401.spl",
+   "SPWI502.spl",
+   "SPWI705.spl"
+  ],
+  "stub": "",
+  "p2": [
+   1179648,
+   1183744
+  ],
+  "res": [
+   "S022CURS",
+   "S039VPRP",
+   "S039VRDN",
+   "S039VRUP",
+   "S041BALL",
+   "S041GLRP"
+  ]
+ },
+ {
+  "op": 191,
+  "name": "PlayBAM5",
+  "func": "fx_play_bam_not_blended",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 111,
+  "files": 14,
+  "example": [
+   "SPIN107.spl",
+   "SPPR105.spl",
+   "SPPR303.spl",
+   "SPPR601.spl",
+   "SPWI305.spl",
+   "SPWI308.spl"
+  ],
+  "stub": "",
+  "p2": [
+   3211264,
+   3276800,
+   3280896,
+   3280912,
+   3342336,
+   3342352
+  ],
+  "res": [
+   "FFGKISAT",
+   "S015HCST",
+   "S038TSHA",
+   "S045DFRC",
+   "S045FCST",
+   "S070CSTR"
+  ]
+ },
+ {
+  "op": 192,
+  "name": "TransferHP",
+  "func": "fx_transfer_hp",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 17,
+  "files": 7,
+  "example": [
+   "BBRIDGE.spl",
+   "BUTCHER.itm",
+   "GKISS.itm",
+   "IRON2.itm",
+   "SPIN104.spl",
+   "SPIN107.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 193,
+  "name": "ScreenShake",
+  "func": "fx_screenshake",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 36,
+  "files": 12,
+  "example": [
+   "BSTORM2.spl",
+   "MCANNON.spl",
+   "RUNE.spl",
+   "SHAMMER.spl",
+   "SHARD.itm",
+   "SPWI004.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 194,
+  "name": "FlashScreen",
+  "func": "fx_flash_screen",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 44,
+  "files": 16,
+  "example": [
+   "BLUETINT.spl",
+   "BSIDER.itm",
+   "CHOST.spl",
+   "LSTORM2.spl",
+   "MCANNON.spl",
+   "ORNGTINT.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 195,
+  "name": "TintScreen",
+  "func": "fx_tint_screen",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 62,
+  "files": 36,
+  "example": [
+   "BSTORM2.spl",
+   "DHELL.spl",
+   "HOWL.spl",
+   "RUNE.spl",
+   "SPIN011.spl",
+   "SPIN108.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1,
+   2,
+   5,
+   100
+  ],
+  "res": []
+ },
+ {
+  "op": 196,
+  "name": "SpecialEffect",
+  "func": "fx_special_effect",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "SPWI201.spl",
+   "SPWI301.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 197,
+  "name": "MultipleVVC",
+  "func": "fx_multiple_vvc",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 4,
+  "files": 4,
+  "example": [
+   "CHOST.spl",
+   "DBOLT.spl",
+   "LSTORM2.spl",
+   "RUNE.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": [
+   "CHOST",
+   "DBOLT",
+   "LSTORM",
+   "RUNE"
+  ]
+ },
+ {
+  "op": 198,
+  "name": "ModifyGlobalVariable",
+  "func": "fx_modify_global_variable",
+  "file": "FXOpcodes/FXOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPEAK.eff"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": [
+   "SPEAK_WI"
+  ]
+ },
+ {
+  "op": 199,
+  "name": "ChangeBackground",
+  "func": "fx_change_background",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "BSTORM2.spl",
+   "DHELL.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": [
+   "S055DSRT",
+   "S057BACK"
+  ]
+ },
+ {
+  "op": 201,
+  "name": "Overlay",
+  "func": "fx_overlay",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 25,
+  "files": 18,
+  "example": [
+   "IMPSTR.spl",
+   "POO.spl",
+   "SPPR106.spl",
+   "SPPR302.spl",
+   "SPWI102.spl",
+   "SPWI111.spl"
+  ],
+  "stub": "todo",
+  "p2": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7
+  ],
+  "res": [
+   "S012AGLB",
+   "S013APPR",
+   "S023BBSH",
+   "S034GLOB",
+   "S048SPHR",
+   "S052RING"
+  ]
+ },
+ {
+  "op": 203,
+  "name": "Curse",
+  "func": "fx_curse",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 2,
+  "files": 2,
+  "example": [
+   "SPPR103.spl",
+   "SPWI117.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 204,
+  "name": "Prayer",
+  "func": "fx_prayer",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 21,
+  "files": 1,
+  "example": [
+   "SPPR303.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 205,
+  "name": "MoveView",
+  "func": "fx_move_view",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 11,
+  "files": 10,
+  "example": [
+   "PWK.spl",
+   "SPWI313.spl",
+   "SPWI505.spl",
+   "SPWI506.spl",
+   "SPWI802.spl",
+   "SPWI804.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 206,
+  "name": "Embalm",
+  "func": "fx_embalm",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 3,
+  "files": 3,
+  "example": [
+   "EMBALM.itm",
+   "SPWI103.spl",
+   "SPWI205.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 207,
+  "name": "StopAllAction",
+  "func": "fx_stop_all_action",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 6,
+  "files": 3,
+  "example": [
+   "BSTORM2.spl",
+   "DHELL.spl",
+   "SPWI308.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0,
+   1
+  ],
+  "res": []
+ },
+ {
+  "op": 208,
+  "name": "IronFist",
+  "func": "fx_iron_fist",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPWI104.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 209,
+  "name": "HostileImage",
+  "func": "fx_hostile_image",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "FANGMIRR.itm"
+  ],
+  "stub": "says-unimplemented,no-op",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 210,
+  "name": "DetectEvil",
+  "func": "fx_detect_evil",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPPR104.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 211,
+  "name": "JumbleCurse",
+  "func": "fx_jumble_curse",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "SPIN012.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ },
+ {
+  "op": 212,
+  "name": "SpeakWithDead",
+  "func": "fx_speak_with_dead",
+  "file": "PSTOpcodes/PSTOpcodes.cpp",
+  "uses": 1,
+  "files": 1,
+  "example": [
+   "STORIES.spl"
+  ],
+  "stub": "",
+  "p2": [
+   0
+  ],
+  "res": []
+ }
+]

@@ -1,0 +1,384 @@
+{
+ "CPsSpellAbyssalFury": {
+  "opcodes": [],
+  "features": [
+   "death effect",
+   "damage effect",
+   "area search",
+   "caster level",
+   "random",
+   "hit trigger",
+   "screen flash/tint",
+   "moves creatures",
+   "checks spell state"
+  ]
+ },
+ "CPsSpellAxOfTorment": {
+  "opcodes": [
+   [
+    0,
+    "CGameEffectAC"
+   ]
+  ],
+  "features": [
+   "random",
+   "hit trigger",
+   "screen flash/tint",
+   "moves creatures"
+  ]
+ },
+ "CPsSpellBallLightning": {
+  "opcodes": [],
+  "features": [
+   "random"
+  ]
+ },
+ "CPsSpellBlacksphere": {
+  "opcodes": [],
+  "features": []
+ },
+ "CPsSpellBladestorm": {
+  "opcodes": [],
+  "features": [
+   "rolls to-hit",
+   "damage effect",
+   "area search",
+   "random",
+   "hit trigger",
+   "screen flash/tint",
+   "background swap"
+  ]
+ },
+ "CPsSpellCelestialHost": {
+  "opcodes": [],
+  "features": [
+   "loads SPL effects",
+   "area search",
+   "random",
+   "screen flash/tint",
+   "background swap",
+   "moves creatures"
+  ]
+ },
+ "CPsSpellChainLightningStorm": {
+  "opcodes": [],
+  "features": [
+   "area search",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellCloudKill": {
+  "opcodes": [],
+  "features": [
+   "area search",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellConflagration": {
+  "opcodes": [
+   [
+    66,
+    "CGameEffectTranslucent"
+   ]
+  ],
+  "features": [
+   "loads SPL effects",
+   "area search",
+   "random",
+   "screen flash/tint",
+   "moves creatures"
+  ]
+ },
+ "CPsSpellDeathBolt": {
+  "opcodes": [],
+  "features": [
+   "area search",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellDesertHell": {
+  "opcodes": [],
+  "features": [
+   "area search",
+   "screen flash/tint",
+   "background swap"
+  ]
+ },
+ "CPsSpellElysiumsFires": {
+  "opcodes": [],
+  "features": [
+   "random"
+  ]
+ },
+ "CPsSpellElysiumsTears": {
+  "opcodes": [],
+  "features": []
+ },
+ "CPsSpellElysiumsTearsMeteor": {
+  "opcodes": [],
+  "features": [
+   "rolls to-hit",
+   "damage effect",
+   "area search",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellEmbalming": {
+  "opcodes": [],
+  "features": [
+   "checks undead/race"
+  ]
+ },
+ "CPsSpellFireAndIce": {
+  "opcodes": [
+   [
+    12,
+    "CGameEffectDamage"
+   ]
+  ],
+  "features": [
+   "area search",
+   "random",
+   "hit trigger",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellForceMissile": {
+  "opcodes": [
+   [
+    12,
+    "CGameEffectDamage"
+   ]
+  ],
+  "features": [
+   "loads SPL effects",
+   "area search",
+   "caster level",
+   "random",
+   "hit trigger"
+  ]
+ },
+ "CPsSpellGlobeOfInvulnerability": {
+  "opcodes": [],
+  "features": [
+   "area search"
+  ]
+ },
+ "CPsSpellHoldUndead": {
+  "opcodes": [
+   [
+    109,
+    "CGameEffectHoldCreature"
+   ]
+  ],
+  "features": [
+   "area search",
+   "random",
+   "checks undead/race"
+  ]
+ },
+ "CPsSpellHowlOfPandemonium": {
+  "opcodes": [
+   [
+    45,
+    "CGameEffectStun"
+   ],
+   [
+    353,
+    "CGameEffectTintScreen"
+   ]
+  ],
+  "features": [
+   "area search",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellIceKnife": {
+  "opcodes": [
+   [
+    54,
+    "CGameEffectThac0"
+   ]
+  ],
+  "features": [
+   "rolls to-hit",
+   "damage effect",
+   "loads SPL effects",
+   "area search",
+   "caster level",
+   "random",
+   "hit trigger"
+  ]
+ },
+ "CPsSpellIgnusFury": {
+  "opcodes": [
+   [
+    12,
+    "CGameEffectDamage"
+   ]
+  ],
+  "features": [
+   "area search",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellImprovedStrength": {
+  "opcodes": [
+   [
+    44,
+    "CGameEffectSTR"
+   ]
+  ],
+  "features": [
+   "random"
+  ]
+ },
+ "CPsSpellMeteorStormBombardment": {
+  "opcodes": [],
+  "features": [
+   "area search",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellMissileOfPatience": {
+  "opcodes": [],
+  "features": [
+   "loads SPL effects",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellPacify": {
+  "opcodes": [
+   [
+    0,
+    "CGameEffectAC"
+   ],
+   [
+    8,
+    "CGameEffectColorGlowSolid"
+   ]
+  ],
+  "features": [
+   "area search",
+   "random",
+   "checks undead/race"
+  ]
+ },
+ "CPsSpellPowerOfOne": {
+  "opcodes": [
+   [
+    44,
+    "CGameEffectSTR"
+   ]
+  ],
+  "features": [
+   "random"
+  ]
+ },
+ "CPsSpellPowerWordBlind": {
+  "opcodes": [
+   [
+    9,
+    "CGameEffectColorGlowPulse"
+   ],
+   [
+    74,
+    "CGameEffectBlindness"
+   ]
+  ],
+  "features": [
+   "area search",
+   "HP-pool targeting",
+   "random",
+   "hit trigger",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellPowerWordKill": {
+  "opcodes": [],
+  "features": [
+   "HP-pool targeting",
+   "hit trigger",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellRuneOfTorment": {
+  "opcodes": [],
+  "features": [
+   "area search",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellShroudOfShadows": {
+  "opcodes": [
+   [
+    0,
+    "CGameEffectAC"
+   ]
+  ],
+  "features": [
+   "random"
+  ]
+ },
+ "CPsSpellStrength": {
+  "opcodes": [
+   [
+    44,
+    "CGameEffectSTR"
+   ]
+  ],
+  "features": [
+   "random"
+  ]
+ },
+ "CPsSpellStygianIceStorm": {
+  "opcodes": [
+   [
+    128,
+    "CGameEffectConfusion"
+   ]
+  ],
+  "features": [
+   "area search",
+   "random",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellSwarmCurse": {
+  "opcodes": [
+   [
+    215,
+    "CGameEffectVisualEffect"
+   ]
+  ],
+  "features": [
+   "damage effect",
+   "area search",
+   "random",
+   "hit trigger",
+   "screen flash/tint"
+  ]
+ },
+ "CPsSpellTashasLaughter": {
+  "opcodes": [],
+  "features": [
+   "area search",
+   "checks undead/race"
+  ]
+ },
+ "CPsSpellVampiricTouch": {
+  "opcodes": [],
+  "features": [
+   "rolls to-hit",
+   "checks undead/race"
+  ]
+ }
+}

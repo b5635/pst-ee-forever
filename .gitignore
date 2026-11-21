@@ -1,0 +1,22 @@
+# build output
+/build/
+*.obj
+*.pdb
+*.ilk
+
+# large RE material and derived dumps (keep scripts, ignore databases and dumps)
+/resources/re/lin/
+/resources/re/win/*.i64
+/resources/re/win/*.exe
+/resources/re/win/*.log
+/resources/re/win/dump/
+/resources/re/pipeline.log
+/resources/re/index.sqlite
+/resources/ext/
+/resources/iesdp-gh-pages/
+!/resources/re/win/manual_names.tsv
+
+# python
+__pycache__/
+.pytest_cache/
+/tools/universal-modder/

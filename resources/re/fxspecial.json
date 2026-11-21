@@ -1,0 +1,1451 @@
+{
+ "CGameEffectAC": {
+  "ops": [
+   0
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 129,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectAddAttachedObject": {
+  "ops": [
+   201
+  ],
+  "resrefs": [
+   "MAGIC01",
+   "MAGIC02",
+   "S061GLWB",
+   "SE10FIZZ",
+   "SPPR106",
+   "SPPR302",
+   "SPWI102",
+   "SPWI111",
+   "SPWI119",
+   "SPWI209",
+   "SPWI304",
+   "SPWI312",
+   "SPWI314",
+   "SPWI504",
+   "SPWI601",
+   "SPWI704",
+   "TRAVEL"
+  ],
+  "planes": [
+   "Carceri"
+  ],
+  "spellstates": [],
+  "subfx": [
+   0,
+   9,
+   30
+  ],
+  "pst": [
+   "CPlanescape::IsInCarceri"
+  ],
+  "lines": 1010,
+  "resrefs_not_in_gemrb": [
+   "MAGIC01",
+   "SE10FIZZ",
+   "SPPR106",
+   "SPPR302",
+   "SPWI102",
+   "SPWI111",
+   "SPWI119",
+   "SPWI209",
+   "SPWI304",
+   "SPWI312",
+   "SPWI314",
+   "TRAVEL"
+  ]
+ },
+ "CGameEffectAddInnateAbility": {
+  "ops": [
+   171
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 11,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectAttackNo": {
+  "ops": [
+   1
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 112,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectBerserk": {
+  "ops": [
+   3
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 32,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectBlindness": {
+  "ops": [
+   74
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 74,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectBlur": {
+  "ops": [
+   65
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 37,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectCHR": {
+  "ops": [
+   6
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 207,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectCON": {
+  "ops": [
+   10
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 177,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectCastSpellPoint": {
+  "ops": [
+   148
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 188,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectCastSpell": {
+  "ops": [
+   146
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 174,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectCastingFailure": {
+  "ops": [
+   60
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 43,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectChangeGeneralState": {
+  "ops": [
+   186
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 38,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectColorGlowPulse": {
+  "ops": [
+   9
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 293,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectColorGlowSolid": {
+  "ops": [
+   8
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 254,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectConfusion": {
+  "ops": [
+   128
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 93,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectCureBlindness": {
+  "ops": [
+   75
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 15,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectCureDisease": {
+  "ops": [
+   79
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 45,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectCurePoison": {
+  "ops": [
+   11
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 50,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectDEX": {
+  "ops": [
+   15
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 202,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectDamageMod": {
+  "ops": [
+   73
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 43,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectDamage": {
+  "ops": [
+   12
+  ],
+  "resrefs": [
+   "ADDER06",
+   "MAGIC02",
+   "NEG",
+   "PAINM05",
+   "S013SMSH",
+   "S034DMG2",
+   "SPIN823",
+   "SPWI101",
+   "SPWI104",
+   "SPWI305",
+   "SPWI803"
+  ],
+  "planes": [
+   "Baator",
+   "Carceri",
+   "NegativeMaterialPlane"
+  ],
+  "spellstates": [
+   36,
+   182
+  ],
+  "subfx": [
+   39
+  ],
+  "pst": [
+   "CPlanescape::EffectDamageDecodeHitSound",
+   "CPlanescape::IsInBaator",
+   "CPlanescape::IsInCarceri",
+   "CPlanescape::IsInNegativeMaterialPlane",
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 2339,
+  "resrefs_not_in_gemrb": [
+   "ADDER06",
+   "PAINM05",
+   "S013SMSH",
+   "S034DMG2",
+   "SPIN823",
+   "SPWI101",
+   "SPWI104",
+   "SPWI803"
+  ]
+ },
+ "CGameEffectDeath": {
+  "ops": [
+   13
+  ],
+  "resrefs": [
+   "AR1200",
+   "AR1201",
+   "AR1203",
+   "AR1204"
+  ],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "CPlanescape::PSGetCharacterIDFromScriptName",
+   "CPlanescape::SetGameFreeze",
+   "CPlanescape::SetNamelessExploreRange",
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 564,
+  "resrefs_not_in_gemrb": [
+   "AR1200",
+   "AR1201",
+   "AR1203",
+   "AR1204"
+  ]
+ },
+ "CGameEffectDetectEvil": {
+  "ops": [
+   210
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 51,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectFatigue": {
+  "ops": [
+   93
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 95,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectFistOfIron": {
+  "ops": [
+   208
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 7,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectFlashScreen": {
+  "ops": [
+   194
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 14,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectFreezeGame": {
+  "ops": [
+   207
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "CPlanescape::SetGameFreeze",
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 79,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectGenericAnimationEffect": {
+  "ops": [
+   188,
+   189,
+   191
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 282,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectGold": {
+  "ops": [
+   105
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 112,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectHaste": {
+  "ops": [
+   16
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 74,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectHealTransfer": {
+  "ops": [
+   192
+  ],
+  "resrefs": [
+   "MAGIC02",
+   "SPIN104",
+   "SPWI204",
+   "SPWI309"
+  ],
+  "planes": [
+   "Baator",
+   "Carceri",
+   "NegativeMaterialPlane"
+  ],
+  "spellstates": [],
+  "subfx": [
+   18
+  ],
+  "pst": [
+   "CPlanescape::IsInBaator",
+   "CPlanescape::IsInCarceri",
+   "CPlanescape::IsInNegativeMaterialPlane",
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 675,
+  "resrefs_not_in_gemrb": [
+   "SPIN104",
+   "SPWI204",
+   "SPWI309"
+  ]
+ },
+ "CGameEffectHeal": {
+  "ops": [
+   17
+  ],
+  "resrefs": [
+   "SPIN822"
+  ],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 271,
+  "resrefs_not_in_gemrb": [
+   "SPIN822"
+  ]
+ },
+ "CGameEffectHitMod": {
+  "ops": [
+   54
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 28,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectHitPoints": {
+  "ops": [
+   18
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 249,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectHoldCreature": {
+  "ops": [
+   109
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 156,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectINT": {
+  "ops": [
+   19
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 177,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectImmuneToWeapon": {
+  "ops": [
+   120
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 69,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectImmunityToEffect": {
+  "ops": [
+   101
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 97,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectImmunityToProjectile": {
+  "ops": [
+   83
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 6,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectImmunityToSpellLevel": {
+  "ops": [
+   102
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 10,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectInciteRunningAttack": {
+  "ops": [
+   82
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 94,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectIntoxication": {
+  "ops": [
+   94
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 95,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectInvisible": {
+  "ops": [
+   20
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 78,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectJumbleCurse": {
+  "ops": [
+   211
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 36,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectKnock": {
+  "ops": [
+   125
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 6,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectLearnSpell": {
+  "ops": [
+   147
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 35,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectLore": {
+  "ops": [
+   21
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 95,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectLuck": {
+  "ops": [
+   22
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 104,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectLuminocityAnimationEffect": {
+  "ops": [
+   187
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 196,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectMirrorImageRun": {
+  "ops": [
+   159
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 31,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectMoveViewport": {
+  "ops": [
+   205
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 95,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectNon_CumulativeAid": {
+  "ops": [
+   129
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 50,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectNon_CumulativeBless": {
+  "ops": [
+   130
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 71,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectNon_CumulativeCurse": {
+  "ops": [
+   203
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [
+   127
+  ],
+  "subfx": [],
+  "pst": [],
+  "lines": 19,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectNon_CumulativeEmbalming": {
+  "ops": [
+   206
+  ],
+  "resrefs": [
+   "MAGIC02",
+   "SPWI103",
+   "SPWI205"
+  ],
+  "planes": [
+   "Baator",
+   "Carceri",
+   "NegativeMaterialPlane"
+  ],
+  "spellstates": [
+   135
+  ],
+  "subfx": [],
+  "pst": [
+   "CPlanescape::IsInBaator",
+   "CPlanescape::IsInCarceri",
+   "CPlanescape::IsInNegativeMaterialPlane"
+  ],
+  "lines": 236,
+  "resrefs_not_in_gemrb": [
+   "SPWI103",
+   "SPWI205"
+  ]
+ },
+ "CGameEffectPanic": {
+  "ops": [
+   24
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 25,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectPetrification": {
+  "ops": [
+   134
+  ],
+  "resrefs": [
+   "LOCALS",
+   "MULTIJ"
+  ],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 358,
+  "resrefs_not_in_gemrb": [
+   "MULTIJ"
+  ]
+ },
+ "CGameEffectPlaySound": {
+  "ops": [
+   174
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 7,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectPoison": {
+  "ops": [
+   25
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 176,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectPrayer": {
+  "ops": [
+   204
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 28,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectRegeneration": {
+  "ops": [
+   98
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 171,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectRemoveCurse": {
+  "ops": [
+   26
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 230,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectRemoveInnateAbility": {
+  "ops": [
+   172
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 7,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistAcid": {
+  "ops": [
+   27
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 70,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistCold": {
+  "ops": [
+   28
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 70,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistCrushing": {
+  "ops": [
+   87
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 80,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistElectricity": {
+  "ops": [
+   29
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 70,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistFire": {
+  "ops": [
+   30
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 70,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistMagicCold": {
+  "ops": [
+   85
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 70,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistMagicFire": {
+  "ops": [
+   84
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 70,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistMissile": {
+  "ops": [
+   89
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 80,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistPiercing": {
+  "ops": [
+   88
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 80,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistSlashing": {
+  "ops": [
+   86
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 80,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistanceToMagic": {
+  "ops": [
+   166
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 16,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResistanceToPoison": {
+  "ops": [
+   173
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 11,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectResurrect": {
+  "ops": [
+   32
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "CPlanescape::PSGetCharacterIDFromScriptName",
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 208,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectRetreatFrom": {
+  "ops": [
+   110
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 465,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSTRExtra": {
+  "ops": [
+   97
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 95,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSTR": {
+  "ops": [
+   44
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 238,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSaveVsBreath": {
+  "ops": [
+   36
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 101,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSaveVsDeath": {
+  "ops": [
+   33
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 101,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSaveVsPoly": {
+  "ops": [
+   35
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 100,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSaveVsSpell": {
+  "ops": [
+   37
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 101,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSaveVsWands": {
+  "ops": [
+   34
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 101,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectScreenShake": {
+  "ops": [
+   193
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 87,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSetSequence": {
+  "ops": [
+   138
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 10,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSilence": {
+  "ops": [
+   38
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 11,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSkillLockPicking": {
+  "ops": [
+   90
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 100,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSkillPickPocket": {
+  "ops": [
+   92
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 102,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSkillStealth": {
+  "ops": [
+   59
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 94,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSkillTraps": {
+  "ops": [
+   91
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 96,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSleep": {
+  "ops": [
+   39
+  ],
+  "resrefs": [
+   "I001ZZZZ"
+  ],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 123,
+  "resrefs_not_in_gemrb": [
+   "I001ZZZZ"
+  ]
+ },
+ "CGameEffectSoulExodus": {
+  "ops": [
+   209
+  ],
+  "resrefs": [
+   "MAGIC01",
+   "SE10FIZZ"
+  ],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 68,
+  "resrefs_not_in_gemrb": [
+   "MAGIC01",
+   "SE10FIZZ"
+  ]
+ },
+ "CGameEffectSparkle": {
+  "ops": [
+   41
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 210,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSpecial": {
+  "ops": [
+   196
+  ],
+  "resrefs": [
+   "S019ACID",
+   "S031DELC",
+   "SP62RDED",
+   "SPWI201"
+  ],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 192,
+  "resrefs_not_in_gemrb": [
+   "S019ACID",
+   "S031DELC",
+   "SP62RDED",
+   "SPWI201"
+  ]
+ },
+ "CGameEffectSpellMemorizationCleric": {
+  "ops": [
+   62
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 127,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectSpellMemorizationMage": {
+  "ops": [
+   42
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 156,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectStun": {
+  "ops": [
+   45,
+   128
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 22,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectThac0": {
+  "ops": [
+   54
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [
+   "ENGINE_MODE == 3"
+  ],
+  "lines": 89,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectTintScreen": {
+  "ops": [
+   195
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 103,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectTranslucent": {
+  "ops": [
+   66
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 39,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectWIS": {
+  "ops": [
+   49
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 203,
+  "resrefs_not_in_gemrb": []
+ },
+ "CGameEffectXP": {
+  "ops": [
+   104
+  ],
+  "resrefs": [],
+  "planes": [],
+  "spellstates": [],
+  "subfx": [],
+  "pst": [],
+  "lines": 106,
+  "resrefs_not_in_gemrb": []
+ }
+}

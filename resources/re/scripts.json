@@ -1,0 +1,3743 @@
+{
+ "actions": [
+  {
+   "id": 0,
+   "name": "NoAction",
+   "sig": "()",
+   "uses": 4,
+   "status": "noop(NoAction)",
+   "gemrb": "GameScript::NoAction",
+   "where": [
+    "0209BONE.bcs",
+    "0402MKGS.bcs",
+    "SPMISC01.bcs"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Attack",
+   "sig": "(O:Target*)",
+   "uses": 2812,
+   "status": "",
+   "gemrb": "GameScript::Attack",
+   "where": [
+    "0000BLEM.bcs",
+    "0000BXD1.bcs",
+    "0000DEF.bcs",
+    "0000GH.bcs",
+    "0000GSPT.bcs",
+    "0000MDRN.bcs"
+   ]
+  },
+  {
+   "id": 7,
+   "name": "CreateCreature",
+   "sig": "(S:NewObject*,P:Location*)",
+   "uses": 2385,
+   "status": "",
+   "gemrb": "GameScript::CreateCreature",
+   "where": [
+    "0000MANA.bcs",
+    "0110CUT1.bcs",
+    "0400ABSH.bcs",
+    "0400CUT2.bcs",
+    "0400RC.bcs",
+    "0400RC2.bcs"
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Dialogue",
+   "sig": "(O:Object*)",
+   "uses": 138,
+   "status": "",
+   "gemrb": "GameScript::Dialogue",
+   "where": [
+    "0000DIAL.bcs",
+    "0000GSPT.bcs",
+    "0000HSRG.bcs",
+    "0000LIPS.bcs",
+    "0101PRT1.bcs",
+    "0102MEBB.bcs"
+   ]
+  },
+  {
+   "id": 10,
+   "name": "Enemy",
+   "sig": "()",
+   "uses": 3165,
+   "status": "",
+   "gemrb": "GameScript::Enemy",
+   "where": [
+    "0000BLEM.bcs",
+    "0000BXD1.bcs",
+    "0000BXD2.bcs",
+    "0000DEF.bcs",
+    "0000GH.bcs",
+    "0000GSPT.bcs"
+   ]
+  },
+  {
+   "id": 15,
+   "name": "GiveItem",
+   "sig": "(S:Object*,O:Target*)",
+   "uses": 78,
+   "status": "",
+   "gemrb": "GameScript::GiveItem",
+   "where": [
+    "DAOLA.dlg",
+    "DBURGHER.dlg",
+    "DCARETKR.dlg",
+    "DCRSSMTH.dlg",
+    "DDILLON.dlg",
+    "DEIVENE.dlg"
+   ]
+  },
+  {
+   "id": 17,
+   "name": "Help",
+   "sig": "()",
+   "uses": 1843,
+   "status": "",
+   "gemrb": "GameScript::Help",
+   "where": [
+    "0000GH.bcs",
+    "0000HGRD.bcs",
+    "0000HSRG.bcs",
+    "0000TALK.bcs",
+    "0000WAND.bcs",
+    "0100DAB1.bcs"
+   ]
+  },
+  {
+   "id": 19,
+   "name": "JoinPartyEx",
+   "sig": "(I:JoinGroup*Boolean)",
+   "uses": 136,
+   "status": "MISSING",
+   "gemrb": "",
+   "where": [
+    "0000JOIN.bcs",
+    "0110CUT4.bcs",
+    "0500MRTE.bcs",
+    "1001CT3B.bcs",
+    "AR0100.bcs",
+    "AR0101.bcs"
+   ]
+  },
+  {
+   "id": 21,
+   "name": "LeaveParty",
+   "sig": "()",
+   "uses": 36,
+   "status": "",
+   "gemrb": "GameScript::LeaveParty",
+   "where": [
+    "1001CUT1.bcs",
+    "1001CUT2.bcs",
+    "BALDUR.bcs",
+    "BANNAH.dlg",
+    "DANNAH.dlg",
+    "DDAKKON.dlg"
+   ]
+  },
+  {
+   "id": 22,
+   "name": "MoveToObjectEx",
+   "sig": "(O:Target*,I:Timeout*)",
+   "uses": 113,
+   "status": "MISSING",
+   "gemrb": "",
+   "where": [
+    "0000BXD2.bcs",
+    "0000PLIM.bcs",
+    "0100THV1.bcs",
+    "0101MF.bcs",
+    "0109COLL.bcs",
+    "0109CPLF.bcs"
+   ]
+  },
+  {
+   "id": 23,
+   "name": "MoveToPoint",
+   "sig": "(P:Point*)",
+   "uses": 3987,
+   "status": "",
+   "gemrb": "GameScript::MoveToPoint",
+   "where": [
+    "0100BA1A.bcs",
+    "0100BA1B.bcs",
+    "0100BA2A.bcs",
+    "0100BA2B.bcs",
+    "0100CL2A.bcs",
+    "0100CL2B.bcs"
+   ]
+  },
+  {
+   "id": 26,
+   "name": "PlaySound",
+   "sig": "(S:Sound*)",
+   "uses": 56,
+   "status": "",
+   "gemrb": "GameScript::PlaySound",
+   "where": [
+    "0200ANNA.bcs",
+    "0404FELL.bcs",
+    "0502GEAR.bcs",
+    "0601MERT.bcs",
+    "0601MIT1.bcs",
+    "0601MIT2.bcs"
+   ]
+  },
+  {
+   "id": 29,
+   "name": "RunAwayFromEx",
+   "sig": "(O:Creature*,I:Time*AITime,I:NoAttacks*Boolean)",
+   "uses": 874,
+   "status": "",
+   "gemrb": "GameScript::RunAwayFrom",
+   "where": [
+    "0100CL1.bcs",
+    "0100CL2A.bcs",
+    "0100CL2B.bcs",
+    "0100CL3.bcs",
+    "0100CL4.bcs",
+    "0100DAB1.bcs"
+   ]
+  },
+  {
+   "id": 30,
+   "name": "GlobalSet",
+   "sig": "(S:Name*,S:Area*,I:Value*)",
+   "uses": 2763,
+   "status": "",
+   "gemrb": "GameScript::SetGlobal",
+   "where": [
+    "0000BXD1.bcs",
+    "0000BXD2.bcs",
+    "0001DEF.bcs",
+    "0100DAB1.bcs",
+    "0100DAB2.bcs",
+    "0100DAB3.bcs"
+   ]
+  },
+  {
+   "id": 31,
+   "name": "Spell",
+   "sig": "(O:Target*,I:Spell*Spell)",
+   "uses": 308,
+   "status": "",
+   "gemrb": "GameScript::Spell",
+   "where": [
+    "0209NECR.bcs",
+    "0306SHIL.bcs",
+    "0403MAGE.bcs",
+    "0600ELOB.bcs",
+    "0600SALA.bcs",
+    "0601JUMB.bcs"
+   ]
+  },
+  {
+   "id": 34,
+   "name": "UseItem",
+   "sig": "(S:Object*,O:Target*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::UseItem",
+   "where": [
+    "DMARISSA.dlg"
+   ]
+  },
+  {
+   "id": 36,
+   "name": "Continue",
+   "sig": "()",
+   "uses": 2112,
+   "status": "",
+   "gemrb": "GameScript::Continue",
+   "where": [
+    "0000DEF.bcs",
+    "0000DLIM.bcs",
+    "0000MDRN.bcs",
+    "0000NAME.bcs",
+    "0000TALK.bcs",
+    "0100CL1.bcs"
+   ]
+  },
+  {
+   "id": 39,
+   "name": "Recoil",
+   "sig": "()",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::Recoil",
+   "where": [
+    "DTEST.dlg"
+   ]
+  },
+  {
+   "id": 40,
+   "name": "PlayDead",
+   "sig": "(I:Time*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::PlayDead",
+   "where": [
+    "0301DEAD.bcs"
+   ]
+  },
+  {
+   "id": 48,
+   "name": "JumpToPoint",
+   "sig": "(P:Target*)",
+   "uses": 78,
+   "status": "",
+   "gemrb": "GameScript::JumpToPoint",
+   "where": [
+    "0110CUT2.bcs",
+    "0110PHAR.bcs",
+    "0200DF5.bcs",
+    "0200DM2.bcs",
+    "0200DM3.bcs",
+    "0200MID.bcs"
+   ]
+  },
+  {
+   "id": 49,
+   "name": "MoveViewPoint",
+   "sig": "(P:Target*,I:ScrollSpeed*Scroll)",
+   "uses": 140,
+   "status": "",
+   "gemrb": "GameScript::MoveViewPoint",
+   "where": [
+    "0100CUT1.bcs",
+    "0100CUT2.bcs",
+    "0110CUT2.bcs",
+    "0201CUT1.bcs",
+    "0202TRG1.bcs",
+    "0202TRG2.bcs"
+   ]
+  },
+  {
+   "id": 50,
+   "name": "MoveViewObject",
+   "sig": "(O:Target*,I:ScrollSpeed*Scroll)",
+   "uses": 53,
+   "status": "",
+   "gemrb": "GameScript::MoveViewObject",
+   "where": [
+    "0110CUT1.bcs",
+    "0201CUT1.bcs",
+    "0202CUT4.bcs",
+    "0502CUT2.bcs",
+    "0605CUT1.bcs",
+    "0610CT1E.bcs"
+   ]
+  },
+  {
+   "id": 60,
+   "name": "ChangeAIScript",
+   "sig": "(S:ScriptFile*,I:Level*Scrlev)",
+   "uses": 887,
+   "status": "",
+   "gemrb": "GameScript::ChangeAIScript",
+   "where": [
+    "0000CRAT.bcs",
+    "0000DIAL.bcs",
+    "0000GFIG.bcs",
+    "0000GHUL.bcs",
+    "0000HPAT.bcs",
+    "0000JOIN.bcs"
+   ]
+  },
+  {
+   "id": 61,
+   "name": "StartTimer",
+   "sig": "(I:ID*,I:Time*)",
+   "uses": 345,
+   "status": "",
+   "gemrb": "GameScript::StartTimer",
+   "where": [
+    "0000SUMN.bcs",
+    "0003FIDG.bcs",
+    "0100THG1.bcs",
+    "0100THG2.bcs",
+    "0100THG3.bcs",
+    "0100THG4.bcs"
+   ]
+  },
+  {
+   "id": 62,
+   "name": "SendTrigger",
+   "sig": "(O:Target*,I:TriggerNum*)",
+   "uses": 86,
+   "status": "",
+   "gemrb": "GameScript::SendTrigger",
+   "where": [
+    "0605DOL1.bcs",
+    "0605DOL2.bcs",
+    "0605DOL3.bcs",
+    "0605ECC1.bcs",
+    "0605ECC2.bcs",
+    "0605FFG.bcs"
+   ]
+  },
+  {
+   "id": 63,
+   "name": "Wait",
+   "sig": "(I:Time*)",
+   "uses": 3531,
+   "status": "",
+   "gemrb": "GameScript::Wait",
+   "where": [
+    "0000BLEM.bcs",
+    "0000MDRN.bcs",
+    "0000SUMN.bcs",
+    "0100BA1A.bcs",
+    "0100BA1B.bcs",
+    "0100CL3.bcs"
+   ]
+  },
+  {
+   "id": 65,
+   "name": "Explore",
+   "sig": "()",
+   "uses": 10,
+   "status": "",
+   "gemrb": "GameScript::Explore",
+   "where": [
+    "1601SHOW.bcs",
+    "AR1202.bcs",
+    "AR1203.bcs",
+    "AR1204.bcs",
+    "AR1300.bcs",
+    "DTPLANS.dlg"
+   ]
+  },
+  {
+   "id": 82,
+   "name": "CreateItem",
+   "sig": "(S:ResRef*,I:Usage1*,I:Usage2*,I:Usage3*)",
+   "uses": 41,
+   "status": "",
+   "gemrb": "GameScript::CreateItem",
+   "where": [
+    "0101MF.bcs",
+    "0400RC.bcs",
+    "0502GFCL.bcs",
+    "0508MANT.bcs",
+    "0600THGB.bcs",
+    "0605KES1.bcs"
+   ]
+  },
+  {
+   "id": 83,
+   "name": "SmallWait",
+   "sig": "(I:Time*)",
+   "uses": 54,
+   "status": "",
+   "gemrb": "GameScript::SmallWait",
+   "where": [
+    "0108BUM6.bcs",
+    "0405CS10.bcs",
+    "0405CUT5.bcs",
+    "0405CUT6.bcs",
+    "0601LECT.bcs",
+    "0610CT3L.bcs"
+   ]
+  },
+  {
+   "id": 84,
+   "name": "Face",
+   "sig": "(I:Direction*)",
+   "uses": 3125,
+   "status": "",
+   "gemrb": "GameScript::Face",
+   "where": [
+    "0000BLEM.bcs",
+    "0000BXD2.bcs",
+    "0000DLIM.bcs",
+    "0100BA1A.bcs",
+    "0100BA1B.bcs",
+    "0100BA2A.bcs"
+   ]
+  },
+  {
+   "id": 85,
+   "name": "RandomWalk",
+   "sig": "()",
+   "uses": 69,
+   "status": "",
+   "gemrb": "GameScript::RandomWalk",
+   "where": [
+    "0000PLIM.bcs",
+    "0000WAND.bcs",
+    "0200BAEN.bcs",
+    "0201MZ3.bcs",
+    "0205MADE.bcs",
+    "0205MADP.bcs"
+   ]
+  },
+  {
+   "id": 86,
+   "name": "SetInterrupt",
+   "sig": "(I:State*Boolean)",
+   "uses": 6,
+   "status": "",
+   "gemrb": "GameScript::SetInterrupt",
+   "where": [
+    "0700CUT3.bcs",
+    "1201CSA4.bcs",
+    "1201CSG9.bcs"
+   ]
+  },
+  {
+   "id": 87,
+   "name": "ProtectObject",
+   "sig": "(O:Target*,I:Range*)",
+   "uses": 7,
+   "status": "",
+   "gemrb": "GameScript::ProtectObject",
+   "where": [
+    "0000MDRN.bcs",
+    "0000SUMN.bcs",
+    "0600TOD1.bcs",
+    "0600TOD2.bcs",
+    "0610TRGF.bcs",
+    "1400VPF1.bcs"
+   ]
+  },
+  {
+   "id": 95,
+   "name": "SpellPoint",
+   "sig": "(P:Target*,I:Spell*Spell)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::SpellPoint",
+   "where": [
+    "0209NECR.bcs"
+   ]
+  },
+  {
+   "id": 102,
+   "name": "MoraleSet",
+   "sig": "(O:Target*,I:Morale*)",
+   "uses": 8,
+   "status": "",
+   "gemrb": "GameScript::MoraleSet",
+   "where": [
+    "1601RAT.bcs",
+    "DDAKKON.dlg",
+    "DGITH.dlg"
+   ]
+  },
+  {
+   "id": 103,
+   "name": "MoraleInc",
+   "sig": "(O:Target*,I:Morale*)",
+   "uses": 73,
+   "status": "",
+   "gemrb": "GameScript::MoraleInc",
+   "where": [
+    "DANAZI.dlg",
+    "DANNAH.dlg",
+    "DCWCAFEF.dlg",
+    "DCWRUSHF.dlg",
+    "DDAKKON.dlg",
+    "DGRACE.dlg"
+   ]
+  },
+  {
+   "id": 104,
+   "name": "MoraleDec",
+   "sig": "(O:Target*,I:Morale*)",
+   "uses": 189,
+   "status": "",
+   "gemrb": "GameScript::MoraleDec",
+   "where": [
+    "DANAZI.dlg",
+    "DANNAH.dlg",
+    "DCWCAFEF.dlg",
+    "DCWRUSHF.dlg",
+    "DDAKKON.dlg",
+    "DDRUNK.dlg"
+   ]
+  },
+  {
+   "id": 108,
+   "name": "EscapeArea",
+   "sig": "()",
+   "uses": 208,
+   "status": "",
+   "gemrb": "GameScript::EscapeArea",
+   "where": [
+    "0000GH.bcs",
+    "0000TALK.bcs",
+    "0000WAND.bcs",
+    "0108TESC.bcs",
+    "0200TT1.bcs",
+    "0200TT2.bcs"
+   ]
+  },
+  {
+   "id": 109,
+   "name": "IncrementGlobal",
+   "sig": "(S:Name*,S:Area*,I:Value*)",
+   "uses": 1098,
+   "status": "",
+   "gemrb": "GameScript::IncrementGlobal",
+   "where": [
+    "0000MANA.bcs",
+    "0000NFRD.bcs",
+    "0100DAB1.bcs",
+    "0100DAB2.bcs",
+    "0100DAB3.bcs",
+    "0100DAB4.bcs"
+   ]
+  },
+  {
+   "id": 110,
+   "name": "LeaveAreaLUA",
+   "sig": "(S:Area*,P:Point*,I:Face*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::LeaveAreaLUA",
+   "where": [
+    "1700TELE.bcs"
+   ]
+  },
+  {
+   "id": 111,
+   "name": "DestroySelf",
+   "sig": "()",
+   "uses": 245,
+   "status": "",
+   "gemrb": "GameScript::DestroySelf",
+   "where": [
+    "0000GSPT.bcs",
+    "0000MDRN.bcs",
+    "0000SUMN.bcs",
+    "0100CUT1.bcs",
+    "0100CUT2.bcs",
+    "0100MAR.bcs"
+   ]
+  },
+  {
+   "id": 113,
+   "name": "ForceSpell",
+   "sig": "(O:Target*,I:Spell*Spell)",
+   "uses": 35,
+   "status": "",
+   "gemrb": "GameScript::ForceSpell",
+   "where": [
+    "0108TRP1.bcs",
+    "0108TRP2.bcs",
+    "0108TRP3.bcs",
+    "0208TRAP.bcs",
+    "0403BOX.bcs",
+    "0403MAGE.bcs"
+   ]
+  },
+  {
+   "id": 115,
+   "name": "SetGlobalTimer",
+   "sig": "(S:Name*,S:Area*,I:Time*GTimes)",
+   "uses": 78,
+   "status": "",
+   "gemrb": "GameScript::SetGlobalTimer",
+   "where": [
+    "0500BEDI.bcs",
+    "0500GGRD.bcs",
+    "0502GENA.bcs",
+    "0502GFCL.bcs",
+    "0502GUAA.bcs",
+    "0503BEDI.bcs"
+   ]
+  },
+  {
+   "id": 116,
+   "name": "TakePartyItem",
+   "sig": "(S:Item*)",
+   "uses": 137,
+   "status": "",
+   "gemrb": "GameScript::TakePartyItem",
+   "where": [
+    "BALDUR.bcs",
+    "DAETHEL.dlg",
+    "DBARKING.dlg",
+    "DBARKIS.dlg",
+    "DCRSSMTH.dlg",
+    "DEIVENE.dlg"
+   ]
+  },
+  {
+   "id": 117,
+   "name": "TakePartyGold",
+   "sig": "(I:Amount*)",
+   "uses": 363,
+   "status": "",
+   "gemrb": "GameScript::TakePartyGold",
+   "where": [
+    "ATHUG.dlg",
+    "D300MER1.dlg",
+    "D300MER5.dlg",
+    "D300MER6.dlg",
+    "D300MER8.dlg",
+    "DANNAH.dlg"
+   ]
+  },
+  {
+   "id": 118,
+   "name": "GivePartyGold",
+   "sig": "(I:Amount*)",
+   "uses": 180,
+   "status": "",
+   "gemrb": "GameScript::GivePartyGold",
+   "where": [
+    "DAMARYS.dlg",
+    "DANIZIUS.dlg",
+    "DANNAH.dlg",
+    "DAWAIT.dlg",
+    "DBAEN.dlg",
+    "DCARVER.dlg"
+   ]
+  },
+  {
+   "id": 119,
+   "name": "DropInventory",
+   "sig": "()",
+   "uses": 33,
+   "status": "",
+   "gemrb": "GameScript::DropInventory",
+   "where": [
+    "0101MF.bcs",
+    "0400RC.bcs",
+    "0502GFCL.bcs",
+    "0508MANT.bcs",
+    "0600THGB.bcs",
+    "0605KES1.bcs"
+   ]
+  },
+  {
+   "id": 120,
+   "name": "StartCutScene",
+   "sig": "(S:CutScene*)",
+   "uses": 433,
+   "status": "",
+   "gemrb": "GameScript::StartCutScene",
+   "where": [
+    "0110CUT1.bcs",
+    "0110CUT2.bcs",
+    "0202TRG1.bcs",
+    "0202TRG2.bcs",
+    "0400CUT2.bcs",
+    "0405CS10.bcs"
+   ]
+  },
+  {
+   "id": 121,
+   "name": "StartCutSceneMode",
+   "sig": "()",
+   "uses": 265,
+   "status": "",
+   "gemrb": "GameScript::StartCutSceneMode",
+   "where": [
+    "0202TRG1.bcs",
+    "0202TRG2.bcs",
+    "0610ICT1.bcs",
+    "0610ICT2.bcs",
+    "0610ICT3.bcs",
+    "0610RAVL.bcs"
+   ]
+  },
+  {
+   "id": 122,
+   "name": "EndCutSceneMode",
+   "sig": "()",
+   "uses": 133,
+   "status": "",
+   "gemrb": "GameScript::EndCutSceneMode",
+   "where": [
+    "0100CUT1.bcs",
+    "0100CUT2.bcs",
+    "0101CUT1.bcs",
+    "0110CUT3.bcs",
+    "0201CUT1.bcs",
+    "0202CS2.bcs"
+   ]
+  },
+  {
+   "id": 123,
+   "name": "ClearAllActions",
+   "sig": "()",
+   "uses": 18,
+   "status": "",
+   "gemrb": "GameScript::ClearAllActions",
+   "where": [
+    "1101TRG2.bcs",
+    "1101TRIG.bcs",
+    "1201CSA4.bcs",
+    "1201CSG9.bcs",
+    "1201CSN8.bcs",
+    "1203CD11.bcs"
+   ]
+  },
+  {
+   "id": 125,
+   "name": "DeactivateEx",
+   "sig": "(O:Object*,I:RenderMode*Boolean)",
+   "uses": 82,
+   "status": "MISSING",
+   "gemrb": "",
+   "where": [
+    "0200DF5.bcs",
+    "0200DM2.bcs",
+    "0200DM3.bcs",
+    "0201DEIO.bcs",
+    "0610CUT1.bcs",
+    "0610CUT2.bcs"
+   ]
+  },
+  {
+   "id": 126,
+   "name": "Activate",
+   "sig": "(O:Object*)",
+   "uses": 61,
+   "status": "",
+   "gemrb": "GameScript::Activate",
+   "where": [
+    "0200DF5.bcs",
+    "0200DM2.bcs",
+    "0200DM3.bcs",
+    "0201BIER.bcs",
+    "0500MRTE.bcs",
+    "0610CT1B.bcs"
+   ]
+  },
+  {
+   "id": 127,
+   "name": "CutSceneId",
+   "sig": "(O:Object*)",
+   "uses": 715,
+   "status": "",
+   "gemrb": "GameScript::CutSceneID",
+   "where": [
+    "0100CUT1.bcs",
+    "0100CUT2.bcs",
+    "0101CUT1.bcs",
+    "0110CUT1.bcs",
+    "0110CUT2.bcs",
+    "0110CUT3.bcs"
+   ]
+  },
+  {
+   "id": 131,
+   "name": "Kill",
+   "sig": "(O:Object*)",
+   "uses": 155,
+   "status": "",
+   "gemrb": "GameScript::Kill",
+   "where": [
+    "0000DLIM.bcs",
+    "0000KILL.bcs",
+    "0110PHAR.bcs",
+    "0208ATAK.bcs",
+    "0209SKEL.bcs",
+    "0209SKLD.bcs"
+   ]
+  },
+  {
+   "id": 132,
+   "name": "VerbalConstant",
+   "sig": "(O:Object*,I:Constant*soundOff)",
+   "uses": 23,
+   "status": "",
+   "gemrb": "GameScript::VerbalConstant",
+   "where": [
+    "0101PRT1.bcs",
+    "0101PRT2.bcs",
+    "0101VPRT.bcs",
+    "0200PRT1.bcs",
+    "0201PORT.bcs",
+    "0202FORT.bcs"
+   ]
+  },
+  {
+   "id": 133,
+   "name": "ClearActions",
+   "sig": "()",
+   "uses": 13,
+   "status": "",
+   "gemrb": "GameScript::ClearActions",
+   "where": [
+    "0301DAAT.bcs",
+    "0301RAAT.bcs",
+    "0401DABU.bcs",
+    "0402MKGS.bcs",
+    "0404FELL.bcs",
+    "1201SHAD.bcs"
+   ]
+  },
+  {
+   "id": 137,
+   "name": "StartDialog",
+   "sig": "(S:DialogFile*,O:Target*)",
+   "uses": 8,
+   "status": "",
+   "gemrb": "GameScript::StartDialogue",
+   "where": [
+    "3006CUT1.bcs",
+    "AR0100.bcs",
+    "AR0200.bcs",
+    "AR0300.bcs",
+    "AR0400.bcs",
+    "AR0600.bcs"
+   ]
+  },
+  {
+   "id": 138,
+   "name": "SetDialog",
+   "sig": "(S:DialogFile*)",
+   "uses": 23,
+   "status": "",
+   "gemrb": "GameScript::SetDialogue",
+   "where": [
+    "0201DMOR.bcs",
+    "0202CS2.bcs",
+    "0202CUT5.bcs",
+    "0202DMOR.bcs",
+    "0202INTR.bcs",
+    "0203DMOR.bcs"
+   ]
+  },
+  {
+   "id": 140,
+   "name": "GiveItemCreate",
+   "sig": "(S:ResRef*,O:Object*,I:Usage1*,I:Usage2*,I:Usage3*)",
+   "uses": 483,
+   "status": "",
+   "gemrb": "GameScript::CreateItem",
+   "where": [
+    "1500GULA.bcs",
+    "AR0500.bcs",
+    "D0202P.dlg",
+    "D300MER4.dlg",
+    "D300MER5.dlg",
+    "D300MER8.dlg"
+   ]
+  },
+  {
+   "id": 143,
+   "name": "OpenDoor",
+   "sig": "(O:Object*)",
+   "uses": 105,
+   "status": "",
+   "gemrb": "GameScript::OpenDoor",
+   "where": [
+    "0401DABU.bcs",
+    "0401SYBI.bcs",
+    "0503ROSA.bcs",
+    "0600DILG.bcs",
+    "0601JUMB.bcs",
+    "0601MONT.bcs"
+   ]
+  },
+  {
+   "id": 144,
+   "name": "CloseDoor",
+   "sig": "(O:Object*)",
+   "uses": 43,
+   "status": "",
+   "gemrb": "GameScript::CloseDoor",
+   "where": [
+    "0502DCUT.bcs",
+    "0503ROSA.bcs",
+    "0600DILG.bcs",
+    "0601JUMB.bcs",
+    "0601MONT.bcs",
+    "0605DOL1.bcs"
+   ]
+  },
+  {
+   "id": 146,
+   "name": "PolymorphEx",
+   "sig": "(I:AnimationType*Animate,I:RangeModes*)",
+   "uses": 23,
+   "status": "",
+   "gemrb": "GameScript::Polymorph",
+   "where": [
+    "0402ILQX.bcs",
+    "0601QSAI.bcs",
+    "0610CUT5.bcs",
+    "0610CUT6.bcs",
+    "0610CUT7.bcs",
+    "0610CUT8.bcs"
+   ]
+  },
+  {
+   "id": 149,
+   "name": "EquipMostDamagingMelee",
+   "sig": "()",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::EquipMostDamagingMelee",
+   "where": [
+    "SPIN101.bcs"
+   ]
+  },
+  {
+   "id": 150,
+   "name": "StartStore",
+   "sig": "(S:Store*,O:Target*)",
+   "uses": 192,
+   "status": "",
+   "gemrb": "GameScript::StartStore",
+   "where": [
+    "D300MER1.dlg",
+    "D300MER3.dlg",
+    "DAALEK.dlg",
+    "DANARCH2.dlg",
+    "DANNAH.dlg",
+    "DANZE.dlg"
+   ]
+  },
+  {
+   "id": 151,
+   "name": "DisplayString",
+   "sig": "(O:Object*,I:StrRef*)",
+   "uses": 3,
+   "status": "",
+   "gemrb": "GameScript::DisplayString",
+   "where": [
+    "DDEIONS.dlg",
+    "DSPLINT.dlg",
+    "DSTALEMA.dlg"
+   ]
+  },
+  {
+   "id": 153,
+   "name": "ChangeEnemyAlly",
+   "sig": "(O:Object*,I:Value*EA)",
+   "uses": 157,
+   "status": "",
+   "gemrb": "GameScript::ChangeEnemyAlly",
+   "where": [
+    "0000MDRN.bcs",
+    "0000SUMN.bcs",
+    "0201DATT.bcs",
+    "0201DDEF.bcs",
+    "0201FZ1.bcs",
+    "0201GD1.bcs"
+   ]
+  },
+  {
+   "id": 157,
+   "name": "ChangeSpecifics",
+   "sig": "(O:Object*,I:Value*Specific)",
+   "uses": 156,
+   "status": "",
+   "gemrb": "GameScript::ChangeSpecifics",
+   "where": [
+    "0000GFIG.bcs",
+    "0100GH10.bcs",
+    "0100GH6.bcs",
+    "0100GH7.bcs",
+    "0100GH8.bcs",
+    "0100GH9.bcs"
+   ]
+  },
+  {
+   "id": 159,
+   "name": "ChangeAlignment",
+   "sig": "(O:Object*,I:Value*Align)",
+   "uses": 33,
+   "status": "",
+   "gemrb": "GameScript::ChangeAlignment",
+   "where": [
+    "1204ALIN.bcs",
+    "BALDUR.bcs"
+   ]
+  },
+  {
+   "id": 160,
+   "name": "ApplySpell",
+   "sig": "(O:Target*,I:Spell*Spell)",
+   "uses": 26,
+   "status": "",
+   "gemrb": "GameScript::ApplySpell",
+   "where": [
+    "0500MRTE.bcs",
+    "0610CT3L.bcs",
+    "0610CUT9.bcs",
+    "0610CUTC.bcs",
+    "1201CSA4.bcs",
+    "DBARKING.dlg"
+   ]
+  },
+  {
+   "id": 164,
+   "name": "Addpartyexperience",
+   "sig": "(I:XP*)",
+   "uses": 579,
+   "status": "",
+   "gemrb": "GameScript::AddExperienceParty",
+   "where": [
+    "0702ACI2.bcs",
+    "AR0900.bcs",
+    "DADAHN.dlg",
+    "DAETHEL.dlg",
+    "DANARCH1.dlg",
+    "DANGYAR.dlg"
+   ]
+  },
+  {
+   "id": 166,
+   "name": "SetNumTimesTalkedTo",
+   "sig": "(I:Num*)",
+   "uses": 101,
+   "status": "",
+   "gemrb": "GameScript::SetNumTimesTalkedTo",
+   "where": [
+    "D300MER8.dlg",
+    "DAILEENA.dlg",
+    "DANZE.dlg",
+    "DARLO.dlg",
+    "DBINIAN.dlg",
+    "DBVCOLL.dlg"
+   ]
+  },
+  {
+   "id": 167,
+   "name": "StartMovie",
+   "sig": "(S:ResRef*)",
+   "uses": 50,
+   "status": "",
+   "gemrb": "GameScript::StartMovie",
+   "where": [
+    "0405CUT8.bcs",
+    "0901CT1B.bcs",
+    "0901PRTL.bcs",
+    "1200CUT6.bcs",
+    "1204TRIG.bcs",
+    "AR0403.bcs"
+   ]
+  },
+  {
+   "id": 169,
+   "name": "DestroyItem",
+   "sig": "(S:Object*,O:Target*,I:All*Boolean)",
+   "uses": 20,
+   "status": "",
+   "gemrb": "GameScript::DestroyItem",
+   "where": [
+    "DCOPPER.dlg",
+    "DDERAN.dlg",
+    "DMANTUOK.dlg",
+    "DMORTAI.dlg",
+    "DSOHMIEN.dlg",
+    "DTEST.dlg"
+   ]
+  },
+  {
+   "id": 171,
+   "name": "CreatePartyGold",
+   "sig": "(I:Amount*)",
+   "uses": 57,
+   "status": "",
+   "gemrb": "GameScript::CreatePartyGold",
+   "where": [
+    "DABLE.dlg",
+    "DACTORCW.dlg",
+    "DADAHN.dlg",
+    "DANNAH.dlg",
+    "DASHMAN.dlg",
+    "DDEVORE.dlg"
+   ]
+  },
+  {
+   "id": 181,
+   "name": "ReallyForceSpellLevel",
+   "sig": "(O:Target*,I:Spell*Spell,I:CastLevel*)",
+   "uses": 92,
+   "status": "",
+   "gemrb": "GameScript::ReallyForceSpell",
+   "where": [
+    "0108SRAT.bcs",
+    "0402FIRE.bcs",
+    "0610RAVL.bcs",
+    "0900MAGE.bcs",
+    "0901TRP2.bcs",
+    "1201TRAP.bcs"
+   ]
+  },
+  {
+   "id": 200,
+   "name": "SetAnimState",
+   "sig": "(O:Object*,I:Anim*AnimStat)",
+   "uses": 802,
+   "status": "",
+   "gemrb": "GameScript::PlaySequence",
+   "where": [
+    "0100DAB1.bcs",
+    "0100DAB2.bcs",
+    "0100DAB3.bcs",
+    "0100DAB4.bcs",
+    "0100DAB5.bcs",
+    "0100DAB6.bcs"
+   ]
+  },
+  {
+   "id": 202,
+   "name": "IncrementGlobalOnce",
+   "sig": "(S:Name1*,S:Area1*,S:Name2*,S:Area2*,I:Val*)",
+   "uses": 1693,
+   "status": "",
+   "gemrb": "GameScript::IncrementGlobalOnce",
+   "where": [
+    "0901TRIA.bcs",
+    "D0202P.dlg",
+    "D300MER1.dlg",
+    "D300MER5.dlg",
+    "D300MER8.dlg",
+    "DABLE.dlg"
+   ]
+  },
+  {
+   "id": 204,
+   "name": "FadeToBlack",
+   "sig": "()",
+   "uses": 369,
+   "status": "",
+   "gemrb": "GameScript::FadeToColor",
+   "where": [
+    "0110CUT1.bcs",
+    "0402O.bcs",
+    "0500CUT5.bcs",
+    "0503CUT1.bcs",
+    "0600CUT1.bcs",
+    "0601CS1.bcs"
+   ]
+  },
+  {
+   "id": 205,
+   "name": "FadeFromBlack",
+   "sig": "()",
+   "uses": 364,
+   "status": "",
+   "gemrb": "GameScript::FadeFromColor",
+   "where": [
+    "0110CUT2.bcs",
+    "0402O.bcs",
+    "0500CUT4.bcs",
+    "0500CUT5.bcs",
+    "0600CUT1.bcs",
+    "0601CS1.bcs"
+   ]
+  },
+  {
+   "id": 207,
+   "name": "SavePlace",
+   "sig": "()",
+   "uses": 15,
+   "status": "",
+   "gemrb": "GameScript::SaveLocation",
+   "where": [
+    "0600AELN.bcs",
+    "0600NEM2.bcs",
+    "0600NEME.bcs",
+    "0602FTDP.bcs",
+    "0700ANAM.bcs",
+    "0700GUAR.bcs"
+   ]
+  },
+  {
+   "id": 208,
+   "name": "ReturnToSavedPlace",
+   "sig": "()",
+   "uses": 593,
+   "status": "",
+   "gemrb": "GameScript::ReturnToSavedLocation",
+   "where": [
+    "0000GH.bcs",
+    "0000TALK.bcs",
+    "0000WAND.bcs",
+    "0100CL1.bcs",
+    "0100GH10.bcs",
+    "0100GH6.bcs"
+   ]
+  },
+  {
+   "id": 210,
+   "name": "FloatMessage",
+   "sig": "(O:Object*,I:StrRef*)",
+   "uses": 1643,
+   "status": "",
+   "gemrb": "GameScript::DisplayStringHead",
+   "where": [
+    "0000NAME.bcs",
+    "0100CL3.bcs",
+    "0100CL4.bcs",
+    "0100CUT1.bcs",
+    "0100FLEE.bcs",
+    "0100HAR1.bcs"
+   ]
+  },
+  {
+   "id": 211,
+   "name": "FloatMessageFixed",
+   "sig": "(P:Location*,I:StrRef*)",
+   "uses": 3,
+   "status": "",
+   "gemrb": "GameScript::FloatMessageFixed",
+   "where": [
+    "AR1601.bcs"
+   ]
+  },
+  {
+   "id": 212,
+   "name": "FloatMessageRnd",
+   "sig": "(O:Object*,S:Pool*)",
+   "uses": 43,
+   "status": "",
+   "gemrb": "GameScript::FloatMessageRnd",
+   "where": [
+    "0502GFSU.bcs",
+    "0502THIL.bcs",
+    "0502WOR1.bcs",
+    "0502WOR2.bcs",
+    "0502WOR3.bcs",
+    "0502WOR4.bcs"
+   ]
+  },
+  {
+   "id": 214,
+   "name": "KillFloatMessage",
+   "sig": "(O:Object*)",
+   "uses": 186,
+   "status": "",
+   "gemrb": "GameScript::KillFloatMessage",
+   "where": [
+    "0100HAR1.bcs",
+    "0100HAR2.bcs",
+    "0100HAR3.bcs",
+    "0100HAR4.bcs",
+    "0100HAR5.bcs",
+    "0100POR1.bcs"
+   ]
+  },
+  {
+   "id": 215,
+   "name": "FaceObject",
+   "sig": "(O:Object*)",
+   "uses": 701,
+   "status": "",
+   "gemrb": "GameScript::FaceObject",
+   "where": [
+    "0000BXD1.bcs",
+    "0000DEF.bcs",
+    "0000MEBB.bcs",
+    "0000NAME.bcs",
+    "0000PLIM.bcs",
+    "0100GH1.bcs"
+   ]
+  },
+  {
+   "id": 216,
+   "name": "FullHeal",
+   "sig": "(O:Object*)",
+   "uses": 47,
+   "status": "",
+   "gemrb": "GameScript::FullHeal",
+   "where": [
+    "DEIVENE.dlg",
+    "DEMORIC.dlg",
+    "DHERMIT.dlg",
+    "DINCAR1.dlg",
+    "DINCAR2.dlg",
+    "DINCAR3.dlg"
+   ]
+  },
+  {
+   "id": 217,
+   "name": "PermanentStatChange",
+   "sig": "(O:Object*,I:StadID*Stats,I:Delta*Delta,I:Modifier*)",
+   "uses": 230,
+   "status": "",
+   "gemrb": "GameScript::PermanentStatChange",
+   "where": [
+    "DANNAH.dlg",
+    "DASHMAN.dlg",
+    "DCARVER.dlg",
+    "DCOLYLFN.dlg",
+    "DDAKKON.dlg",
+    "DEIVENE.dlg"
+   ]
+  },
+  {
+   "id": 218,
+   "name": "PlaySequence",
+   "sig": "(I:Anim*AnimStat)",
+   "uses": 1057,
+   "status": "",
+   "gemrb": "GameScript::PlaySequence",
+   "where": [
+    "0000GH.bcs",
+    "0000TALK.bcs",
+    "0003FIDG.bcs",
+    "0100FLEE.bcs",
+    "0100GH1.bcs",
+    "0100GH10.bcs"
+   ]
+  },
+  {
+   "id": 219,
+   "name": "WaitRandom",
+   "sig": "(I:MinTime*,I:MaxTime*)",
+   "uses": 1398,
+   "status": "",
+   "gemrb": "GameScript::WaitRandom",
+   "where": [
+    "0000GH.bcs",
+    "0000TALK.bcs",
+    "0100BA1A.bcs",
+    "0100BA1B.bcs",
+    "0100BA2A.bcs",
+    "0100BA2B.bcs"
+   ]
+  },
+  {
+   "id": 220,
+   "name": "StartRandomTimer",
+   "sig": "(I:ID*,I:MinTime*,I:MinTime*)",
+   "uses": 268,
+   "status": "",
+   "gemrb": "GameScript::StartRandomTimer",
+   "where": [
+    "0000NAME.bcs",
+    "0102MEBB.bcs",
+    "0109GBUM.bcs",
+    "0202DHAL.bcs",
+    "0300MER1.bcs",
+    "0300MER3.bcs"
+   ]
+  },
+  {
+   "id": 221,
+   "name": "DestroyPartyGold",
+   "sig": "(I:Amount*)",
+   "uses": 21,
+   "status": "",
+   "gemrb": "GameScript::DestroyPartyGold",
+   "where": [
+    "DACTORCW.dlg",
+    "DGONCAL.dlg",
+    "DMORTE.dlg",
+    "DVRISCH.dlg"
+   ]
+  },
+  {
+   "id": 222,
+   "name": "DestroyPartyItem",
+   "sig": "(S:Object*,I:All*Boolean)",
+   "uses": 147,
+   "status": "",
+   "gemrb": "GameScript::DestroyPartyItem",
+   "where": [
+    "0403BOX.bcs",
+    "0403DOOR.bcs",
+    "0403DOR2.bcs",
+    "0502DDOR.bcs",
+    "AR0500.bcs",
+    "AR202D1.bcs"
+   ]
+  },
+  {
+   "id": 224,
+   "name": "TransformPartyItem",
+   "sig": "(S:OldObject*,S:NewObject*,I:Charge1*,I:Charge2*,I:Charge3*)",
+   "uses": 48,
+   "status": "",
+   "gemrb": "GameScript::TransformPartyItem",
+   "where": [
+    "D0202P.dlg",
+    "D300MER8.dlg",
+    "DCELEST.dlg",
+    "DCOPEARC.dlg",
+    "DDEIONS.dlg",
+    "DEBLADE.dlg"
+   ]
+  },
+  {
+   "id": 225,
+   "name": "FollowCreature",
+   "sig": "(O:Target*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::FollowCreature",
+   "where": [
+    "0600THUG.bcs"
+   ]
+  },
+  {
+   "id": 226,
+   "name": "GenerateModronMaze",
+   "sig": "()",
+   "uses": 15,
+   "status": "",
+   "gemrb": "GameScript::GenerateMaze",
+   "where": [
+    "DCUBE.dlg",
+    "DMENGINE.dlg"
+   ]
+  },
+  {
+   "id": 233,
+   "name": "GlobalSetGlobal",
+   "sig": "(S:Name1*,S:Area1*,S:Name2*,S:Area2*)",
+   "uses": 4,
+   "status": "",
+   "gemrb": "GameScript::GlobalSetGlobal",
+   "where": [
+    "AR0201.bcs",
+    "AR0202.bcs",
+    "AR0203.bcs"
+   ]
+  },
+  {
+   "id": 244,
+   "name": "BitSet",
+   "sig": "(S:Name*,S:Area*,I:Bit*Bits)",
+   "uses": 132,
+   "status": "",
+   "gemrb": "GameScript::GlobalBOr",
+   "where": [
+    "0000HPAT.bcs",
+    "0200PRT1.bcs",
+    "0201DEIO.bcs",
+    "0202TRG1.bcs",
+    "0202TRG2.bcs",
+    "0208GRDS.bcs"
+   ]
+  },
+  {
+   "id": 245,
+   "name": "BitClear",
+   "sig": "(S:Name*,S:Area*,I:Bit*Bits)",
+   "uses": 36,
+   "status": "",
+   "gemrb": "GameScript::BitClear",
+   "where": [
+    "0201BIER.bcs",
+    "0208GRDS.bcs",
+    "0600DILG.bcs",
+    "0604SEN4.bcs",
+    "0612PAT1.bcs",
+    "1601KILL.bcs"
+   ]
+  },
+  {
+   "id": 246,
+   "name": "ForceAIScript",
+   "sig": "(S:ScriptFile*,O:Target*,I:Level*Scrlev)",
+   "uses": 89,
+   "status": "",
+   "gemrb": "GameScript::ForceAIScript",
+   "where": [
+    "0500GRD3.bcs",
+    "0512FT2C.bcs",
+    "0512KELA.bcs",
+    "0512NXLV.bcs",
+    "0601CS1.bcs",
+    "1501CS1.bcs"
+   ]
+  },
+  {
+   "id": 247,
+   "name": "ExploreMapChunk",
+   "sig": "(P:Center*,I:Radius*,I:Mode*)",
+   "uses": 33,
+   "status": "",
+   "gemrb": "GameScript::ExploreMapChunk",
+   "where": [
+    "0405CS10.bcs",
+    "0405CUT5.bcs",
+    "0405CUT6.bcs",
+    "0610CT2B.bcs",
+    "0610CT2C.bcs",
+    "0610CT2D.bcs"
+   ]
+  },
+  {
+   "id": 248,
+   "name": "RunToPoint",
+   "sig": "(P:Point*)",
+   "uses": 274,
+   "status": "",
+   "gemrb": "GameScript::RunToPoint",
+   "where": [
+    "0100CUT1.bcs",
+    "0100CUT2.bcs",
+    "0101VIRA.bcs",
+    "0108GRAT.bcs",
+    "0108RFTF.bcs",
+    "0109THG1.bcs"
+   ]
+  },
+  {
+   "id": 251,
+   "name": "RunningAttack",
+   "sig": "(O:Target*)",
+   "uses": 284,
+   "status": "",
+   "gemrb": "GameScript::RunningAttack",
+   "where": [
+    "0000BXD2.bcs",
+    "0000HGRD.bcs",
+    "0000HSRG.bcs",
+    "0103GARD.bcs",
+    "0209SKEL.bcs",
+    "0209SKLD.bcs"
+   ]
+  },
+  {
+   "id": 253,
+   "name": "RunToObject",
+   "sig": "(O:Target*)",
+   "uses": 48,
+   "status": "",
+   "gemrb": "GameScript::RunToObject",
+   "where": [
+    "0000HGRD.bcs",
+    "0000HSRG.bcs",
+    "0000PLIM.bcs",
+    "0108BISH.bcs",
+    "0108CMP6.bcs",
+    "0500GITH.bcs"
+   ]
+  },
+  {
+   "id": 256,
+   "name": "RunToSavedLocation",
+   "sig": "()",
+   "uses": 6,
+   "status": "",
+   "gemrb": "GameScript::RunToSavedLocation",
+   "where": [
+    "0108BISH.bcs",
+    "0610TR00.bcs",
+    "1100GRG0.bcs",
+    "1100GRG4.bcs",
+    "1100GRK0.bcs",
+    "1100LEAD.bcs"
+   ]
+  },
+  {
+   "id": 259,
+   "name": "Damage",
+   "sig": "(O:Target*,I:Delta*Delta,I:Modifier*)",
+   "uses": 78,
+   "status": "",
+   "gemrb": "GameScript::Damage",
+   "where": [
+    "0901TRIA.bcs",
+    "1800TR07.bcs",
+    "1800TR12.bcs",
+    "1800TR21.bcs",
+    "DBARKIS.dlg",
+    "DDBIRDS.dlg"
+   ]
+  },
+  {
+   "id": 262,
+   "name": "ChangeColor",
+   "sig": "(I:Range*ClownRge,I:Color*ClownClr)",
+   "uses": 75,
+   "status": "",
+   "gemrb": "GameScript::ChangeColor",
+   "where": [
+    "0610CUT6.bcs",
+    "0610CUT7.bcs",
+    "1500CS9.bcs",
+    "1500DOUB.bcs",
+    "1500SOEG.bcs"
+   ]
+  },
+  {
+   "id": 263,
+   "name": "PlaySequenceTimed",
+   "sig": "(I:Anim*AnimStat,I:Seconds*)",
+   "uses": 70,
+   "status": "",
+   "gemrb": "GameScript::PlaySequenceTimed",
+   "where": [
+    "0100CL3.bcs",
+    "0100CL4.bcs",
+    "0208SK10.bcs",
+    "0208SK11.bcs",
+    "0208SK12.bcs",
+    "0208SK13.bcs"
+   ]
+  },
+  {
+   "id": 265,
+   "name": "IncrementProficiency",
+   "sig": "(O:Target*,I:SlotNum*WProf,I:Modifier*)",
+   "uses": 41,
+   "status": "",
+   "gemrb": "GameScript::IncrementProficiency",
+   "where": [
+    "DKORUR.dlg",
+    "DMARQUEZ.dlg",
+    "DPORPHIR.dlg",
+    "DQUISAI.dlg"
+   ]
+  },
+  {
+   "id": 266,
+   "name": "FloatRebus",
+   "sig": "(O:Target*)",
+   "uses": 490,
+   "status": "",
+   "gemrb": "GameScript::FloatRebus",
+   "where": [
+    "DADABUS.dlg",
+    "DDABUS.dlg",
+    "DFELL.dlg"
+   ]
+  },
+  {
+   "id": 267,
+   "name": "StartSong",
+   "sig": "(I:Song*Songs,P:Where*,I:How*SongFlag)",
+   "uses": 180,
+   "status": "",
+   "gemrb": "GameScript::StartSong",
+   "where": [
+    "0110CUT1.bcs",
+    "0200ANNA.bcs",
+    "0202INTR.bcs",
+    "0610CT3B.bcs",
+    "0610CT3C.bcs",
+    "0610CT3D.bcs"
+   ]
+  },
+  {
+   "id": 268,
+   "name": "ChangeFaction",
+   "sig": "(O:Object*,I:Value*Faction)",
+   "uses": 5,
+   "status": "",
+   "gemrb": "GameScript::SetFaction",
+   "where": [
+    "BALDUR.bcs"
+   ]
+  },
+  {
+   "id": 269,
+   "name": "ChangeTeam",
+   "sig": "(O:Object*,I:Value*Team)",
+   "uses": 135,
+   "status": "",
+   "gemrb": "GameScript::SetTeam",
+   "where": [
+    "0100GH1.bcs",
+    "0100GH2.bcs",
+    "0100GH3.bcs",
+    "0100GH4.bcs",
+    "0100GH5.bcs",
+    "0100NT.bcs"
+   ]
+  },
+  {
+   "id": 270,
+   "name": "ForceAttack",
+   "sig": "(O:Object*,O:Target*)",
+   "uses": 531,
+   "status": "",
+   "gemrb": "GameScript::ForceAttack",
+   "where": [
+    "ABISHAB.dlg",
+    "ATHUG.dlg",
+    "BATHUG.dlg",
+    "DABISHAI.dlg",
+    "DACASTE.dlg",
+    "DADYZOEL.dlg"
+   ]
+  },
+  {
+   "id": 271,
+   "name": "ForceFacing",
+   "sig": "(O:Object*,I:Dir*)",
+   "uses": 10,
+   "status": "",
+   "gemrb": "GameScript::ForceFacing",
+   "where": [
+    "0600ACT1.bcs",
+    "0600TIPA.bcs",
+    "1501CS1.bcs",
+    "1501CUT1.bcs",
+    "AR0110.bcs",
+    "AR0402.bcs"
+   ]
+  },
+  {
+   "id": 272,
+   "name": "ChangeDialog",
+   "sig": "(O:Object*,S:ResRef*)",
+   "uses": 25,
+   "status": "",
+   "gemrb": "GameScript::ChangeDialogue",
+   "where": [
+    "0100NT.bcs",
+    "0200NT.bcs",
+    "0300NT.bcs",
+    "0400NT.bcs",
+    "0402ILQX.bcs",
+    "AR0200.bcs"
+   ]
+  },
+  {
+   "id": 273,
+   "name": "SetInternal",
+   "sig": "(O:Object*,I:Index*Internal,I:Value*)",
+   "uses": 470,
+   "status": "",
+   "gemrb": "GameScript::SetInternal",
+   "where": [
+    "0000HPAT.bcs",
+    "0102MEBB.bcs",
+    "0108RFTF.bcs",
+    "0108TRCO.bcs",
+    "0108TTRG.bcs",
+    "0109DOOR.bcs"
+   ]
+  },
+  {
+   "id": 274,
+   "name": "IncInternal",
+   "sig": "(O:Object*,I:Index*Internal,I:Value*)",
+   "uses": 386,
+   "status": "",
+   "gemrb": "GameScript::IncInternal",
+   "where": [
+    "0500THOK.bcs",
+    "0601JUMB.bcs",
+    "0601LADY.bcs",
+    "0603LADY.bcs",
+    "0604QUEL.bcs",
+    "0605DOL1.bcs"
+   ]
+  },
+  {
+   "id": 276,
+   "name": "SetDoorLocked",
+   "sig": "(O:Object*,I:Locked*Boolean)",
+   "uses": 72,
+   "status": "",
+   "gemrb": "GameScript::SetDoorLocked",
+   "where": [
+    "0101CUT1.bcs",
+    "0201CUT1.bcs",
+    "0401DABU.bcs",
+    "0403DOOR.bcs",
+    "0403DOR2.bcs",
+    "0502DCUT.bcs"
+   ]
+  },
+  {
+   "id": 277,
+   "name": "IncrementExtraProficiency",
+   "sig": "(O:Target*,I:Modifier*)",
+   "uses": 43,
+   "status": "",
+   "gemrb": "GameScript::IncrementExtraProficiency",
+   "where": [
+    "DBARKIS.dlg",
+    "DKORUR.dlg",
+    "DMARQUEZ.dlg",
+    "DPORPHIR.dlg",
+    "DQUISAI.dlg"
+   ]
+  },
+  {
+   "id": 278,
+   "name": "ActivatePortalCursor",
+   "sig": "(O:Object*,I:Value*)",
+   "uses": 122,
+   "status": "",
+   "gemrb": "GameScript::ActivatePortalCursor",
+   "where": [
+    "0101CUT1.bcs",
+    "0101PRT2.bcs",
+    "0101VPRT.bcs",
+    "0200PRT1.bcs",
+    "0201PORT.bcs",
+    "0500TRG1.bcs"
+   ]
+  },
+  {
+   "id": 279,
+   "name": "EnablePortalTravel",
+   "sig": "(O:Object*,I:Value*)",
+   "uses": 127,
+   "status": "",
+   "gemrb": "GameScript::EnablePortalTravel",
+   "where": [
+    "0101CUT1.bcs",
+    "0101PRT2.bcs",
+    "0101VPRT.bcs",
+    "0200PRT1.bcs",
+    "0201PORT.bcs",
+    "0500TRG1.bcs"
+   ]
+  },
+  {
+   "id": 281,
+   "name": "TeleportParty",
+   "sig": "(S:Area*,P:Point*,I:Face*)",
+   "uses": 110,
+   "status": "",
+   "gemrb": "GameScript::TeleportParty",
+   "where": [
+    "0110CUT4.bcs",
+    "0503CUT1.bcs",
+    "0509SCOF.bcs",
+    "0610CT3L.bcs",
+    "0700CUT5.bcs",
+    "0901CT1B.bcs"
+   ]
+  },
+  {
+   "id": 285,
+   "name": "FixEngineRoom",
+   "sig": "()",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::FixEngineRoom",
+   "where": [
+    "DMENGINE.dlg"
+   ]
+  },
+  {
+   "id": 286,
+   "name": "SetCorpseEnabled",
+   "sig": "(S:Name*,I:State*)",
+   "uses": 238,
+   "status": "",
+   "gemrb": "GameScript::AmbientActivate",
+   "where": [
+    "1501CS1.bcs",
+    "1501CS4.bcs",
+    "1900PRT1.bcs",
+    "1900PRT2.bcs",
+    "1900PRT3.bcs",
+    "1900PRT4.bcs"
+   ]
+  },
+  {
+   "id": 287,
+   "name": "DebugOutput",
+   "sig": "(S:Message*)",
+   "uses": 58,
+   "status": "",
+   "gemrb": "GameScript::Debug",
+   "where": [
+    "0401TRIG.bcs",
+    "0700CUT4.bcs",
+    "1202IGNU.bcs",
+    "1203INC1.bcs",
+    "1203INC2.bcs",
+    "1203INC3.bcs"
+   ]
+  },
+  {
+   "id": 290,
+   "name": "SetNamelessDisguise",
+   "sig": "(I:DisguiseNum*Disguise)",
+   "uses": 5,
+   "status": "",
+   "gemrb": "GameScript::SetNamelessDisguise",
+   "where": [
+    "DMORTE.dlg",
+    "DVAXIS.dlg"
+   ]
+  },
+  {
+   "id": 291,
+   "name": "SinisterPoof",
+   "sig": "(S:BamResRef*,P:Location*,I:Itterations*)",
+   "uses": 107,
+   "status": "",
+   "gemrb": "GameScript::CreateVisualEffect",
+   "where": [
+    "0305NEST.bcs",
+    "0405CS10.bcs",
+    "0405CUT5.bcs",
+    "0405CUT6.bcs",
+    "0508CS1.bcs",
+    "0610CUTA.bcs"
+   ]
+  },
+  {
+   "id": 292,
+   "name": "StickySinisterPoof",
+   "sig": "(S:BamResRef*,O:Object*,I:Itterations*)",
+   "uses": 72,
+   "status": "",
+   "gemrb": "GameScript::CreateVisualEffectObjectSticky",
+   "where": [
+    "0000MDRN.bcs",
+    "0000SUMN.bcs",
+    "0404FELL.bcs",
+    "0601MIT1.bcs",
+    "0601MIT2.bcs",
+    "0601MIT3.bcs"
+   ]
+  },
+  {
+   "id": 293,
+   "name": "SetNamelessClass",
+   "sig": "(I:Value*Class)",
+   "uses": 39,
+   "status": "",
+   "gemrb": "GameScript::SetNamelessClass",
+   "where": [
+    "DANNAH.dlg",
+    "DCARVER.dlg",
+    "DDAKKON.dlg",
+    "DELI.dlg",
+    "DKITLA.dlg",
+    "DKORUR.dlg"
+   ]
+  },
+  {
+   "id": 295,
+   "name": "CreateCreatureAtFeet",
+   "sig": "(S:ResRef*)",
+   "uses": 24,
+   "status": "",
+   "gemrb": "GameScript::CreateCreatureAtFeet",
+   "where": [
+    "DMONJUG.dlg",
+    "DPETLIMI.dlg",
+    "DRODMM.dlg",
+    "DSOHMIEN.dlg",
+    "DTRELON.dlg",
+    "MBOX.dlg"
+   ]
+  },
+  {
+   "id": 296,
+   "name": "RestParty",
+   "sig": "(I:SuggestedDream*,I:HP*,I:Renting*)",
+   "uses": 20,
+   "status": "",
+   "gemrb": "GameScript::RestParty",
+   "where": [
+    "DANGYAR.dlg",
+    "DARLO.dlg",
+    "DBRASKEN.dlg",
+    "DEMORIC.dlg",
+    "DFSTCLRK.dlg",
+    "DHARGRI.dlg"
+   ]
+  },
+  {
+   "id": 297,
+   "name": "ResetFogOfWar",
+   "sig": "()",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::UndoExplore",
+   "where": [
+    "AR0401.bcs"
+   ]
+  },
+  {
+   "id": 298,
+   "name": "DisableSpriteDither",
+   "sig": "()",
+   "uses": 21,
+   "status": "",
+   "gemrb": "GameScript::DisableSpriteDither",
+   "where": [
+    "0110CUT1.bcs",
+    "0610CUT1.bcs",
+    "0610CUT2.bcs",
+    "0610CUT3.bcs",
+    "0901CUT1.bcs",
+    "1001CT4B.bcs"
+   ]
+  },
+  {
+   "id": 299,
+   "name": "EnableSpriteDither",
+   "sig": "()",
+   "uses": 21,
+   "status": "",
+   "gemrb": "GameScript::EnableSpriteDither",
+   "where": [
+    "0110CUT3.bcs",
+    "0502CUT2.bcs",
+    "0610CT1E.bcs",
+    "0610CT2F.bcs",
+    "0610CT3L.bcs",
+    "0901CT1B.bcs"
+   ]
+  },
+  {
+   "id": 300,
+   "name": "DisableFogDither",
+   "sig": "()",
+   "uses": 21,
+   "status": "",
+   "gemrb": "GameScript::DisableFogDither",
+   "where": [
+    "0110CUT1.bcs",
+    "0610CUT1.bcs",
+    "0610CUT2.bcs",
+    "0610CUT3.bcs",
+    "0901CUT1.bcs",
+    "1001CT4B.bcs"
+   ]
+  },
+  {
+   "id": 301,
+   "name": "EnableFogDither",
+   "sig": "()",
+   "uses": 21,
+   "status": "",
+   "gemrb": "GameScript::EnableFogDither",
+   "where": [
+    "0110CUT3.bcs",
+    "0502CUT2.bcs",
+    "0610CT1E.bcs",
+    "0610CT2F.bcs",
+    "0610CT3L.bcs",
+    "0901CT1B.bcs"
+   ]
+  },
+  {
+   "id": 302,
+   "name": "SetNoOneOnTrigger",
+   "sig": "(O:Trigger*)",
+   "uses": 2,
+   "status": "",
+   "gemrb": "GameScript::SetNoOneOnTrigger",
+   "where": [
+    "0405CUT9.bcs",
+    "AR0702.bcs"
+   ]
+  },
+  {
+   "id": 303,
+   "name": "TimedMoveToPoint",
+   "sig": "(P:Point*,I:Time*)",
+   "uses": 128,
+   "status": "",
+   "gemrb": "GameScript::TimedMoveToPoint",
+   "where": [
+    "0101CUT1.bcs",
+    "0110CUT2.bcs",
+    "0202CS2.bcs",
+    "0202CS3.bcs",
+    "0400CUT2.bcs",
+    "0500CUT2.bcs"
+   ]
+  },
+  {
+   "id": 305,
+   "name": "FullHealEx",
+   "sig": "(O:Object*)",
+   "uses": 3,
+   "status": "",
+   "gemrb": "GameScript::FullHeal",
+   "where": [
+    "DBSPHERE.dlg",
+    "DDAKKON.dlg",
+    "DVHAIL.dlg"
+   ]
+  },
+  {
+   "id": 306,
+   "name": "GiveExperience",
+   "sig": "(O:Object*,I:Amount*)",
+   "uses": 246,
+   "status": "",
+   "gemrb": "GameScript::AddXPObject",
+   "where": [
+    "DADABUS.dlg",
+    "DANNAH.dlg",
+    "DART14.dlg",
+    "DASHMAN.dlg",
+    "DAWAIT.dlg",
+    "DBARKIS.dlg"
+   ]
+  },
+  {
+   "id": 309,
+   "name": "QuitGame",
+   "sig": "(I:Value*MovVal,I:Value*MovVal,I:Value*MovVal)",
+   "uses": 33,
+   "status": "",
+   "gemrb": "GameScript::QuitGame",
+   "where": [
+    "AR1204.bcs",
+    "BALDUR.bcs",
+    "DANNAH.dlg",
+    "DDAKKON.dlg",
+    "DGRACE.dlg",
+    "DIGNUS.dlg"
+   ]
+  },
+  {
+   "id": 310,
+   "name": "StartCutSceneEx",
+   "sig": "(S:CutScene*,I:Value*)",
+   "uses": 2,
+   "status": "",
+   "gemrb": "GameScript::StartCutScene",
+   "where": [
+    "AR1500.bcs"
+   ]
+  },
+  {
+   "id": 311,
+   "name": "GeneratePartyMember",
+   "sig": "(P:Location*,I:Value*Specific)",
+   "uses": 7,
+   "status": "",
+   "gemrb": "GameScript::GeneratePartyMember",
+   "where": [
+    "AR1204.bcs"
+   ]
+  },
+  {
+   "id": 312,
+   "name": "PlaySoundNotRanged",
+   "sig": "(S:Sound*)",
+   "uses": 285,
+   "status": "",
+   "gemrb": "GameScript::PlaySoundNotRanged",
+   "where": [
+    "0201CUT1.bcs",
+    "0404FELL.bcs",
+    "0405CS10.bcs",
+    "0405CUT5.bcs",
+    "0405CUT6.bcs",
+    "0605CUT1.bcs"
+   ]
+  },
+  {
+   "id": 313,
+   "name": "EscapeAreaRunning",
+   "sig": "()",
+   "uses": 103,
+   "status": "MISSING",
+   "gemrb": "",
+   "where": [
+    "0100GH1.bcs",
+    "0100GH10.bcs",
+    "0100GH2.bcs",
+    "0100GH3.bcs",
+    "0100GH4.bcs",
+    "0100GH5.bcs"
+   ]
+  }
+ ],
+ "triggers": [
+  {
+   "id": 2,
+   "name": "AttackedBy",
+   "sig": "(O:Object*,I:Style*AStyles)",
+   "uses": 1280,
+   "status": "",
+   "gemrb": "GameScript::AttackedBy",
+   "where": [
+    "0000BLEM.bcs",
+    "0000BXD1.bcs",
+    "0000BXD2.bcs",
+    "0000DEF.bcs",
+    "0000GH.bcs",
+    "0000GSPT.bcs"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Help",
+   "sig": "(O:Object*)",
+   "uses": 1031,
+   "status": "",
+   "gemrb": "GameScript::Help_Trigger",
+   "where": [
+    "0000MDRN.bcs",
+    "0000PLIM.bcs",
+    "0000SUMN.bcs",
+    "0100CL3.bcs",
+    "0100CL4.bcs",
+    "0100DAB1.bcs"
+   ]
+  },
+  {
+   "id": 6,
+   "name": "ReceivedOrder",
+   "sig": "(O:Object*,I:OrderID*Order)",
+   "uses": 3,
+   "status": "",
+   "gemrb": "GameScript::ReceivedOrder",
+   "where": [
+    "0200THV1.bcs",
+    "0300THV1.bcs",
+    "0400THV1.bcs"
+   ]
+  },
+  {
+   "id": 32,
+   "name": "HitBy",
+   "sig": "(O:Object*,I:DameType*Damages)",
+   "uses": 3,
+   "status": "",
+   "gemrb": "GameScript::HitBy",
+   "where": [
+    "0205CNTR.bcs",
+    "0205POS3.bcs",
+    "0205SERV.bcs"
+   ]
+  },
+  {
+   "id": 34,
+   "name": "TimerExpired",
+   "sig": "(I:ID*)",
+   "uses": 47,
+   "status": "",
+   "gemrb": "GameScript::TimerExpired",
+   "where": [
+    "0003FIDG.bcs",
+    "0109GBUM.bcs",
+    "0200BAEN.bcs",
+    "0200DF5.bcs",
+    "0200DM2.bcs",
+    "0200DM3.bcs"
+   ]
+  },
+  {
+   "id": 36,
+   "name": "Trigger",
+   "sig": "(I:TriggerNum*)",
+   "uses": 52,
+   "status": "",
+   "gemrb": "GameScript::TriggerTrigger",
+   "where": [
+    "0605DOL3.bcs",
+    "0605ECC3.bcs",
+    "0605FFG3.bcs",
+    "0605KES3.bcs",
+    "0605NEN3.bcs",
+    "0605PAT1.bcs"
+   ]
+  },
+  {
+   "id": 37,
+   "name": "Die",
+   "sig": "()",
+   "uses": 407,
+   "status": "",
+   "gemrb": "GameScript::Die",
+   "where": [
+    "0000BXD1.bcs",
+    "0000BXD2.bcs",
+    "0000NFRD.bcs",
+    "0100GH10.bcs",
+    "0100GH6.bcs",
+    "0100GH7.bcs"
+   ]
+  },
+  {
+   "id": 54,
+   "name": "OnCreation",
+   "sig": "()",
+   "uses": 337,
+   "status": "",
+   "gemrb": "GameScript::OnCreation",
+   "where": [
+    "0000BLEM.bcs",
+    "0000BXD2.bcs",
+    "0000DEF.bcs",
+    "0000MDRN.bcs",
+    "0000SUMN.bcs",
+    "0003FIDG.bcs"
+   ]
+  },
+  {
+   "id": 74,
+   "name": "Died",
+   "sig": "(O:Object*)",
+   "uses": 3,
+   "status": "",
+   "gemrb": "GameScript::Died",
+   "where": [
+    "0205GARD.bcs",
+    "0205PTRN.bcs",
+    "0205SERV.bcs"
+   ]
+  },
+  {
+   "id": 76,
+   "name": "Entered",
+   "sig": "(O:Object*)",
+   "uses": 70,
+   "status": "",
+   "gemrb": "GameScript::Entered",
+   "where": [
+    "0101PRT2.bcs",
+    "0108TRP1.bcs",
+    "0108TTRG.bcs",
+    "0208TRAP.bcs",
+    "0402FIRE.bcs",
+    "0403TRAP.bcs"
+   ]
+  },
+  {
+   "id": 82,
+   "name": "Opened",
+   "sig": "(O:Object*)",
+   "uses": 18,
+   "status": "",
+   "gemrb": "GameScript::Opened",
+   "where": [
+    "0108TRP2.bcs",
+    "0108TRP3.bcs",
+    "0304THF.bcs",
+    "0403BOX.bcs",
+    "0403DOR2.bcs",
+    "0508TRAP.bcs"
+   ]
+  },
+  {
+   "id": 87,
+   "name": "Unlocked",
+   "sig": "(O:Object*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::Unlocked",
+   "where": [
+    "1600DOOR.bcs"
+   ]
+  },
+  {
+   "id": 93,
+   "name": "PickPocketFailed",
+   "sig": "(O:Object*)",
+   "uses": 8,
+   "status": "",
+   "gemrb": "GameScript::PickpocketFailed",
+   "where": [
+    "0600ELIH.bcs",
+    "0601ELI0.bcs",
+    "0601ELI1.bcs",
+    "0601ELI2.bcs",
+    "0601ELI3.bcs",
+    "0601ELI4.bcs"
+   ]
+  },
+  {
+   "id": 94,
+   "name": "StealFailed",
+   "sig": "(O:Object*)",
+   "uses": 9,
+   "status": "",
+   "gemrb": "GameScript::StealFailed",
+   "where": [
+    "0102MEBB.bcs",
+    "0300MER1.bcs",
+    "0300MER3.bcs",
+    "0300MER7.bcs",
+    "0505MICA.bcs",
+    "0505MICB.bcs"
+   ]
+  },
+  {
+   "id": 96,
+   "name": "PickLockFailed",
+   "sig": "(O:Object*)",
+   "uses": 4,
+   "status": "",
+   "gemrb": "GameScript::PickLockFailed",
+   "where": [
+    "0508TRAP.bcs"
+   ]
+  },
+  {
+   "id": 121,
+   "name": "TriggerClick",
+   "sig": "()",
+   "uses": 8,
+   "status": "",
+   "gemrb": "GameScript::Clicked",
+   "where": [
+    "0000LIPS.bcs",
+    "0201BIER.bcs",
+    "0401TRIG.bcs",
+    "0502FORG.bcs",
+    "0508SHEL.bcs",
+    "0705PENT.bcs"
+   ]
+  },
+  {
+   "id": 148,
+   "name": "Vacant",
+   "sig": "()",
+   "uses": 49,
+   "status": "",
+   "gemrb": "GameScript::Vacant",
+   "where": [
+    "0700ANAM.bcs",
+    "0701ANAM.bcs",
+    "1100ANIM.bcs",
+    "AR0101.bcs",
+    "AR0105.bcs",
+    "AR0109.bcs"
+   ]
+  },
+  {
+   "id": 157,
+   "name": "HarmlessOpened",
+   "sig": "(O:Object*)",
+   "uses": 11,
+   "status": "",
+   "gemrb": "GameScript::HarmlessOpened",
+   "where": [
+    "0101VPRT.bcs",
+    "0109DOOR.bcs",
+    "0403DOOR.bcs",
+    "0502DDOR.bcs",
+    "0702LIPS.bcs",
+    "0901DOOR.bcs"
+   ]
+  },
+  {
+   "id": 158,
+   "name": "HarmlessClosed",
+   "sig": "(O:Object*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::HarmlessClosed",
+   "where": [
+    "0101VPRT.bcs"
+   ]
+  },
+  {
+   "id": 159,
+   "name": "HarmlessEntered",
+   "sig": "(O:Object*)",
+   "uses": 113,
+   "status": "",
+   "gemrb": "GameScript::HarmlessEntered",
+   "where": [
+    "0101PRT1.bcs",
+    "0101VPRT.bcs",
+    "0200PRT1.bcs",
+    "0201OPDA.bcs",
+    "0201OPDB.bcs",
+    "0201PORT.bcs"
+   ]
+  },
+  {
+   "id": 164,
+   "name": "NullDialog",
+   "sig": "(O:Object*)",
+   "uses": 2,
+   "status": "",
+   "gemrb": "GameScript::NullDialog",
+   "where": [
+    "0403GDUL.bcs",
+    "0403PROP.bcs"
+   ]
+  },
+  {
+   "id": 165,
+   "name": "WasInDialog",
+   "sig": "()",
+   "uses": 244,
+   "status": "",
+   "gemrb": "GameScript::WasInDialog",
+   "where": [
+    "0000GH.bcs",
+    "0000TALK.bcs",
+    "0100CL1.bcs",
+    "0100GH10.bcs",
+    "0100GH6.bcs",
+    "0100GH7.bcs"
+   ]
+  },
+  {
+   "id": 171,
+   "name": "NamelessBitTheDust",
+   "sig": "()",
+   "uses": 2,
+   "status": "",
+   "gemrb": "GameScript::NamelessBitTheDust",
+   "where": [
+    "0901SHM0.bcs",
+    "1800TR21.bcs"
+   ]
+  },
+  {
+   "id": 175,
+   "name": "FailedToOpen",
+   "sig": "(O:Object*)",
+   "uses": 5,
+   "status": "",
+   "gemrb": "GameScript::OpenFailed",
+   "where": [
+    "0400DOOR.bcs",
+    "0511DOOR.bcs",
+    "0702LIP2.bcs",
+    "0702LIPS.bcs",
+    "1600DOOR.bcs"
+   ]
+  },
+  {
+   "id": 16394,
+   "name": "Alignment",
+   "sig": "(O:Object*,I:Alignment*Align)",
+   "uses": 44,
+   "status": "",
+   "gemrb": "GameScript::Alignment",
+   "where": [
+    "1204ALIN.bcs",
+    "AR1201.bcs",
+    "BALDUR.bcs",
+    "DCELEST.dlg"
+   ]
+  },
+  {
+   "id": 16395,
+   "name": "Allegiance",
+   "sig": "(O:Object*,I:Allegience*EA)",
+   "uses": 788,
+   "status": "",
+   "gemrb": "GameScript::Allegiance",
+   "where": [
+    "0000SUMN.bcs",
+    "0100CL1.bcs",
+    "0100CL2A.bcs",
+    "0100CL2B.bcs",
+    "0100DAB1.bcs",
+    "0100DAB2.bcs"
+   ]
+  },
+  {
+   "id": 16396,
+   "name": "Class",
+   "sig": "(O:Object*,I:Class*Class)",
+   "uses": 141,
+   "status": "",
+   "gemrb": "GameScript::Class",
+   "where": [
+    "1204TRIG.bcs",
+    "1204TRNA.bcs",
+    "DABLE.dlg",
+    "DANNAH.dlg",
+    "DBBPLOT1.dlg",
+    "DBBPLOT2.dlg"
+   ]
+  },
+  {
+   "id": 16397,
+   "name": "Exists",
+   "sig": "(O:Object*)",
+   "uses": 667,
+   "status": "",
+   "gemrb": "GameScript::Exists",
+   "where": [
+    "0108BUM1.bcs",
+    "0108BUM8.bcs",
+    "0108BUMB.bcs",
+    "0205CNTR.bcs",
+    "0205GARD.bcs",
+    "0402ATHL.bcs"
+   ]
+  },
+  {
+   "id": 16399,
+   "name": "Global",
+   "sig": "(S:Name*,S:Area*,I:Value*)",
+   "uses": 17093,
+   "status": "",
+   "gemrb": "GameScript::Global",
+   "where": [
+    "0000BXD2.bcs",
+    "0000CRAT.bcs",
+    "0000GHUL.bcs",
+    "0000GSPT.bcs",
+    "0000HPAT.bcs",
+    "0000NAME.bcs"
+   ]
+  },
+  {
+   "id": 16401,
+   "name": "HPGT",
+   "sig": "(O:Object*,I:HitPoints*)",
+   "uses": 23,
+   "status": "",
+   "gemrb": "GameScript::HPGT",
+   "where": [
+    "DBARKIS.dlg",
+    "DDBIRDS.dlg",
+    "DFINGER.dlg",
+    "DMARROW.dlg",
+    "DPILLAR.dlg",
+    "DP_JRNL.dlg"
+   ]
+  },
+  {
+   "id": 16402,
+   "name": "HPLT",
+   "sig": "(O:Object*,I:HitPoints*)",
+   "uses": 94,
+   "status": "",
+   "gemrb": "GameScript::HPLT",
+   "where": [
+    "0600THGB.bcs",
+    "0901TRIA.bcs",
+    "DBARKIS.dlg",
+    "DDBIRDS.dlg",
+    "DFINGER.dlg",
+    "DFORGE.dlg"
+   ]
+  },
+  {
+   "id": 16403,
+   "name": "LOS",
+   "sig": "(O:Object*,I:Range*)",
+   "uses": 34,
+   "status": "",
+   "gemrb": "GameScript::LOS",
+   "where": [
+    "0108BISH.bcs",
+    "0108HANE.bcs",
+    "0108RFTF.bcs",
+    "0201DEIO.bcs",
+    "0205EMOR.bcs",
+    "0205MTAI.bcs"
+   ]
+  },
+  {
+   "id": 16405,
+   "name": "MoraleGT",
+   "sig": "(O:Object*,I:Morale*)",
+   "uses": 26,
+   "status": "",
+   "gemrb": "GameScript::MoraleGT",
+   "where": [
+    "D0202P.dlg",
+    "DANNAH.dlg",
+    "DDAKKON.dlg",
+    "DDRUNK.dlg",
+    "DFLEECE.dlg",
+    "DGITH.dlg"
+   ]
+  },
+  {
+   "id": 16406,
+   "name": "MoraleLT",
+   "sig": "(O:Object*,I:Morale*)",
+   "uses": 27,
+   "status": "",
+   "gemrb": "GameScript::MoraleLT",
+   "where": [
+    "1601RAT.bcs",
+    "D0202P.dlg",
+    "DANNAH.dlg",
+    "DDAKKON.dlg",
+    "DDRUNK.dlg",
+    "DFLEECE.dlg"
+   ]
+  },
+  {
+   "id": 16407,
+   "name": "Race",
+   "sig": "(O:Object*,I:Race*Race)",
+   "uses": 12,
+   "status": "",
+   "gemrb": "GameScript::Race",
+   "where": [
+    "0500GRAL.bcs",
+    "1100FOLL.bcs"
+   ]
+  },
+  {
+   "id": 16408,
+   "name": "Range",
+   "sig": "(O:Object*,I:Range*)",
+   "uses": 185,
+   "status": "",
+   "gemrb": "GameScript::Range",
+   "where": [
+    "0000MDRN.bcs",
+    "0000PLIM.bcs",
+    "0100THG1.bcs",
+    "0100THG2.bcs",
+    "0100THG3.bcs",
+    "0100THG4.bcs"
+   ]
+  },
+  {
+   "id": 16412,
+   "name": "See",
+   "sig": "(O:Object*)",
+   "uses": 1532,
+   "status": "",
+   "gemrb": "GameScript::See",
+   "where": [
+    "0000BLEM.bcs",
+    "0000BXD1.bcs",
+    "0000BXD2.bcs",
+    "0000DEF.bcs",
+    "0000GH.bcs",
+    "0000GSPT.bcs"
+   ]
+  },
+  {
+   "id": 16413,
+   "name": "Specifics",
+   "sig": "(O:Object*,I:Specifics*Specific)",
+   "uses": 45,
+   "status": "",
+   "gemrb": "GameScript::Specifics",
+   "where": [
+    "0000MANA.bcs",
+    "0403GANG.bcs",
+    "0403GDUL.bcs",
+    "0500GATK.bcs",
+    "0500NOOP.bcs",
+    "0512FAC2.bcs"
+   ]
+  },
+  {
+   "id": 16415,
+   "name": "TimeOfDay",
+   "sig": "(I:TimeOfDay*TimeODay)",
+   "uses": 31,
+   "status": "",
+   "gemrb": "GameScript::TimeOfDay",
+   "where": [
+    "0200DF5.bcs",
+    "0400ADY.bcs",
+    "0400RC.bcs",
+    "0400RC2.bcs",
+    "0502SARO.bcs",
+    "0600THBD.bcs"
+   ]
+  },
+  {
+   "id": 16419,
+   "name": "True",
+   "sig": "()",
+   "uses": 2044,
+   "status": "",
+   "gemrb": "GameScript::True",
+   "where": [
+    "0000BXD1.bcs",
+    "0000DIAL.bcs",
+    "0000DLIM.bcs",
+    "0000GH.bcs",
+    "0000GHUL.bcs",
+    "0000HGRD.bcs"
+   ]
+  },
+  {
+   "id": 16424,
+   "name": "NumCreature",
+   "sig": "(O:Object*,I:Number*)",
+   "uses": 2,
+   "status": "",
+   "gemrb": "GameScript::NumCreatures",
+   "where": [
+    "0600THGB.bcs",
+    "AR1401.bcs"
+   ]
+  },
+  {
+   "id": 16425,
+   "name": "NumCreatureLT",
+   "sig": "(O:Object*,I:Number*)",
+   "uses": 11,
+   "status": "",
+   "gemrb": "GameScript::NumCreaturesLT",
+   "where": [
+    "0400RC.bcs",
+    "0400RC2.bcs",
+    "AR1601.bcs",
+    "AR1601_3.bcs"
+   ]
+  },
+  {
+   "id": 16426,
+   "name": "NumCreatureGT",
+   "sig": "(O:Object*,I:Number*)",
+   "uses": 6,
+   "status": "",
+   "gemrb": "GameScript::NumCreaturesGT",
+   "where": [
+    "0400RC.bcs",
+    "0400RC2.bcs",
+    "AR1601.bcs",
+    "AR1601_3.bcs"
+   ]
+  },
+  {
+   "id": 16428,
+   "name": "HPPercent",
+   "sig": "(O:Object*,I:HitPoints*)",
+   "uses": 3,
+   "status": "",
+   "gemrb": "GameScript::HPPercent",
+   "where": [
+    "DMORTE.dlg",
+    "DNENNY.dlg"
+   ]
+  },
+  {
+   "id": 16429,
+   "name": "HPPercentLT",
+   "sig": "(O:Object*,I:HitPoints*)",
+   "uses": 379,
+   "status": "",
+   "gemrb": "GameScript::HPPercentLT",
+   "where": [
+    "0000GH.bcs",
+    "0000TALK.bcs",
+    "0000WAND.bcs",
+    "0100CL3.bcs",
+    "0100CL4.bcs",
+    "0100DAB1.bcs"
+   ]
+  },
+  {
+   "id": 16430,
+   "name": "HPPercentGT",
+   "sig": "(O:Object*,I:HitPoints*)",
+   "uses": 2,
+   "status": "",
+   "gemrb": "GameScript::HPPercentGT",
+   "where": [
+    "DMORTE.dlg",
+    "DNENNY.dlg"
+   ]
+  },
+  {
+   "id": 16432,
+   "name": "False",
+   "sig": "()",
+   "uses": 99,
+   "status": "noop(False)",
+   "gemrb": "GameScript::False",
+   "where": [
+    "0401SYBI.bcs",
+    "0512NXLV.bcs",
+    "0600DILG.bcs",
+    "0600PAT7.bcs",
+    "1202IGNU.bcs",
+    "1800TR01.bcs"
+   ]
+  },
+  {
+   "id": 16433,
+   "name": "HaveSpell",
+   "sig": "(I:Spell*Spell)",
+   "uses": 55,
+   "status": "",
+   "gemrb": "GameScript::HaveSpell",
+   "where": [
+    "0609VRIS.bcs",
+    "0610RAVL.bcs",
+    "0901TRIA.bcs",
+    "1204TRNF.bcs",
+    "1500HARG.bcs",
+    "1500HARX.bcs"
+   ]
+  },
+  {
+   "id": 16434,
+   "name": "HaveAnySpells",
+   "sig": "()",
+   "uses": 21,
+   "status": "",
+   "gemrb": "GameScript::HaveAnySpells",
+   "where": [
+    "0209NECR.bcs",
+    "0600ELOB.bcs",
+    "0600SALA.bcs",
+    "1400RATL.bcs",
+    "1600T1LD.bcs",
+    "1600T2LD.bcs"
+   ]
+  },
+  {
+   "id": 16436,
+   "name": "GlobalGT",
+   "sig": "(S:Name*,S:Area*,I:Value*)",
+   "uses": 2415,
+   "status": "",
+   "gemrb": "GameScript::GlobalGT",
+   "where": [
+    "0000HSRG.bcs",
+    "0101MF.bcs",
+    "0102MEBB.bcs",
+    "0107MART.bcs",
+    "0108HANE.bcs",
+    "0110PHAR.bcs"
+   ]
+  },
+  {
+   "id": 16437,
+   "name": "GlobalLT",
+   "sig": "(S:Name*,S:Area*,I:Value*)",
+   "uses": 795,
+   "status": "",
+   "gemrb": "GameScript::GlobalLT",
+   "where": [
+    "0000HSRG.bcs",
+    "0000MANA.bcs",
+    "0110PHAR.bcs",
+    "0208GRDS.bcs",
+    "0300CRIE.bcs",
+    "0400D1.bcs"
+   ]
+  },
+  {
+   "id": 16440,
+   "name": "NotStateCheck",
+   "sig": "(O:Object*,I:State*State)",
+   "uses": 8,
+   "status": "",
+   "gemrb": "GameScript::NotStateCheck",
+   "where": [
+    "0610RAVL.bcs",
+    "0901TRIA.bcs"
+   ]
+  },
+  {
+   "id": 16441,
+   "name": "NumTimesTalkedTo",
+   "sig": "(I:Num*)",
+   "uses": 479,
+   "status": "",
+   "gemrb": "GameScript::NumTimesTalkedTo",
+   "where": [
+    "0301RAMO.bcs",
+    "0301SHMO.bcs",
+    "0400ELY.bcs",
+    "0600JOLM.bcs",
+    "ATHUG.dlg",
+    "D300MER1.dlg"
+   ]
+  },
+  {
+   "id": 16442,
+   "name": "NumTimesTalkedToGT",
+   "sig": "(I:Num*)",
+   "uses": 342,
+   "status": "",
+   "gemrb": "GameScript::NumTimesTalkedToGT",
+   "where": [
+    "0301RAMO.bcs",
+    "0301SHMO.bcs",
+    "ATHUG.dlg",
+    "D300MER1.dlg",
+    "D300MER2.dlg",
+    "D300MER3.dlg"
+   ]
+  },
+  {
+   "id": 16443,
+   "name": "NumTimesTalkedToLT",
+   "sig": "(I:Num*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::NumTimesTalkedToLT",
+   "where": [
+    "DTHUGS1.dlg"
+   ]
+  },
+  {
+   "id": 16448,
+   "name": "GlobalTimerExpired",
+   "sig": "(S:Name*,S:Area*)",
+   "uses": 50,
+   "status": "",
+   "gemrb": "GameScript::GlobalTimerExpired",
+   "where": [
+    "0208GRDS.bcs",
+    "0500BEDI.bcs",
+    "1600T1GL.bcs",
+    "1600T1LD.bcs",
+    "1600T1RT.bcs",
+    "1600T2GL.bcs"
+   ]
+  },
+  {
+   "id": 16449,
+   "name": "GlobalTimerNotExpired",
+   "sig": "(S:Name*,S:Area*)",
+   "uses": 5,
+   "status": "",
+   "gemrb": "GameScript::GlobalTimerNotExpired",
+   "where": [
+    "AR0500.bcs",
+    "AR0502.bcs",
+    "AR0503.bcs",
+    "AR0511.bcs",
+    "AR0512.bcs"
+   ]
+  },
+  {
+   "id": 16450,
+   "name": "PartyHasItem",
+   "sig": "(S:Item*)",
+   "uses": 747,
+   "status": "",
+   "gemrb": "GameScript::PartyHasItem",
+   "where": [
+    "0201PORT.bcs",
+    "0403BOX.bcs",
+    "0403DOR2.bcs",
+    "1700TRO5.bcs",
+    "1800PTK4.bcs",
+    "AR0108.bcs"
+   ]
+  },
+  {
+   "id": 16451,
+   "name": "InParty",
+   "sig": "(O:Object*)",
+   "uses": 705,
+   "status": "",
+   "gemrb": "GameScript::InParty",
+   "where": [
+    "0200ANNA.bcs",
+    "0202TRG1.bcs",
+    "0202TRG2.bcs",
+    "0402DAKN.bcs",
+    "0402IGNS.bcs",
+    "0404FELL.bcs"
+   ]
+  },
+  {
+   "id": 16453,
+   "name": "CheckStatGT",
+   "sig": "(O:Object*,I:Value*,I:StatNum*Stats)",
+   "uses": 1502,
+   "status": "",
+   "gemrb": "GameScript::CheckStatGT",
+   "where": [
+    "1800TR07.bcs",
+    "1800TR12.bcs",
+    "1800TR21.bcs",
+    "D300MER8.dlg",
+    "DACTORCW.dlg",
+    "DADABUS.dlg"
+   ]
+  },
+  {
+   "id": 16454,
+   "name": "CheckStatLT",
+   "sig": "(O:Object*,I:Value*,I:StatNum*Stats)",
+   "uses": 1180,
+   "status": "",
+   "gemrb": "GameScript::CheckStatLT",
+   "where": [
+    "0901TRIA.bcs",
+    "D300MER8.dlg",
+    "DACTORCW.dlg",
+    "DADABUS.dlg",
+    "DADAHN.dlg",
+    "DANAM.dlg"
+   ]
+  },
+  {
+   "id": 16455,
+   "name": "RandomNum",
+   "sig": "(I:Range*,I:Value*)",
+   "uses": 198,
+   "status": "",
+   "gemrb": "GameScript::RandomNum",
+   "where": [
+    "0100THG1.bcs",
+    "0100THG2.bcs",
+    "0100THG3.bcs",
+    "0100THG4.bcs",
+    "0100THG5.bcs",
+    "0200THG1.bcs"
+   ]
+  },
+  {
+   "id": 16457,
+   "name": "RandomNumLT",
+   "sig": "(I:Range*,I:Value*)",
+   "uses": 2,
+   "status": "",
+   "gemrb": "GameScript::RandomNumLT",
+   "where": [
+    "0205POS1.bcs",
+    "0205POS2.bcs"
+   ]
+  },
+  {
+   "id": 16462,
+   "name": "PartyGold",
+   "sig": "(I:Amount*)",
+   "uses": 16,
+   "status": "",
+   "gemrb": "GameScript::PartyGold",
+   "where": [
+    "DBISH.dlg",
+    "DCOLYLFN.dlg",
+    "DHARLOTD.dlg",
+    "DHIVEF1.dlg",
+    "DKNFGHL.dlg",
+    "DMARTA.dlg"
+   ]
+  },
+  {
+   "id": 16463,
+   "name": "PartyGoldGT",
+   "sig": "(I:Amount*)",
+   "uses": 341,
+   "status": "",
+   "gemrb": "GameScript::PartyGoldGT",
+   "where": [
+    "ATHUG.dlg",
+    "D300MER1.dlg",
+    "D300MER5.dlg",
+    "D300MER6.dlg",
+    "D300MER8.dlg",
+    "DACTORCW.dlg"
+   ]
+  },
+  {
+   "id": 16464,
+   "name": "PartyGoldLT",
+   "sig": "(I:Amount*)",
+   "uses": 71,
+   "status": "",
+   "gemrb": "GameScript::PartyGoldLT",
+   "where": [
+    "D300MER5.dlg",
+    "D300MER6.dlg",
+    "DANNAH.dlg",
+    "DAOLA.dlg",
+    "DARLO.dlg",
+    "DBARKIS.dlg"
+   ]
+  },
+  {
+   "id": 16465,
+   "name": "Dead",
+   "sig": "(S:Name*)",
+   "uses": 588,
+   "status": "",
+   "gemrb": "GameScript::Dead",
+   "where": [
+    "0101VPRT.bcs",
+    "0110PHAR.bcs",
+    "0208ATAK.bcs",
+    "0209SKEL.bcs",
+    "0209SKLD.bcs",
+    "0402PTN1.bcs"
+   ]
+  },
+  {
+   "id": 16481,
+   "name": "HasItem",
+   "sig": "(S:ResRef*,O:Object*)",
+   "uses": 190,
+   "status": "",
+   "gemrb": "GameScript::HasItem",
+   "where": [
+    "1800PRT1.bcs",
+    "1800PRT6.bcs",
+    "1800PRT7.bcs",
+    "1800PRT8.bcs",
+    "DCASSIUS.dlg",
+    "DEIVENE.dlg"
+   ]
+  },
+  {
+   "id": 16482,
+   "name": "InteractingWith",
+   "sig": "(O:Object*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::InteractingWith",
+   "where": [
+    "0202DHAL.bcs"
+   ]
+  },
+  {
+   "id": 16488,
+   "name": "TimeGT",
+   "sig": "(I:Time*Time)",
+   "uses": 6,
+   "status": "",
+   "gemrb": "GameScript::TimeGT",
+   "where": [
+    "AR0500.bcs",
+    "AR0600.bcs",
+    "AR1500.bcs"
+   ]
+  },
+  {
+   "id": 16489,
+   "name": "TimeLT",
+   "sig": "(I:Time*Time)",
+   "uses": 6,
+   "status": "",
+   "gemrb": "GameScript::TimeLT",
+   "where": [
+    "AR0500.bcs",
+    "AR0600.bcs",
+    "AR1500.bcs"
+   ]
+  },
+  {
+   "id": 16496,
+   "name": "?16496",
+   "sig": "",
+   "uses": 7,
+   "status": "MISSING",
+   "gemrb": "",
+   "where": [
+    "0205POS1.bcs",
+    "0205POS2.bcs",
+    "0205POS3.bcs",
+    "0402JRKL.bcs"
+   ]
+  },
+  {
+   "id": 16501,
+   "name": "NearLocation",
+   "sig": "(O:Object*,P:Point*,I:Range*)",
+   "uses": 326,
+   "status": "",
+   "gemrb": "GameScript::NearLocation",
+   "where": [
+    "0000DLIM.bcs",
+    "0000GFIG.bcs",
+    "0000HPAT.bcs",
+    "0100NT.bcs",
+    "0100TEAR.bcs",
+    "0109INIT.bcs"
+   ]
+  },
+  {
+   "id": 16502,
+   "name": "NearSavedLocation",
+   "sig": "(I:Range*)",
+   "uses": 334,
+   "status": "",
+   "gemrb": "GameScript::NearSavedLocation",
+   "where": [
+    "0000GH.bcs",
+    "0000WAND.bcs",
+    "0100GH10.bcs",
+    "0100GH6.bcs",
+    "0100GH7.bcs",
+    "0100GH8.bcs"
+   ]
+  },
+  {
+   "id": 16508,
+   "name": "TimerActive",
+   "sig": "(I:ID*)",
+   "uses": 401,
+   "status": "",
+   "gemrb": "GameScript::TimerActive",
+   "where": [
+    "0000NAME.bcs",
+    "0000SUMN.bcs",
+    "0100THG1.bcs",
+    "0100THG2.bcs",
+    "0100THG3.bcs",
+    "0100THG4.bcs"
+   ]
+  },
+  {
+   "id": 16510,
+   "name": "CreatureInArea",
+   "sig": "(S:AreaName*)",
+   "uses": 163,
+   "status": "",
+   "gemrb": "GameScript::AreaCheck",
+   "where": [
+    "BALDUR.bcs",
+    "DANIZIUS.dlg",
+    "DBVCOLL.dlg",
+    "DCGOON1.dlg",
+    "DCGOON2.dlg",
+    "DCRSOFF2.dlg"
+   ]
+  },
+  {
+   "id": 16511,
+   "name": "BitCheck",
+   "sig": "(S:Name*,S:Area*,I:Bit*Bits)",
+   "uses": 171,
+   "status": "",
+   "gemrb": "GameScript::BitCheck",
+   "where": [
+    "0000MANA.bcs",
+    "0201DEIO.bcs",
+    "0202TRG1.bcs",
+    "0202TRG2.bcs",
+    "0208GRDS.bcs",
+    "0209BONE.bcs"
+   ]
+  },
+  {
+   "id": 16518,
+   "name": "GlobalORGlobal",
+   "sig": "(S:Name1*,S:Area1*,S:Name2*,S:Area2*)",
+   "uses": 46,
+   "status": "",
+   "gemrb": "GameScript::GlobalOrGlobal_Trigger",
+   "where": [
+    "DASHMAN.dlg",
+    "DBBPLOT1.dlg",
+    "DBBPLOT2.dlg",
+    "DBBPLOT3.dlg",
+    "DHARGRI.dlg"
+   ]
+  },
+  {
+   "id": 16521,
+   "name": "PartyCountEQ",
+   "sig": "(I:Count*)",
+   "uses": 27,
+   "status": "",
+   "gemrb": "GameScript::PartyCountEQ",
+   "where": [
+    "D0202P.dlg",
+    "DHARGRI.dlg",
+    "DHERMIT.dlg",
+    "DMANYAS1.dlg",
+    "DMEBBETH.dlg",
+    "DMFTREE.dlg"
+   ]
+  },
+  {
+   "id": 16522,
+   "name": "PartyCountLT",
+   "sig": "(I:Count*)",
+   "uses": 4,
+   "status": "",
+   "gemrb": "GameScript::PartyCountLT",
+   "where": [
+    "DGRACE.dlg",
+    "DNORDOM.dlg"
+   ]
+  },
+  {
+   "id": 16523,
+   "name": "PartyCountGT",
+   "sig": "(I:Count*)",
+   "uses": 38,
+   "status": "",
+   "gemrb": "GameScript::PartyCountGT",
+   "where": [
+    "D0202P.dlg",
+    "DBERROG.dlg",
+    "DBURGHER.dlg",
+    "DGRACE.dlg",
+    "DHARGRI.dlg",
+    "DHERMIT.dlg"
+   ]
+  },
+  {
+   "id": 16528,
+   "name": "PartyItemCountLT",
+   "sig": "(S:Item*,I:Count)",
+   "uses": 2,
+   "status": "",
+   "gemrb": "GameScript::NumItemsPartyLT",
+   "where": [
+    "DKNFGHL.dlg"
+   ]
+  },
+  {
+   "id": 16529,
+   "name": "PartyItemCountGT",
+   "sig": "(S:Item*,I:Count)",
+   "uses": 9,
+   "status": "",
+   "gemrb": "GameScript::NumItemsPartyGT",
+   "where": [
+    "DKNFGHL.dlg",
+    "DPHINEAS.dlg",
+    "DRATBONE.dlg"
+   ]
+  },
+  {
+   "id": 16531,
+   "name": "NearbyDialog",
+   "sig": "(S:DialogFile*)",
+   "uses": 4761,
+   "status": "",
+   "gemrb": "GameScript::NearbyDialog",
+   "where": [
+    "0506HAMY.bcs",
+    "ABISHAB.dlg",
+    "BMORTE.dlg",
+    "BNORDOM.dlg",
+    "D0202P.dlg",
+    "D300MER4.dlg"
+   ]
+  },
+  {
+   "id": 16535,
+   "name": "Proficiency",
+   "sig": "(O:Object*,I:Slot*WProf,I:Value*)",
+   "uses": 10,
+   "status": "",
+   "gemrb": "GameScript::Proficiency",
+   "where": [
+    "DMARQUEZ.dlg"
+   ]
+  },
+  {
+   "id": 16536,
+   "name": "ProficiencyLT",
+   "sig": "(O:Object*,I:Slot*WProf,I:Value*)",
+   "uses": 40,
+   "status": "",
+   "gemrb": "GameScript::ProficiencyLT",
+   "where": [
+    "DKORUR.dlg",
+    "DMARQUEZ.dlg",
+    "DPORPHIR.dlg",
+    "DQUISAI.dlg"
+   ]
+  },
+  {
+   "id": 16537,
+   "name": "ProficiencyGT",
+   "sig": "(O:Object*,I:Slot*WProf,I:Value*)",
+   "uses": 65,
+   "status": "",
+   "gemrb": "GameScript::ProficiencyGT",
+   "where": [
+    "DEBLADE.dlg",
+    "DKORUR.dlg",
+    "DMARQUEZ.dlg",
+    "DPORPHIR.dlg",
+    "DQUISAI.dlg"
+   ]
+  },
+  {
+   "id": 16538,
+   "name": "Faction",
+   "sig": "(O:Object*,I:Value*Faction)",
+   "uses": 5,
+   "status": "",
+   "gemrb": "GameScript::Faction",
+   "where": [
+    "BALDUR.bcs"
+   ]
+  },
+  {
+   "id": 16539,
+   "name": "Team",
+   "sig": "(O:Object*,I:Value*Team)",
+   "uses": 9,
+   "status": "",
+   "gemrb": "GameScript::Team",
+   "where": [
+    "0700RAL1.bcs",
+    "0700RAL2.bcs",
+    "0700RAL3.bcs",
+    "0700RAL4.bcs",
+    "0701RAL1.bcs",
+    "0701RAL2.bcs"
+   ]
+  },
+  {
+   "id": 16540,
+   "name": "StuffGlobalRandom",
+   "sig": "(S:Name*,S:Area*,I:Range*)",
+   "uses": 4,
+   "status": "",
+   "gemrb": "GameScript::StuffGlobalRandom",
+   "where": [
+    "DGAOHA.dlg"
+   ]
+  },
+  {
+   "id": 16545,
+   "name": "Internal",
+   "sig": "(O:Object*,I:Index*Internal,I:Value*)",
+   "uses": 728,
+   "status": "",
+   "gemrb": "GameScript::Internal",
+   "where": [
+    "0102MEBB.bcs",
+    "0108RFTF.bcs",
+    "0108TRCO.bcs",
+    "0109GGD2.bcs",
+    "0109GTHG.bcs",
+    "0205EMOR.bcs"
+   ]
+  },
+  {
+   "id": 16546,
+   "name": "InternalLT",
+   "sig": "(O:Object*,I:Index*Internal,I:Value*)",
+   "uses": 4,
+   "status": "",
+   "gemrb": "GameScript::InternalLT",
+   "where": [
+    "0300ASH.bcs",
+    "0609STND.bcs",
+    "0701BRD1.bcs",
+    "0701BRD2.bcs"
+   ]
+  },
+  {
+   "id": 16547,
+   "name": "InternalGT",
+   "sig": "(O:Object*,I:Index*Internal,I:Value*)",
+   "uses": 50,
+   "status": "",
+   "gemrb": "GameScript::InternalGT",
+   "where": [
+    "0601JUMB.bcs",
+    "0601LADY.bcs",
+    "0603LADY.bcs",
+    "0604QUEL.bcs",
+    "0605DOL1.bcs",
+    "0605DOL2.bcs"
+   ]
+  },
+  {
+   "id": 16550,
+   "name": "IsLocked",
+   "sig": "(O:Object*)",
+   "uses": 3,
+   "status": "",
+   "gemrb": "GameScript::IsLocked",
+   "where": [
+    "0500GGRD.bcs",
+    "AR0500.bcs"
+   ]
+  },
+  {
+   "id": 16552,
+   "name": "ExtraProficiency",
+   "sig": "(O:Object*,I:Value*)",
+   "uses": 20,
+   "status": "",
+   "gemrb": "GameScript::ExtraProficiency",
+   "where": [
+    "DKORUR.dlg",
+    "DMARQUEZ.dlg",
+    "DPORPHIR.dlg",
+    "DQUISAI.dlg"
+   ]
+  },
+  {
+   "id": 16554,
+   "name": "ExtraProficiencyGT",
+   "sig": "(O:Object*,I:Value*)",
+   "uses": 33,
+   "status": "",
+   "gemrb": "GameScript::ExtraProficiencyGT",
+   "where": [
+    "DKORUR.dlg",
+    "DMARQUEZ.dlg",
+    "DPORPHIR.dlg",
+    "DQUISAI.dlg"
+   ]
+  },
+  {
+   "id": 16557,
+   "name": "ClassLevelGT",
+   "sig": "(O:Object*,I:Value*Class,I:Value*)",
+   "uses": 18,
+   "status": "",
+   "gemrb": "GameScript::ClassLevelGT",
+   "where": [
+    "1204TRIG.bcs",
+    "DITEETH.dlg"
+   ]
+  },
+  {
+   "id": 16558,
+   "name": "ClassLevelLT",
+   "sig": "(O:Object*,I:Value*Class,I:Value*)",
+   "uses": 13,
+   "status": "",
+   "gemrb": "GameScript::ClassLevelLT",
+   "where": [
+    "1204TRIG.bcs",
+    "DWSCROLL.dlg"
+   ]
+  },
+  {
+   "id": 16561,
+   "name": "LastPersonTalkedTo",
+   "sig": "(O:Object*)",
+   "uses": 100,
+   "status": "",
+   "gemrb": "GameScript::LastPersonTalkedTo",
+   "where": [
+    "BANNAH.dlg",
+    "BGRACE.dlg",
+    "BMORTE.dlg",
+    "BNORDOM.dlg",
+    "BVHAILOR.dlg"
+   ]
+  },
+  {
+   "id": 16562,
+   "name": "IsInGuardianMantle",
+   "sig": "(O:Object*)",
+   "uses": 1,
+   "status": "",
+   "gemrb": "GameScript::IsInGuardianMantle",
+   "where": [
+    "1204TRNF.bcs"
+   ]
+  },
+  {
+   "id": 16576,
+   "name": "?16576",
+   "sig": "",
+   "uses": 14,
+   "status": "MISSING",
+   "gemrb": "",
+   "where": [
+    "BALDUR.bcs"
+   ]
+  },
+  {
+   "id": 16639,
+   "name": "?16639",
+   "sig": "",
+   "uses": 5,
+   "status": "MISSING",
+   "gemrb": "",
+   "where": [
+    "BALDUR.bcs"
+   ]
+  }
+ ],
+ "dlg_unknown_actions": [
+  "addexperienceparty",
+  "deactivate",
+  "polymorph",
+  "runawayfrom",
+  "setglobal"
+ ],
+ "dlg_unknown_triggers": []
+}

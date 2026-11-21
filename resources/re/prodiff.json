@@ -1,0 +1,726 @@
+[
+ {
+  "spl": "SPWI912",
+  "cls": "CPsSpellAbyssalFury",
+  "case": 234,
+  "gemrb_pro": "FURY",
+  "gemrb_has": false,
+  "ee_refs": [
+   "ABYSS02",
+   "ABYSS03",
+   "ABYSS04",
+   "ABYSS05",
+   "ABYSS06",
+   "ABYSS07",
+   "S077BARM",
+   "S077CRVS",
+   "S077SCRT",
+   "S077SPT2"
+  ],
+  "not_in_gemrb": [
+   "ABYSS02",
+   "ABYSS03",
+   "ABYSS04",
+   "ABYSS05",
+   "ABYSS06",
+   "ABYSS07",
+   "S077BARM",
+   "S077CRVS",
+   "S077SCRT",
+   "S077SPT2"
+  ]
+ },
+ {
+  "spl": null,
+  "cls": "CPsSpellAxOfTorment",
+  "case": null,
+  "gemrb_pro": null,
+  "gemrb_has": false,
+  "ee_refs": [
+   "AXOFT03",
+   "AXOFT04",
+   "AXOFT05",
+   "AXOFT06",
+   "MAGIC01",
+   "S031GRRN",
+   "S031LSRN",
+   "SE10FIZZ"
+  ],
+  "not_in_gemrb": [
+   "AXOFT03",
+   "AXOFT04",
+   "AXOFT05",
+   "AXOFT06",
+   "MAGIC01",
+   "S031GRRN",
+   "S031LSRN",
+   "SE10FIZZ"
+  ]
+ },
+ {
+  "spl": "SPWI301",
+  "cls": "CPsSpellBallLightning",
+  "case": 1,
+  "gemrb_pro": null,
+  "gemrb_has": false,
+  "ee_refs": [
+   "BALLL02",
+   "S034BALL"
+  ],
+  "not_in_gemrb": [
+   "BALLL02",
+   "S034BALL"
+  ]
+ },
+ {
+  "spl": "SPWI401",
+  "cls": "CPsSpellBlacksphere",
+  "case": 242,
+  "gemrb_pro": "BSPHERE",
+  "gemrb_has": false,
+  "ee_refs": [
+   "BLACK03",
+   "BLACK05",
+   "S041CAST"
+  ],
+  "not_in_gemrb": [
+   "BLACK03",
+   "BLACK05",
+   "S041CAST"
+  ]
+ },
+ {
+  "spl": "SPWI702",
+  "cls": "CPsSpellBladestorm",
+  "case": 232,
+  "gemrb_pro": "BSTORM",
+  "gemrb_has": true,
+  "ee_refs": [
+   "BLADE02",
+   "BLADE5A",
+   "BLADE5B",
+   "BLADE5C",
+   "EF01TPRT",
+   "S057BACK",
+   "S057BLAD",
+   "S057FLSH"
+  ],
+  "not_in_gemrb": [
+   "BLADE02",
+   "BLADE5A",
+   "BLADE5B",
+   "BLADE5C",
+   "S057FLSH"
+  ]
+ },
+ {
+  "spl": "SPWI901",
+  "cls": "CPsSpellCelestialHost",
+  "case": 254,
+  "gemrb_pro": "CHOST",
+  "gemrb_has": true,
+  "ee_refs": [
+   "CELH102",
+   "CELH103",
+   "CELH104",
+   "CELH203",
+   "CELH204",
+   "CELH205",
+   "CELH302",
+   "CELH303",
+   "CELH304",
+   "CELH306",
+   "CELH405",
+   "CELH406",
+   "DBOLT03",
+   "DRAGON",
+   "MAGIC01",
+   "MOP504",
+   "S091APPR",
+   "S091ARRS",
+   "S091ASUN",
+   "S091BLST",
+   "S091DEVA",
+   "S091DVAT",
+   "S091GATE",
+   "S091GRLY",
+   "S091HTCH",
+   "S091PHNX",
+   "S091RAIL",
+   "S091SMHT",
+   "SE10FIZZ",
+   "TORMENT"
+  ],
+  "not_in_gemrb": [
+   "CELH104",
+   "CELH203",
+   "CELH204",
+   "CELH205",
+   "CELH302",
+   "CELH303",
+   "CELH304",
+   "CELH306",
+   "CELH405",
+   "CELH406",
+   "DBOLT03",
+   "MAGIC01",
+   "MOP504",
+   "S091APPR",
+   "S091ARRS",
+   "S091ASUN",
+   "S091BLST",
+   "S091DEVA",
+   "S091DVAT",
+   "S091GRLY",
+   "S091HTCH",
+   "S091PHNX",
+   "S091RAIL",
+   "S091SMHT",
+   "SE10FIZZ"
+  ]
+ },
+ {
+  "spl": "SPWI604",
+  "cls": "CPsSpellChainLightningStorm",
+  "case": 246,
+  "gemrb_pro": "LSTORM",
+  "gemrb_has": true,
+  "ee_refs": [
+   "CHAIN03",
+   "CHAIN04",
+   "CHAIN05",
+   "MAGIC01",
+   "S064BGLT",
+   "S064HGLT",
+   "S064LORT",
+   "S064UPLT",
+   "SE10FIZZ"
+  ],
+  "not_in_gemrb": [
+   "CHAIN03",
+   "CHAIN04",
+   "CHAIN05",
+   "MAGIC01",
+   "S064BGLT",
+   "S064HGLT",
+   "S064LORT",
+   "S064UPLT",
+   "SE10FIZZ"
+  ]
+ },
+ {
+  "spl": "SPWI501",
+  "cls": "CPsSpellCloudKill",
+  "case": 230,
+  "gemrb_pro": "CLOUDKIL",
+  "gemrb_has": true,
+  "ee_refs": [
+   "CLOUD03",
+   "S056CKLL",
+   "TRAVEL"
+  ],
+  "not_in_gemrb": [
+   "TRAVEL"
+  ]
+ },
+ {
+  "spl": "SPWI902",
+  "cls": "CPsSpellConflagration",
+  "case": 270,
+  "gemrb_pro": "CONFLAG",
+  "gemrb_has": true,
+  "ee_refs": [
+   "A010SPIN",
+   "AURA_11A",
+   "CONFL05",
+   "CONFLAG"
+  ],
+  "not_in_gemrb": [
+   "A010SPIN",
+   "AURA_11A",
+   "CONFL05"
+  ]
+ },
+ {
+  "spl": "SPWI803",
+  "cls": "CPsSpellDeathBolt",
+  "case": 250,
+  "gemrb_pro": "DBOLT",
+  "gemrb_has": true,
+  "ee_refs": [
+   "CHAIN03",
+   "DBOLT03",
+   "DBOLT05",
+   "DBOLT06",
+   "S083BGCL",
+   "S083CLDS",
+   "S083FLSH"
+  ],
+  "not_in_gemrb": [
+   "CHAIN03",
+   "DBOLT05",
+   "DBOLT06",
+   "S083CLDS",
+   "S083FLSH"
+  ]
+ },
+ {
+  "spl": "SPWI505",
+  "cls": "CPsSpellDesertHell",
+  "case": 244,
+  "gemrb_pro": "DHELL",
+  "gemrb_has": true,
+  "ee_refs": [
+   "DESER03",
+   "EF01TPRT",
+   "MAGIC02",
+   "S055DSRT"
+  ],
+  "not_in_gemrb": [
+   "DESER03",
+   "MAGIC02"
+  ]
+ },
+ {
+  "spl": "SPWI905",
+  "cls": "CPsSpellElysiumsFires",
+  "case": 233,
+  "gemrb_pro": "ELYFIRE",
+  "gemrb_has": true,
+  "ee_refs": [
+   "S095PROJ"
+  ],
+  "not_in_gemrb": [
+   "S095PROJ"
+  ]
+ },
+ {
+  "spl": "SPWI305",
+  "cls": "CPsSpellElysiumsTears",
+  "case": 239,
+  "gemrb_pro": "ELYTEAR",
+  "gemrb_has": true,
+  "ee_refs": [
+   "S070BOMB"
+  ],
+  "not_in_gemrb": []
+ },
+ {
+  "spl": null,
+  "cls": "CPsSpellElysiumsTearsMeteor",
+  "case": null,
+  "gemrb_pro": null,
+  "gemrb_has": false,
+  "ee_refs": [
+   "ELYST04",
+   "ELYST05",
+   "MAGIC01",
+   "S070BOOM",
+   "SE10FIZZ"
+  ],
+  "not_in_gemrb": [
+   "ELYST04",
+   "ELYST05",
+   "MAGIC01",
+   "S070BOOM",
+   "SE10FIZZ"
+  ]
+ },
+ {
+  "spl": "SPWI103",
+  "cls": "CPsSpellEmbalming",
+  "case": 289,
+  "gemrb_pro": "EMBALM",
+  "gemrb_has": true,
+  "ee_refs": [
+   "MAGIC01",
+   "SE10FIZZ"
+  ],
+  "not_in_gemrb": [
+   "MAGIC01",
+   "SE10FIZZ"
+  ]
+ },
+ {
+  "spl": "SPWI506",
+  "cls": "CPsSpellFireAndIce",
+  "case": 245,
+  "gemrb_pro": "FIREICE",
+  "gemrb_has": true,
+  "ee_refs": [
+   "FIREA02",
+   "FIREA03",
+   "FIREA04",
+   "FIREA05",
+   "FIREA06",
+   "FIREA07",
+   "S056FEXP",
+   "S056FRBL",
+   "S056FTRL",
+   "S056ICBL",
+   "S056ICBM",
+   "S056ITRL"
+  ],
+  "not_in_gemrb": [
+   "FIREA05",
+   "FIREA06",
+   "FIREA07",
+   "S056ICBL",
+   "S056ICBM",
+   "S056ITRL"
+  ]
+ },
+ {
+  "spl": null,
+  "cls": "CPsSpellForceMissile",
+  "case": null,
+  "gemrb_pro": null,
+  "gemrb_has": false,
+  "ee_refs": [
+   "FORCE03",
+   "FORCE05"
+  ],
+  "not_in_gemrb": [
+   "FORCE03",
+   "FORCE05"
+  ]
+ },
+ {
+  "spl": "SPWI602",
+  "cls": "CPsSpellGlobeOfInvulnerability",
+  "case": 266,
+  "gemrb_pro": "GOINVUL",
+  "gemrb_has": true,
+  "ee_refs": [
+   "GLOBE03",
+   "GLOBE04",
+   "GLOBE05",
+   "S034DSPR",
+   "SHIEL06"
+  ],
+  "not_in_gemrb": [
+   "GLOBE04",
+   "GLOBE05",
+   "S034DSPR"
+  ]
+ },
+ {
+  "spl": "SPWI307",
+  "cls": "CPsSpellHoldUndead",
+  "case": 237,
+  "gemrb_pro": "HOLDUND",
+  "gemrb_has": true,
+  "ee_refs": [
+   "HOLDU03",
+   "HOLDU05"
+  ],
+  "not_in_gemrb": [
+   "HOLDU03"
+  ]
+ },
+ {
+  "spl": "SPWI603",
+  "cls": "CPsSpellHowlOfPandemonium",
+  "case": 231,
+  "gemrb_pro": "HOPAND",
+  "gemrb_has": true,
+  "ee_refs": [
+   "HOWL03",
+   "HOWL04",
+   "S055CAST"
+  ],
+  "not_in_gemrb": []
+ },
+ {
+  "spl": "SPWI207",
+  "cls": "CPsSpellIceKnife",
+  "case": 221,
+  "gemrb_pro": "IKNIFE",
+  "gemrb_has": true,
+  "ee_refs": [
+   "ICEKN04",
+   "ICEKN05",
+   "ICEKN06",
+   "NEG",
+   "S025COLD",
+   "S025MELT",
+   "S025PTRZ"
+  ],
+  "not_in_gemrb": [
+   "S025COLD",
+   "S025PTRZ"
+  ]
+ },
+ {
+  "spl": "SPWI804",
+  "cls": "CPsSpellIgnusFury",
+  "case": 251,
+  "gemrb_pro": "IFURY",
+  "gemrb_has": true,
+  "ee_refs": [
+   "IGNFU05",
+   "S084IGHD"
+  ],
+  "not_in_gemrb": []
+ },
+ {
+  "spl": "SPWI406",
+  "cls": "CPsSpellImprovedStrength",
+  "case": 228,
+  "gemrb_pro": "ISTR",
+  "gemrb_has": true,
+  "ee_refs": [
+   "MAGIC02",
+   "S046ISTM"
+  ],
+  "not_in_gemrb": [
+   "S046ISTM"
+  ]
+ },
+ {
+  "spl": "SPWI802",
+  "cls": "CPsSpellMeteorStormBombardment",
+  "case": 249,
+  "gemrb_pro": "MSWARM",
+  "gemrb_has": true,
+  "ee_refs": [
+   "METEO02",
+   "METEO05",
+   "METEO06",
+   "METEOR",
+   "S061BEAM",
+   "S061ROCK"
+  ],
+  "not_in_gemrb": [
+   "METEO02",
+   "S061ROCK"
+  ]
+ },
+ {
+  "spl": "SPWI113",
+  "cls": "CPsSpellMissileOfPatience",
+  "case": 238,
+  "gemrb_pro": "LMISS",
+  "gemrb_has": true,
+  "ee_refs": [
+   "MAGIC01",
+   "MOP103",
+   "MOP105",
+   "MOP503",
+   "MOP504",
+   "MOP505",
+   "MOP902",
+   "MOP903",
+   "MOP904",
+   "MOP905",
+   "S113BLAP",
+   "S113BLAR",
+   "S113BLDP",
+   "S113BLFR",
+   "S113BOWF",
+   "S113BWAR",
+   "S113SLBL",
+   "S113SLNG",
+   "S113SMOK",
+   "SE10FIZZ"
+  ],
+  "not_in_gemrb": [
+   "MAGIC01",
+   "MOP103",
+   "MOP105",
+   "MOP503",
+   "MOP504",
+   "MOP505",
+   "MOP902",
+   "MOP903",
+   "MOP904",
+   "MOP905",
+   "S113BLAP",
+   "S113BLAR",
+   "S113BLDP",
+   "S113BLFR",
+   "S113BOWF",
+   "S113BWAR",
+   "S113SLNG",
+   "S113SMOK",
+   "SE10FIZZ"
+  ]
+ },
+ {
+  "spl": "SPWI108",
+  "cls": "CPsSpellPacify",
+  "case": 222,
+  "gemrb_pro": "PACIFY",
+  "gemrb_has": true,
+  "ee_refs": [
+   "I001ZZZZ",
+   "MAGIC01",
+   "PACIF05",
+   "SE10FIZZ",
+   "TRAVEL"
+  ],
+  "not_in_gemrb": [
+   "I001ZZZZ",
+   "MAGIC01",
+   "SE10FIZZ"
+  ]
+ },
+ {
+  "spl": "SPWI219",
+  "cls": "CPsSpellPowerOfOne",
+  "case": 287,
+  "gemrb_pro": "POONE",
+  "gemrb_has": true,
+  "ee_refs": [
+   "MAGIC02"
+  ],
+  "not_in_gemrb": []
+ },
+ {
+  "spl": "SPWI805",
+  "cls": "CPsSpellPowerWordBlind",
+  "case": 252,
+  "gemrb_pro": "PWBLIND",
+  "gemrb_has": true,
+  "ee_refs": [
+   "PWBLI03",
+   "PWBLI05"
+  ],
+  "not_in_gemrb": []
+ },
+ {
+  "spl": "SPWI909",
+  "cls": "CPsSpellPowerWordKill",
+  "case": 265,
+  "gemrb_pro": "PWKILL",
+  "gemrb_has": true,
+  "ee_refs": [
+   "MAGIC01",
+   "PWKIL04",
+   "PWKIL05",
+   "SE10FIZZ"
+  ],
+  "not_in_gemrb": [
+   "MAGIC01",
+   "PWKIL05",
+   "SE10FIZZ"
+  ]
+ },
+ {
+  "spl": "SPWI914",
+  "cls": "CPsSpellRuneOfTorment",
+  "case": 255,
+  "gemrb_pro": "ROTORM",
+  "gemrb_has": true,
+  "ee_refs": [
+   "CELH406",
+   "RUNE",
+   "RUNET03",
+   "RUNET04",
+   "RUNET05",
+   "RUNET06",
+   "S914BGBL",
+   "S914HGBL",
+   "S914RUNE",
+   "TRAVEL"
+  ],
+  "not_in_gemrb": [
+   "CELH406",
+   "RUNET03",
+   "RUNET04",
+   "RUNET05",
+   "RUNET06",
+   "S914BGBL",
+   "S914HGBL",
+   "S914RUNE"
+  ]
+ },
+ {
+  "spl": "SPWI408",
+  "cls": "CPsSpellShroudOfShadows",
+  "case": 229,
+  "gemrb_pro": "SSHADOW",
+  "gemrb_has": true,
+  "ee_refs": [
+   "S048CRTR",
+   "SHROU03",
+   "SHROU05"
+  ],
+  "not_in_gemrb": [
+   "SHROU03",
+   "SHROU05"
+  ]
+ },
+ {
+  "spl": "SPWI211",
+  "cls": "CPsSpellStrength",
+  "case": 223,
+  "gemrb_pro": "STRENGTH",
+  "gemrb_has": true,
+  "ee_refs": [
+   "MAGIC02"
+  ],
+  "not_in_gemrb": []
+ },
+ {
+  "spl": "SPWI705",
+  "cls": "CPsSpellStygianIceStorm",
+  "case": 248,
+  "gemrb_pro": "ISTORM",
+  "gemrb_has": true,
+  "ee_refs": [
+   "STYGI03",
+   "STYGI04"
+  ],
+  "not_in_gemrb": [
+   "STYGI03",
+   "STYGI04"
+  ]
+ },
+ {
+  "spl": "SPWI212",
+  "cls": "CPsSpellSwarmCurse",
+  "case": 218,
+  "gemrb_pro": "ISWARM",
+  "gemrb_has": true,
+  "ee_refs": [
+   "NEG",
+   "S030SWEX",
+   "SWARM03",
+   "SWARM04",
+   "SWARM05",
+   "TRAVEL"
+  ],
+  "not_in_gemrb": [
+   "S030SWEX",
+   "SWARM03",
+   "TRAVEL"
+  ]
+ },
+ {
+  "spl": "SPWI308",
+  "cls": "CPsSpellTashasLaughter",
+  "case": 240,
+  "gemrb_pro": "TLAUGH",
+  "gemrb_has": true,
+  "ee_refs": [
+   "TRAVEL"
+  ],
+  "not_in_gemrb": []
+ },
+ {
+  "spl": "SPWI309",
+  "cls": "CPsSpellVampiricTouch",
+  "case": 263,
+  "gemrb_pro": "VTOUCH",
+  "gemrb_has": true,
+  "ee_refs": [
+   "MAGIC01",
+   "SE10FIZZ"
+  ],
+  "not_in_gemrb": [
+   "MAGIC01",
+   "SE10FIZZ"
+  ]
+ }
+]
