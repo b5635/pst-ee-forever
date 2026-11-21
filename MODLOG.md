@@ -35,3 +35,34 @@ region scripts would need patching ~300 ARE entries and would miss areas already
 3. The other `Fetch` in OnActionButton (1402193DB) is the travel-region message; deliberately not voiced.
 
 **Next.** Ask user to confirm audio by ear; other unvoiced text paths (item descriptions?) if they report any.
+
+## 2026-11-21 — turn-based combat groundwork (module `tbc` core, `dev` Lua bridge)
+
+**Goal.** BG3-style turns on PST's own rules. Research, probes and open questions: `docs/TBC_RESEARCH.md`.
+
+**Built.**
+- Pure core `src/modules/tbc/`: `tbc_rules.h` (time maths, APR encoding, initiative, path clip,
+  opportunity check), `director.*` (event-driven turn state machine: action/movement/reaction budgets,
+  shared party initiative, late joiners, removal/end), `tbc_sim.*` (scripted fight). 12 unit cases.
+- Engine adapters `src/engine/world.*` (ROUND_LENGTH, ENGINE_MODE, world clock) and `lua.*` (verified Lua
+  5.2 functions only). 12 new manifest entries with `pstf_verify` RIP-target and `.data` cross-checks.
+- `dev` module: redirects the `luaAuto.cfg` load in `CLUAConsole::LuaInit` (win 14022627A) and registers
+  `PSTF_*` probes. Toggle `[dev] lua=1`.
+
+**Engine facts found.** PST round = 51 ticks (not 100, not "5 s"): `LoadOptions` default by `ENGINE_MODE==3`.
+15 ticks per game second. Windows `CBaldurChitin` game pointer at +0x10C8 (Linux +0x1118). Pathfinding is on
+its own thread (`SearchThreadMain`). The ported `lua_createtable`/`lua_setfield`/`lua_type` names are wrong.
+
+**Verified in game** (temporary `luaAuto.cfg`, then removed): log shows `dev: Lua bridge installed at 14022627A`,
+7 functions registered, `PSTF_EngineMode -> 3`, `PSTF_TbcSim -> winner=party rounds=3 swings=10 clock=200`.
+`PSTF_RoundLength -> 100` at that point: **luaAuto.cfg runs before LoadOptions**; the 51 needs the console.
+
+**Gotchas.**
+1. luaAuto.cfg is too early for option-derived values (round length); game object exists already.
+2. Windows CBaldurChitin offsets differ from Linux; CInfGame offsets checked so far agree.
+3. `pstf_verify` only accepts code-section symbols; globals are checked through RIP-relative operands.
+
+**Restore.** `[dev] lua=0`, or `tools\deploy.ps1 -Remove`. No game files changed (probe cfg deleted).
+
+**Next.** Owner: enable `Cheats` in Baldur.lua and run `Infinity_DisplayString(PSTF_SelfTest())` in a save
+(expect `ok`). Then confirm `ProcessAI`/`AIUpdateWalk` vtable hooks and add `PSTF_Own/Release` (TBC_RESEARCH §7).

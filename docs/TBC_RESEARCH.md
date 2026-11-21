@@ -1,0 +1,238 @@
+# Turn-based combat: research notes, probes and tests
+
+Companion to `TURN_BASED_COMBAT_EXTENSION_PLAN.md` (design) for the `tbc` module. This file records
+**what the 3.2.2 engine actually does**, **how to find out more**, and **how each fact is asserted**.
+Target: BG3-style turns (initiative order, one action + movement + one reaction per turn, explicit
+End Turn, shared party initiative) on top of PST's own rules.
+
+Status (2026-11-21):
+- Done: pure core (`src/modules/tbc/`) with 12 unit cases; 12 new manifest entries checked statically;
+  a dev Lua bridge (`[dev] lua=1`) verified in the running game.
+- Not wired yet: the director does not take over creatures in game. Section 7 lists the hook points
+  still to confirm.
+
+---
+
+## 1. The ways in (cheapest first)
+
+| Layer | Tool | What it can tell you | Asserted by |
+|---|---|---|---|
+| L0 pure | `tools\check.ps1` -> `pstf_tests` | turn flow, budgets, APR, initiative, path clip, time maths | `tests/unit/test_tbc.cpp` |
+| L0 static | `tools\check.ps1` -> `pstf_verify` | engine code bytes, RIP-relative targets (globals), static `.data` values | `src/engine/symbols.h`, `tools/pstf_verify.cpp` |
+| RE lookup | `python -P tools/re.py ...`, `python -I tools/exe_bytes.py VA N [--rel32|--u32]` | logic (Linux), addresses/bytes (Windows) | becomes a manifest entry + test |
+| L1 startup Lua | `luaAuto.cfg` in the game folder (vanilla mechanism, §2.3) | runs our `PSTF_*` probes at boot; results land in our log | `pst_forever\logs\pst_forever.log` |
+| L1 console | Ctrl+Space Lua console (§2) | anything during play: `PSTF_*`, `C:Eval(...)`, engine bindings | log lines `lua: NAME -> value` |
+| L2 pipe (planned) | `tools\pstf.py` over `\\.\pipe\pst_forever` | same as console, but scriptable without a keyboard | not built yet |
+
+Agent loop for an engine fact: find it with `re.py` (Linux logic, then Windows asm), dump the bytes
+with `exe_bytes.py`, add a manifest entry plus a `pstf_verify` cross-check, read it at runtime
+through `src/engine/` and expose it as a `PSTF_*` Lua probe. Then assert it in `PSTF_SelfTest`.
+
+---
+
+## 2. The in-game Lua console (vanilla engine feature)
+
+### 2.1 Turning it on
+`CScreenWorld::OnKeyDown` (lin 4337F0) opens the `cheatConsole` menu (key code 32, space) only when
+`CInfGame` option `Cheats` **or** `Debug Mode` is set (CInfGame +0xB94C / +0xB960 on Linux:
+`*((_DWORD*)v3 + 11859 / 11864)`). Both are read from
+`Documents\Planescape Torment - Enhanced Edition\Baldur.lua`:
+
+```lua
+SetPrivateProfileString('Game Options','Cheats','1')         -- CInfGame::LoadOptions
+SetPrivateProfileString('Program Options','Debug Mode','1')  -- CBaldurChitin::LoadOptions (also sets a debug flag on the world screen)
+SetPrivateProfileString('Program Options','Logging On','1')  -- CChitin::m_bUseLogs (engine log)
+```
+
+On this machine `Baldur.lua` has neither (checked 2026-11-21); not changed without the owner's OK.
+The usual EE binding is **Ctrl+Space**; confirm the modifier on first use.
+The console text box is `luaEditArea`; input goes to `Infinity_LuaConsoleInput`.
+
+### 2.2 What the console can do
+- **Raw Lua 5.2** in the engine's single global state (the same state the `.menu` UI uses).
+  The standard libs are `_G, table, string, bit32, math, debug` (no `io`, `os`, `package`; see IESDP
+  `file_formats/ie_formats/lua_globals.htm`).
+- **`C:Eval('<BCS action>')`** (`CLUAConsole::Eval(CString,int)`, lin 27BFE0): parses the text with
+  `CAIScriptFile::ParseResponseString` and queues the actions on a creature through its
+  `InsertAction` vtable slot. Parse errors show as "Action Errors:" overhead text. This is the
+  cheapest way to **stage combat**: `C:Eval('Attack(NearestEnemyOf(Myself))')`,
+  `C:Eval('ChangeEnemyAlly(Myself,ENEMY)')`, `C:Eval('CreateCreature("...",[x.y],0)')`.
+- Other `C:` methods (Linux names): `CreateCreature, CreateItem, AddGold, SetGlobal, GetGlobal,
+  MoveToArea, ExploreArea, AdvanceRealTime(ticks), SetHour, EnableCheatKeys, PlaySound,
+  DisplayText, WriteScript, TestAllDialog, StrrefOn/Off, LogMessages`. Cheats: `CLUACheats::*`
+  (`CowKill, DrizztAttacks, DrizztDefends, Hans, Midas, FirstAid, CriticalItems`).
+- Engine objects from the tolua chunk: `game`, `timer = game:GetWorldTimer()`, `worldScreen`, ...
+  (IESDP lua_globals; BG:EE-derived, confirm per method on PST:EE).
+- Output: `Infinity_DisplayString(tostring(x))` (overhead/log text) and `Infinity_Log(...)` both exist
+  in PST:EE's `uiLoadFunctions`. Our probes also log every result, so the console never has to be read.
+
+### 2.3 `luaAuto.cfg` / `luaAutoS.cfg`
+`CLUAConsole::LuaInit` (lin 27AAB0, win 140226220) runs `luaL_loadfilex("luaAuto.cfg")` + `pcall`
+right after the engine bindings and `C` exist; `LuaUninit` runs `luaAutoS.cfg` at shutdown. Both are
+read from the working directory (the game folder). A missing file is silently ignored.
+- **Order fact (measured in game 2026-11-21):** `luaAuto.cfg` runs **before**
+  `CInfGame::LoadOptions`. `ROUND_LENGTH` is still its static 100 at that point, so round-length
+  checks must run later (console or a later hook). The game object already exists.
+- Test use: drop a `luaAuto.cfg` that calls `PSTF_*` probes, launch, read our log, delete the file.
+  That is how the 2026-11-21 check below ran.
+
+### 2.4 Our probes (`[dev] lua=1`, `src/modules/dev/lua_bridge.cpp`)
+Registered at the `luaAuto.cfg` call site (win 14022627A, redirected through a near trampoline).
+They only read engine state, on the game thread.
+
+| Function | Returns | Verified |
+|---|---|---|
+| `PSTF_Version()` | build string | in game |
+| `PSTF_EngineMode()` | `CChitin::ENGINE_MODE` (3 = PST:EE) | in game: 3 |
+| `PSTF_RoundLength()` | `CGameAnimationType::ROUND_LENGTH` ticks | in game: 100 at luaAuto time; 51 expected from the console |
+| `PSTF_WorldTime()` | `ticks, running` (`CInfGame::m_worldTime`) | static only |
+| `PSTF_RoundsForSeconds(s)` | effect rounds at the live round length | in game: 15 s -> 3 at 100 ticks |
+| `PSTF_TbcSim(seed)` | director fight summary at the live round length | in game: `winner=party rounds=3 swings=10 clock=200` |
+| `PSTF_SelfTest()` | `"ok"` or a list of failed engine-fact checks | in game: reported the luaAuto-is-too-early case |
+
+Console recipe (once Cheats is on): `Infinity_DisplayString(PSTF_SelfTest())`, then
+`Infinity_DisplayString(PSTF_RoundLength())` -> expect `ok` / `51`.
+Measure ticks per real second: call `PSTF_WorldTime()` twice about 10 s apart and compare the log
+lines (expected 15 per second at normal speed, unpaused).
+
+---
+
+## 3. Engine facts for turn-based combat (3.2.2)
+
+`lin` = Linux EA (logic), `win` = Windows EA (hook/bytes). "Static" = asserted by `pstf_verify`.
+
+### 3.1 Time
+| Fact | Evidence | Asserted |
+|---|---|---|
+| 15 game ticks per game second | `CGameAIBase::Wait` (lin 60E9B0) `*15`; effect `AddEffect` paths `/0xF`; IESDP "7 AI updates = 7/15 s" | unit (`kTicksPerSecond`) |
+| Day = 108000 ticks (24 h x 300 s x 15) | `CTimerWorld::UpdateTime` (lin 345D00, win 1402B3490) `% 0x1A5E0` | unit |
+| **PST round = 51 ticks (3.4 s)**, other EE = 100 | `CInfGame::LoadOptions` (lin 3679E0 L326-331; win 1402E775C/776A/777D): `"Round Length"` default `ENGINE_MODE==3 ? 51 : 100` | static (bytes + RIP targets + `.data`=100) |
+| `ROUND_LENGTH` global | win 14071F5FC (Linux E6A174); user-overridable in Baldur.lua | static + `PSTF_RoundLength` |
+| `ENGINE_MODE` | win 1407CB718 (bss), set by `initEngineSettings` from `engine.lua` `engine_mode=3` | static + in game (3) |
+| World clock | `[[g_pBaldurChitin 14072C278] + 0x10C8] + 0x7820` = `CTimerWorld` {+0 u32 ticks, +4 u8 running} | static (28-byte chain at 14035432E) |
+| Real-time render rate | `CChitin::TIMER_UPDATES_PER_SECOND` = "Maximum Frame Rate" (10..90, default 30; this machine 40) | not yet |
+
+> **Plan correction.** `TURN_BASED_COMBAT_EXTENSION_PLAN.md` says "a combat round is 5 seconds".
+> The engine's PST:EE round is 51 ticks = 3.4 game seconds. A 15 s debuff is 225 ticks, which is
+> `RoundsForSeconds(15, 51)` = 5 rounds (4.41 rounded up). The plan's "3 rounds" only holds for a
+> 5 s round. Decide with the owner which one the turn clock uses; the code takes the engine value.
+
+> **Layout warning.** The Windows `CBaldurChitin` has the game pointer at +0x10C8; Linux has it at
+> +0x1118 (`g_pBaldurChitin[547]`). Linux offsets in this class are **not** valid on Windows.
+> `CInfGame` offsets checked so far agree (+0x7820 timer, +0xA178/+0xA180 area list).
+
+### 3.2 Attacks, initiative, rounds
+- APR is stored as a short: 0..5 attacks, 6..10 = 0.5..4.5 (`v - 5.5`), >10 = 0
+  (`CDerivedStats::NumAttacksShortToFloat`, lin 17EA10). Unit-tested in `AprHalvesFromStat`.
+- The engine already has **per-swing initiative** inside the attack round: `CGameSprite::Swing`
+  (lin 4EAC10 L377-403) sets a delay = weapon speed (ability byte 18) minus a stat, plus
+  `rand(INITIATIVE_RANGE) - INITIATIVE_RANGE/2`, clamped 0..10, stored at sprite +0x484C (`this+9254*2`).
+  The director must let this play out (or zero it) inside our turn. **Find out:**
+  `re.py data "CGameSprite::INITIATIVE_RANGE"`, then `re.py code CGameSprite::Swing --lines 370-410 --win`.
+- `Swing` raises `AttackedBy`/`HitBy` triggers itself (L230-231): a turn that drives the engine's
+  own `Attack` action keeps the script-visible side effects for free. Prefer issuing real actions
+  (`C:Eval`-style `InsertAction`) and gating *when* they run over re-implementing swings.
+- Callers of `Swing`: `Attack`, `AttackReevaluate`, `RunAwayFrom`, `ProtectPoint`, `ProtectObject`.
+
+### 3.3 "Are we in combat?" (combat start/end signals)
+- Area battle music: `CGameArea::AIUpdate` (lin 1B8840) decrements a counter at area +0xFC4
+  (`this+1009*4`, Linux) and drops song 3 (battle) when it reaches 0. `CGameSprite::Attack` /
+  `AttackReevaluate` and `CMessageStartCombatMusic::Run` call `PlaySong(3)`. Candidate start/end
+  signal that matches what the player hears. **Confirm the Windows offset** in `re.py code CGameArea::AIUpdate --win`.
+- `CInfGame::CanRestParty` / `CGameArea::PSTCanRestParty` scan for nearby hostiles ("cannot rest").
+  That is the engine's own definition of "enemies near".
+- Hostility: `CAIObjectType::IsEnemyOf` (lin 5E4CC0, win 14012B7A0), `GetEnemyOf`. EA lives in the
+  sprite's `CAIObjectType` at sprite +0x30 (`this+48`).
+
+### 3.4 Taking a creature over
+- Per-sprite update: `CGameSprite::AIUpdate` (lin 53A510, win 1403B4330, vtable): effects
+  (`ProcessEffectList`), walking (`AIUpdateWalk`), animation, bounce, markers.
+  Script and action processing: `CGameSprite::ProcessAI` (lin 4FA830, win 140421830, vtable).
+  **Plan:** gate `ProcessAI` and `AIUpdateWalk` for director-owned ids only; keep animation running.
+  **Find out:** the vtable slot of each on Windows (`re.py xref CGameSprite::ProcessAI --win`; it has no
+  direct callers: it is called through the vtable from `CGameArea::AIUpdate`).
+- `CGameSprite::SetActiveAI(int)` (lin 522DE0) is the engine's own deactivation: it frees the path and
+  marks the pending `CSearchRequest` stale. It is too heavy for takeover (it also leaves the search
+  map) but shows what a clean stop has to drop.
+- **Pathfinding runs on its own thread** (`SearchThreadMain`, lin 341660, win 1402AEAB0). Requests are
+  `CSearchRequest` with states WAITING/PROCESSING/STALE. A path preview is therefore asynchronous:
+  queue a request on the game thread, wait for the result event, then `ClipPath`. Never touch the
+  request from our code off the game thread. (This is the PST:EE form of the fork's "stale cache" lesson.)
+- Pause: `CScreenWorld::TogglePauseGame` (lin 42F250, win 1403678A0), `CTimerWorld::StopTime/StartTime`.
+  Pausing stops the whole world, so a "pause between turns" design breaks hard requirement 2. Keep it
+  only as a fallback prototype.
+
+### 3.5 Names the port got wrong (fix in `manual_names.tsv` when confirmed)
+- `lua_createtable` -> win 1400E49E0 is really **`lua_setfield`** (strlen's a key at r8).
+- `lua_setfield` -> win 1400E47D0 is something else (takes two ints and runs a GC step). Unknown.
+- `isoc23_sscanf` = win 1400E3D00 is **`lua_type`** (index2addr, nil object -> -1, `type & 0xF`); the ported `lua_type` twin 140459E00 is wrong.
+- `luaL_loadfilex` = win 1400E6CA0 (unported; proved by the `luaAuto.cfg` call site).
+- The Windows `CInfGame::LoadOptions` pseudocode is cut short by `__noreturn`: read `re.py asm ... --all`.
+
+---
+
+## 4. How the BG3 turn maps onto PST (implemented in the director)
+
+| BG3 | Here | Code |
+|---|---|---|
+| Initiative once per fight | `d10 - dex reaction bonus`, lower first; ties: party, roll, id | `Initiative`, `InitBefore` |
+| Shared initiative for adjacent party members | consecutive party slots form a group; switch freely, budgets kept | `Director::SwitchTo` |
+| Action | one action: attack round **or** cast **or** use item/swap | `BeginSwing`, `BeginAction` |
+| Extra Attack | native APR: 3/2 = 2 swings, then 1, alternating per own round | `AttacksThisRound` |
+| Movement | pixel budget; path clipped once and reused for preview and walk | `ClipPath`, `BeginMove` |
+| Reaction | one opportunity attack, refreshed at its own turn start | `Reaction`, `LeavesReach` |
+| End Turn | explicit, or automatic when nothing is left; never while moving/swinging/casting | `EndTurn`, `MaybeAutoEnd` |
+| Late joiners | wait until next round if their slot already passed | `Director::Join` |
+| Bonus action | **PST has none.** Open decision: none (default), or quick-slot items | - |
+
+---
+
+## 5. Tests
+
+### 5.1 Exist (run by `tools\check.ps1`)
+- `tests/unit/test_tbc.cpp`: time maths, APR encoding, initiative order/ties, RNG determinism, path
+  clipping, opportunity check, director turn flow, 3/2 APR over two rounds, group switching, groups
+  split by a hostile, reactions, late joiners, removal/death/end, deterministic sim.
+- `pstf_verify`: Lua API bytes; the `luaAuto.cfg` call goes to `luaL_loadfilex`; LoadOptions
+  round-length bytes plus RIP targets (ENGINE_MODE, ROUND_LENGTH); static ROUND_LENGTH = 100;
+  world-clock chain: chitin global, +0x10C8, +0x7820, call to `UpdateTime`.
+
+### 5.2 To build next (cheapest layer that can catch it)
+1. **Console run of `PSTF_SelfTest`** after loading a save: `ok` and round length 51.
+2. **Real ticks per second**: two `PSTF_WorldTime()` samples; assert ~15/s unpaused and 0 paused.
+3. **Effect duration census** (static/RE): every `ROUND_LENGTH` user (39 refs:
+   `re.py data CGameAnimationType::ROUND_LENGTH`) and every `m_worldTime` reader on sprites, so the
+   combat clock knows what to rebase on handback.
+4. **Trigger parity** (in game, plan §2.4): stage one attack, one cast and one kill with `C:Eval`,
+   in real time and under the director, and compare `LastAttackerOf`, `AttackedBy`, `HitBy`, `Die`
+   and the kill variables. Needs a variable dump probe (`PSTF_Global(name)`).
+5. **Takeover probe**: `PSTF_Own(id)` / `PSTF_Release(id)` gating `ProcessAI`/`AIUpdateWalk` for one
+   creature. Assert it stops (no position change across N ticks) while a townsperson keeps walking.
+6. **Pipe + `tools\pstf.py`** so steps 1-5 run without a keyboard (`tools\ingame.ps1 -Suite tbc`).
+
+---
+
+## 6. Open questions and how to answer each
+
+| Question | How to find out |
+|---|---|
+| Which vtable slots hold `ProcessAI` / `AIUpdate` on Windows? | `re.py asm` on `CGameArea::AIUpdate --win`, look for `call qword ptr [rax+N]` on sprites; cross-check with `vtscan.py` output |
+| Windows offset of the area battle counter (Linux +0xFC4) | `re.py code CGameArea::AIUpdate --win --lines ...` near `PlaySong(..,256,4,1)` |
+| Sprite action queue / current action offsets | `re.py code CGameAIBase::SetCurrAction --win`, `ClearActions`, `InsertAction` (vtable +280 on Linux, per `CLUAConsole::Eval`) |
+| Does the console need Ctrl? | try in game with Cheats=1; or `re.py code CScreenWorld::OnKeyDown --lines 3180-3300` |
+| How does `C:Eval` pick the creature (`a3` slot vs selection)? | `re.py code CLUAConsole::Eval --lines 60-140` |
+| Weapon-speed delay inside the director turn | `re.py code CGameSprite::Swing --lines 370-410`; observe a 2-APR swing in game |
+| Exact real-time rate of AI ticks vs "Maximum Frame Rate" | `PSTF_WorldTime()` samples at 30 and 40 fps |
+
+---
+
+## 7. Next implementation steps
+1. Confirm `ProcessAI` and `AIUpdateWalk` hook points (section 6), add them to the manifest, and add a
+   `tbc` module with `[tbc] enabled=0`. Install no hooks when it is off.
+2. Ownership set (actor ids, never pointers) -> gate both functions for owned ids only. Probes:
+   `PSTF_Own/Release`.
+3. Combat start: area battle counter or the first hostile `Attack` on a party member -> `Director::Start`.
+4. Drive turns by issuing the engine's own actions (`InsertAction`, as `C:Eval` does) and completing
+   them on action-done events. Feed `MoveFinished`/`SwingResolved`/`ActionResolved`.
+5. Combat clock + handback rebase (census from 5.2.3).
+6. HUD: Lua `.menu` reading `PSTF_*` snapshots (turn order, budgets), End Turn button.

@@ -30,6 +30,8 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   - `asm NAME [--lin] [--lines A-B]` disassembly + IDA prototype (Windows by default: hook prologues)
   - `data REGEX [--win]` who reads/writes a global · `data FUNC --uses [--win]` globals a function touches
   - `addr NAME` Windows VA/RVA/bytes/unique signature (for the symbol manifest)
+- `python -I tools/exe_bytes.py VA N [--rel32|--u32]`: raw bytes of the on-disk exe at any VA (code or
+  `.data`), as C++ array, with rel32/RIP target or dword value. Use it for every manifest entry.
 - The dumps are complete (every function: pseudocode, disassembly, calls, data refs, prototype; proof in
   `resources/re/*/dump/verify.json`, asserted by the tests). Don't open IDA for lookups; use `re.py`.
   Never open `all_Torment.c`/`.asm` (tens of MB) or list `dec_all/` directly.
@@ -78,3 +80,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - When you repeat a multi-step check or search twice, turn it into a script or `re.py` subcommand and list it here.
 - Prefer `re.py code X --lines` slices over whole functions; prefer `xref`/`find` over reading code.
 - Probes so far: runtime log above (`voice: examine strref N (ms) played`).
+- Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest`,
+  callable from the in-game console (Ctrl+Space, needs `Cheats` or `Debug Mode` in Baldur.lua) or from a
+  temporary `<game>\luaAuto.cfg` (runs at boot, before LoadOptions). Every call logs `lua: NAME -> value`.
+  Details, engine facts and open questions for turn-based combat: `docs/TBC_RESEARCH.md`.

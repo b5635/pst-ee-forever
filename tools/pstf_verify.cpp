@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <vector>
@@ -83,6 +84,32 @@ int wmain(int argc, wchar_t** argv) {
   if (auto* p = img.At(sym::kRvaPlay + 4, 5)) {
     auto t = Rel32Target(sym::kImageBase + sym::kRvaPlay + 4, p);
     if (!t || *t != 0x140494BF0ull) Fail("wrapper does not jump to 140494BF0", "CSound::Play");
+  }
+
+  // RIP-relative operands: target = VA of the next instruction + disp32 at `disp_off`.
+  auto rip = [&](uint32_t rva, uint32_t insn_len, uint32_t disp_off, uint64_t want, const char* what) {
+    const uint8_t* p = img.At(rva + disp_off, 4);
+    int32_t disp = 0;
+    if (p) std::memcpy(&disp, p, 4);
+    if (!p || sym::kImageBase + rva + insn_len + static_cast<int64_t>(disp) != want)
+      Fail("rip-relative target differs", what);
+  };
+  if (auto* p = img.At(sym::kRvaLuaAutoLoadCall, 5)) {
+    auto t = Rel32Target(sym::kImageBase + sym::kRvaLuaAutoLoadCall, p);
+    if (!t || *t != sym::kVaLuaLoadFileX) Fail("call target is not luaL_loadfilex", "luaAuto");
+  }
+  rip(sym::kRvaRoundModeCmp, 7, 2, sym::kVaEngineMode, "ENGINE_MODE");
+  rip(sym::kRvaRoundStore, 6, 2, sym::kVaRoundLength, "ROUND_LENGTH");
+  rip(sym::kRvaWorldTimeChain, 7, 3, sym::kVaBaldurChitin, "g_pBaldurChitin");
+  if (auto* p = img.At(sym::kRvaWorldTimeChain + 23, 5)) {
+    auto t = Rel32Target(sym::kImageBase + sym::kRvaWorldTimeChain + 23, p);
+    if (!t || *t != sym::kVaTimerUpdateTime) Fail("call target is not UpdateTime", "worldtime");
+  }
+  // Static initialiser of ROUND_LENGTH (.data) is the non-PST default; LoadOptions stores 51.
+  if (auto* p = img.At(static_cast<uint32_t>(sym::kVaRoundLength - sym::kImageBase), 4)) {
+    uint32_t v = 0;
+    std::memcpy(&v, p, 4);
+    if (v != 100) Fail("static ROUND_LENGTH is not 100", "ROUND_LENGTH");
   }
 
   std::printf("verify: %zu symbols, %d failures\n", std::size(sym::kAll), g_fail);

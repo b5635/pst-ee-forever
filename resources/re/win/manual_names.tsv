@@ -5,3 +5,16 @@
 140495610	CSound::SetFireForget(int)
 140494BD0	CSound::Play(int)
 1404949D0	CSound::GetPlayTime(void)
+1400E3D00	lua_type
+1400E49E0	lua_setfield
+1400E6CA0	luaL_loadfilex
+1400E44C0	lua_pushcclosure
+1400E4920	lua_setglobal
+1400E4290	lua_pushnumber
+1400E4350	lua_pushstring
+1400E45D0	lua_pushboolean
+1400E3E90	lua_tonumberx
+1400E3B30	lua_gettop
+140226220	CLUAConsole::LuaInit(void)
+1402E6680	CInfGame::LoadOptions(void)
+1402B3490	CTimerWorld::UpdateTime(uchar)

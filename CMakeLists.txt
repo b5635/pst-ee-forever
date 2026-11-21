@@ -16,6 +16,9 @@ add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
 add_library(pstf_logic STATIC
   src/core/ini.cpp
   src/core/patch_math.cpp
+  src/modules/tbc/tbc_rules.cpp
+  src/modules/tbc/director.cpp
+  src/modules/tbc/tbc_sim.cpp
 )
 target_include_directories(pstf_logic PUBLIC src)
 
@@ -37,11 +40,14 @@ add_library(pst_forever SHARED
   src/core/patch.cpp
   src/engine/sound.cpp
   src/modules/voice/examine_voice.cpp
+  src/engine/world.cpp
+  src/engine/lua.cpp
+  src/modules/dev/lua_bridge.cpp
 )
 target_link_libraries(pst_forever PRIVATE pstf_logic bcrypt)
 
 # L0 unit tests
-add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp)
+add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp)
 target_link_libraries(pstf_tests PRIVATE pstf_logic)
 target_include_directories(pstf_tests PRIVATE tests/unit)
 
