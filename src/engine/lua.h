@@ -3,6 +3,7 @@
 // Only functions confirmed on both binaries are exposed (see symbols.h "Lua 5.2 API").
 #pragma once
 #include <cstdint>
+#include <string>
 
 namespace pstf::engine {
 
@@ -17,5 +18,9 @@ void LuaPushString(LuaState* L, const char* s);
 void LuaPushBool(LuaState* L, bool v);
 int LuaTop(LuaState* L);
 double LuaNumberArg(LuaState* L, int idx, double fallback);  // fallback if absent / not a number
+
+// Runs a Lua file in the engine's global state (g_lua). Returns "" on success, else the error text.
+// Game thread only, outside any engine Lua call (we use it from the frame tick).
+std::string LuaDoFile(const char* path);
 
 }  // namespace pstf::engine

@@ -105,6 +105,17 @@ int wmain(int argc, wchar_t** argv) {
     auto t = Rel32Target(sym::kImageBase + sym::kRvaWorldTimeChain + 23, p);
     if (!t || *t != sym::kVaTimerUpdateTime) Fail("call target is not UpdateTime", "worldtime");
   }
+  auto call_to = [&](uint32_t rva, uint64_t want, const char* what) {
+    const uint8_t* p = img.At(rva, 5);
+    auto t = p ? Rel32Target(sym::kImageBase + rva, p) : std::nullopt;
+    if (!t || *t != want) Fail("call target differs", what);
+  };
+  call_to(0x226264, sym::kImageBase + sym::kRvaLuaPCallK, "LuaInit -> lua_pcallk");
+  call_to(0x2262CB, sym::kImageBase + sym::kRvaLuaSetTop, "LuaInit -> lua_settop");
+  call_to(sym::kRvaFrameTickCall, sym::kVaChitinSyncUpdate, "frame tick -> CChitin::SynchronousUpdate");
+  rip(sym::kRvaGLuaLoad, 7, 3, sym::kVaGLua, "g_lua");
+  rip(sym::kRvaContinueLoadScreen, 7, 3, sym::kVaBaldurChitin, "OnContinueGame chitin");
+
   // Static initialiser of ROUND_LENGTH (.data) is the non-PST default; LoadOptions stores 51.
   if (auto* p = img.At(static_cast<uint32_t>(sym::kVaRoundLength - sym::kImageBase), 4)) {
     uint32_t v = 0;

@@ -66,3 +66,16 @@ its own thread (`SearchThreadMain`). The ported `lua_createtable`/`lua_setfield`
 
 **Next.** Owner: enable `Cheats` in Baldur.lua and run `Infinity_DisplayString(PSTF_SelfTest())` in a save
 (expect `ok`). Then confirm `ProcessAI`/`AIUpdateWalk` vtable hooks and add `PSTF_Own/Release` (TBC_RESEARCH §7).
+
+## 2026-11-21 — test lab: cheats, no movies, load a save with no input
+
+- Baldur.lua (owner's request): `'Game Options','Cheats','1'`, `'Program Options','Disable Movies','1'`.
+  Original backed up to `buildackup\Baldur.lua.20261121-020348`. Disable Movies skips story movies too.
+- `tools\launch.ps1 [-Save PREFIX] [-Lua FILE] [-Close]`: sets `Last Save PST`, starts the game with
+  `PSTF_AUTOLOAD=1`; the `dev` module presses Continue from a new per-frame tick and runs FILE when the world is up.
+- New manifest entries (30 total): frame tick call 140144254, active engine/start/world/load screen offsets
+  (Windows = Linux - 0x50 in CBaldurChitin), OnContinueGame, lua_pcallk/settop/tolstring, luaL_loadfilex, g_lua.
+- Verified: `launch.ps1 -Lua tests\ingame\smoke.lua -Close` -> exit 0, `PSTF_RoundLength -> 51`,
+  `PSTF_RoundsForSeconds(15) -> 5`, `PSTF_SelfTest -> ok`, about 3 s from launch to script.
+- Gotchas: the game is killed by PID, so Baldur.lua is not rewritten on that exit (our edits persist).
+  The ported name of 140144250 (`__acrt_uninitialize_tmpfile`) is wrong: it is CBaldurChitin::SynchronousUpdate.

@@ -5,6 +5,7 @@
 #include "core/config.h"
 #include "core/log.h"
 #include "core/version_guard.h"
+#include "modules/dev/autoload.h"
 #include "modules/dev/lua_bridge.h"
 #include "modules/voice/examine_voice.h"
 
@@ -26,6 +27,7 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   } else {
     pstf::Log("dev: Lua bridge disabled in ini");
   }
+  pstf::dev::InstallAutoload(ini);
   return 0;
 }
 

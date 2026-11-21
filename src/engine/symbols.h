@@ -123,6 +123,59 @@ constexpr uint32_t kOffChitinGame = 0x10C8;
 constexpr uint32_t kOffGameWorldTimer = 0x7820;
 constexpr uint64_t kVaTimerUpdateTime = 0x1402B3490ull;
 
+// --- more Lua: run a file later (dev autorun) ----------------------------------------------------
+// lua_pcallk(L,nargs,nres,errfunc,ctx,k): lin 6A2B50, win 1400E4EF0 (LuaInit calls it at 140226264).
+// lua_settop: lin 69FE40, win 1400E3B50 (LuaInit tail `jmp` at 1402262CB with edx=-2).
+// lua_tolstring: lin 6A1050, win 1400E40E0 (index2addr, type 4 fast path, luaV_tostring).
+// g_lua: win 14072C8C8 (LuaInit 140226226 `mov rcx,[g_lua]`).
+inline constexpr uint8_t kLuaPCallKBytes[] = {0x40, 0x53, 0x56, 0x57, 0x41, 0x56, 0x48, 0x83,
+                                              0xEC, 0x68, 0x48, 0x8B, 0x05, 0xD7, 0x40, 0x64};
+inline constexpr uint8_t kLuaSetTopBytes[] = {0x85, 0xD2, 0x78, 0x34, 0x48, 0x8B, 0x41, 0x20,
+                                              0x48, 0x63, 0xD2, 0x48, 0xFF, 0xC2, 0x48, 0xC1};
+inline constexpr uint8_t kLuaToLStringBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74,
+                                                 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x49};
+inline constexpr uint8_t kLuaLoadFileXBytes[] = {0x40, 0x55, 0x53, 0x41, 0x54, 0x41, 0x56, 0x41,
+                                                 0x57, 0x48, 0x8D, 0xAC, 0x24, 0xA0, 0xFE, 0xFF};
+inline constexpr uint8_t kGLuaLoadBytes[] = {0x48, 0x8B, 0x0D, 0x9B, 0x66, 0x50, 0x00};
+constexpr uint32_t kRvaLuaPCallK = 0x0E4EF0;
+constexpr uint32_t kRvaLuaSetTop = 0x0E3B50;
+constexpr uint32_t kRvaLuaToLString = 0x0E40E0;
+constexpr uint32_t kRvaLuaLoadFileX = 0x0E6CA0;
+constexpr uint32_t kRvaGLuaLoad = 0x226226;
+constexpr uint64_t kVaGLua = 0x14072C8C8ull;
+
+// --- frame tick ----------------------------------------------------------------------------------
+// CBaldurChitin::SynchronousUpdate (lin 15BE60; win 140144250, ported name __acrt_uninitialize_tmpfile
+// is wrong): `sub rsp,28h; call CChitin::SynchronousUpdate (1404A6120); add rsp,28h; jmp chWriteInifile`.
+// Called once per main-loop iteration by CChitin::Update on the main (game) thread.
+inline constexpr uint8_t kFrameTickCallBytes[] = {0xE8, 0xC7, 0x1E, 0x36, 0x00};
+constexpr uint32_t kRvaFrameTickCall = 0x144254;
+constexpr uint64_t kVaChitinSyncUpdate = 0x1404A6120ull;
+
+// --- screens (engines) ---------------------------------------------------------------------------
+// CChitin::pActiveEngine at chitin+0x260 (lin CChitin::SynchronousUpdate `this+76` qword;
+//   win 1404A6135 `cmp qword [rcx+260h],0`). Screens hang off CBaldurChitin, Windows = Linux - 0x50:
+//   start +0x1138 (tolua GetEngineStart win 14045F7BE; lin 0x1188), world +0x1148 (GetEngineWorld
+//   win 14045F9CE; lin 0x1198), load +0x1110 (OnContinueGame win 1403459C5; lin 0x1160).
+// CScreenStart::OnContinueGame(this) -> bool: lin 40F4C0, win 1403459A0: loads the save named by
+//   Baldur.lua 'Game Options','Last Save PST' (GetContinueSaveGameName, "Last Save %s" + campaign).
+inline constexpr uint8_t kActiveEngineCmpBytes[] = {0x48, 0x83, 0xB9, 0x60, 0x02, 0x00, 0x00, 0x00};
+inline constexpr uint8_t kGetEngineStartBytes[] = {0x48, 0x8B, 0x97, 0x38, 0x11, 0x00, 0x00};
+inline constexpr uint8_t kGetEngineWorldBytes[] = {0x48, 0x8B, 0x97, 0x48, 0x11, 0x00, 0x00};
+inline constexpr uint8_t kContinueLoadScreenBytes[] = {0x48, 0x8B, 0x0D, 0xAC, 0x68, 0x3E, 0x00, 0x33,
+                                                       0xD2, 0x48, 0x8B, 0x89, 0x10, 0x11, 0x00, 0x00};
+inline constexpr uint8_t kOnContinueGameBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8D,
+                                                   0x54, 0x24, 0x38, 0xE8, 0x60, 0xFC, 0xFF, 0xFF};
+constexpr uint32_t kRvaActiveEngineCmp = 0x4A6135;
+constexpr uint32_t kRvaGetEngineStart = 0x45F7BE;
+constexpr uint32_t kRvaGetEngineWorld = 0x45F9CE;
+constexpr uint32_t kRvaContinueLoadScreen = 0x3459C5;
+constexpr uint32_t kRvaOnContinueGame = 0x3459A0;
+constexpr uint32_t kOffChitinActiveEngine = 0x260;
+constexpr uint32_t kOffChitinStartScreen = 0x1138;
+constexpr uint32_t kOffChitinWorldScreen = 0x1148;
+constexpr uint32_t kOffChitinLoadScreen = 0x1110;
+
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 inline constexpr Symbol kAll[] = {
     PSTF_SYM("entry", kEntryRva, kEntryBytes, "PE AddressOfEntryPoint"),
@@ -149,6 +202,21 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("LoadOptions.round.store", kRvaRoundStore, kRoundStoreBytes, "lin 3679E0 / win 1402E777D"),
     PSTF_SYM("AsyncUpdate.worldtime.chain", kRvaWorldTimeChain, kWorldTimeChainBytes,
              "lin 4308B0 / win 14035432E"),
+    PSTF_SYM("lua_pcallk", kRvaLuaPCallK, kLuaPCallKBytes, "lin 6A2B50 / win 1400E4EF0"),
+    PSTF_SYM("lua_settop", kRvaLuaSetTop, kLuaSetTopBytes, "lin 69FE40 / win 1400E3B50"),
+    PSTF_SYM("lua_tolstring", kRvaLuaToLString, kLuaToLStringBytes, "lin 6A1050 / win 1400E40E0"),
+    PSTF_SYM("luaL_loadfilex", kRvaLuaLoadFileX, kLuaLoadFileXBytes, "lin 6A5320 / win 1400E6CA0"),
+    PSTF_SYM("LuaInit.g_lua", kRvaGLuaLoad, kGLuaLoadBytes, "lin 27AAB0 / win 140226226"),
+    PSTF_SYM("BaldurChitin.SyncUpdate.call", kRvaFrameTickCall, kFrameTickCallBytes,
+             "lin 15BE60 / win 140144254"),
+    PSTF_SYM("Chitin.SyncUpdate.activeEngine", kRvaActiveEngineCmp, kActiveEngineCmpBytes,
+             "lin 65C5C0 / win 1404A6135"),
+    PSTF_SYM("tolua.GetEngineStart", kRvaGetEngineStart, kGetEngineStartBytes, "lin 5D35D0 / win 14045F7BE"),
+    PSTF_SYM("tolua.GetEngineWorld", kRvaGetEngineWorld, kGetEngineWorldBytes, "win 14045F9CE"),
+    PSTF_SYM("OnContinueGame.loadScreen", kRvaContinueLoadScreen, kContinueLoadScreenBytes,
+             "lin 40F4C0 / win 1403459C5"),
+    PSTF_SYM("CScreenStart::OnContinueGame", kRvaOnContinueGame, kOnContinueGameBytes,
+             "lin 40F4C0 / win 1403459A0"),
 };
 #undef PSTF_SYM
 

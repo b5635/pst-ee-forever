@@ -214,3 +214,30 @@ TEST_CASE("tbc sim: same seed, same fight; party wins with PST round length") {
   CHECK(a.clock_ticks == (a.rounds - 1) * kRoundTicksPst);
   CHECK(a.swings >= 6);  // 6 hostile hp, every party swing hits
 }
+
+#include "modules/dev/autoload_logic.h"
+
+TEST_CASE("dev autoload: continue after a stable start screen, script after a stable world") {
+  using pstf::dev::Act;
+  using pstf::dev::Autoload;
+  using pstf::dev::Scr;
+  Autoload a;
+  for (uint32_t i = 0; i < 10; ++i) CHECK(a.Step(Scr::Other) == Act::None);  // movies, splash
+  for (uint32_t i = 1; i < Autoload::kStartStable; ++i) CHECK(a.Step(Scr::Start) == Act::None);
+  CHECK(a.Step(Scr::Start) == Act::Continue);
+  for (int i = 0; i < 20; ++i) CHECK(a.Step(Scr::Load) == Act::None);
+  CHECK(a.Step(Scr::World) == Act::None);
+  CHECK(a.Step(Scr::Other) == Act::None);  // a flicker resets the count
+  for (uint32_t i = 1; i < Autoload::kWorldStable; ++i) CHECK(a.Step(Scr::World) == Act::None);
+  CHECK(a.Step(Scr::World) == Act::RunScript);
+  CHECK(a.Step(Scr::World) == Act::None);  // once only
+
+  Autoload b;
+  Act last = Act::None;
+  for (uint32_t i = 0; i <= Autoload::kTimeout; ++i) last = b.Step(Scr::Other);
+  CHECK(last == Act::Fail);
+  Autoload c;
+  for (uint32_t i = 0; i < Autoload::kStartStable; ++i) c.Step(Scr::Start);
+  c.ContinueFailed();
+  CHECK(c.Step(Scr::World) == Act::None);
+}

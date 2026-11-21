@@ -18,3 +18,8 @@
 140226220	CLUAConsole::LuaInit(void)
 1402E6680	CInfGame::LoadOptions(void)
 1402B3490	CTimerWorld::UpdateTime(uchar)
+140144250	CBaldurChitin::SynchronousUpdate(void)
+1403459A0	CScreenStart::OnContinueGame(void)
+1400E4EF0	lua_pcallk
+1400E3B50	lua_settop
+1400E40E0	lua_tolstring

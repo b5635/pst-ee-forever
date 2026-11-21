@@ -43,6 +43,9 @@ add_library(pst_forever SHARED
   src/engine/world.cpp
   src/engine/lua.cpp
   src/modules/dev/lua_bridge.cpp
+  src/modules/dev/autoload.cpp
+  src/engine/screens.cpp
+  src/core/tick.cpp
 )
 target_link_libraries(pst_forever PRIVATE pstf_logic bcrypt)
 

@@ -20,7 +20,8 @@ Status (2026-11-21):
 | L0 pure | `tools\check.ps1` -> `pstf_tests` | turn flow, budgets, APR, initiative, path clip, time maths | `tests/unit/test_tbc.cpp` |
 | L0 static | `tools\check.ps1` -> `pstf_verify` | engine code bytes, RIP-relative targets (globals), static `.data` values | `src/engine/symbols.h`, `tools/pstf_verify.cpp` |
 | RE lookup | `python -P tools/re.py ...`, `python -I tools/exe_bytes.py VA N [--rel32|--u32]` | logic (Linux), addresses/bytes (Windows) | becomes a manifest entry + test |
-| L1 startup Lua | `luaAuto.cfg` in the game folder (vanilla mechanism, §2.3) | runs our `PSTF_*` probes at boot; results land in our log | `pst_forever\logs\pst_forever.log` |
+| **L1 scripted** | `tools\launch.ps1 -Lua tests\ingame\X.lua -Close` | loads a save with no input, runs X.lua in the engine state when the world is up; exit code = result | log lines; `error()` in X.lua fails the run |
+| L1 startup Lua | `luaAuto.cfg` in the game folder (vanilla mechanism, §2.3) | runs our `PSTF_*` probes at boot (too early for options) | `pst_forever\logs\pst_forever.log` |
 | L1 console | Ctrl+Space Lua console (§2) | anything during play: `PSTF_*`, `C:Eval(...)`, engine bindings | log lines `lua: NAME -> value` |
 | L2 pipe (planned) | `tools\pstf.py` over `\\.\pipe\pst_forever` | same as console, but scriptable without a keyboard | not built yet |
 
@@ -76,7 +77,20 @@ read from the working directory (the game folder). A missing file is silently ig
 - Test use: drop a `luaAuto.cfg` that calls `PSTF_*` probes, launch, read our log, delete the file.
   That is how the 2026-11-21 check below ran.
 
-### 2.4 Our probes (`[dev] lua=1`, `src/modules/dev/lua_bridge.cpp`)
+### 2.4 Loading a save with no input (`tools\launch.ps1`)
+- `CScreenStart::OnContinueGame` (lin 40F4C0, win 1403459A0) loads the save Baldur.lua names in
+  `'Game Options','Last Save PST'` (`GetContinueSaveGameName`: `"Last Save %s"` + campaign "PST").
+- `launch.ps1` writes that key, starts the game with `PSTF_AUTOLOAD=1`; the `dev` module ticks every frame
+  (redirected `call CChitin::SynchronousUpdate` in `CBaldurChitin::SynchronousUpdate`, win 140144254), waits
+  30 frames on the start screen, calls `OnContinueGame`, waits 60 frames on the world screen, then runs
+  `PSTF_RUN_LUA` through `luaL_loadfilex` + `lua_pcallk` on `g_lua`. Logic: `autoload_logic.h` (unit-tested).
+- Active screen = `chitin+0x260` compared with start `+0x1138`, world `+0x1148`, load `+0x1110`.
+- Measured 2026-11-21: start screen at frame 1 (movies off), Continue at frame 30, world at frame 31,
+  script at frame 90, about 3 s after launch. Engine switches `+loadgame`/`+newgame` exist in
+  `CChitin::ParseCommandLine` but only set flags (multiplayer path); not used.
+- Movies: `'Program Options','Disable Movies'` makes `CBaldurProjector::PlayMovie` return at once (all movies).
+
+### 2.5 Our probes (`[dev] lua=1`, `src/modules/dev/lua_bridge.cpp`)
 Registered at the `luaAuto.cfg` call site (win 14022627A, redirected through a near trampoline).
 They only read engine state, on the game thread.
 
@@ -84,11 +98,12 @@ They only read engine state, on the game thread.
 |---|---|---|
 | `PSTF_Version()` | build string | in game |
 | `PSTF_EngineMode()` | `CChitin::ENGINE_MODE` (3 = PST:EE) | in game: 3 |
-| `PSTF_RoundLength()` | `CGameAnimationType::ROUND_LENGTH` ticks | in game: 100 at luaAuto time; 51 expected from the console |
+| `PSTF_RoundLength()` | `CGameAnimationType::ROUND_LENGTH` ticks | in game: 100 at luaAuto time, **51 with a save loaded** |
+| `PSTF_Screen()` | active screen: start/load/world/other/none | in game: world |
 | `PSTF_WorldTime()` | `ticks, running` (`CInfGame::m_worldTime`) | static only |
 | `PSTF_RoundsForSeconds(s)` | effect rounds at the live round length | in game: 15 s -> 3 at 100 ticks |
 | `PSTF_TbcSim(seed)` | director fight summary at the live round length | in game: `winner=party rounds=3 swings=10 clock=200` |
-| `PSTF_SelfTest()` | `"ok"` or a list of failed engine-fact checks | in game: reported the luaAuto-is-too-early case |
+| `PSTF_SelfTest()` | `"ok"` or a list of failed engine-fact checks | in game: `ok` with a save loaded |
 
 Console recipe (once Cheats is on): `Infinity_DisplayString(PSTF_SelfTest())`, then
 `Infinity_DisplayString(PSTF_RoundLength())` -> expect `ok` / `51`.
@@ -198,7 +213,7 @@ lines (expected 15 per second at normal speed, unpaused).
   world-clock chain: chitin global, +0x10C8, +0x7820, call to `UpdateTime`.
 
 ### 5.2 To build next (cheapest layer that can catch it)
-1. **Console run of `PSTF_SelfTest`** after loading a save: `ok` and round length 51.
+1. ~~Console run of `PSTF_SelfTest`~~ done via `launch.ps1 -Lua tests/ingame/smoke.lua`: `ok`, round length 51.
 2. **Real ticks per second**: two `PSTF_WorldTime()` samples; assert ~15/s unpaused and 0 paused.
 3. **Effect duration census** (static/RE): every `ROUND_LENGTH` user (39 refs:
    `re.py data CGameAnimationType::ROUND_LENGTH`) and every `m_worldTime` reader on sprites, so the
@@ -208,7 +223,7 @@ lines (expected 15 per second at normal speed, unpaused).
    and the kill variables. Needs a variable dump probe (`PSTF_Global(name)`).
 5. **Takeover probe**: `PSTF_Own(id)` / `PSTF_Release(id)` gating `ProcessAI`/`AIUpdateWalk` for one
    creature. Assert it stops (no position change across N ticks) while a townsperson keeps walking.
-6. **Pipe + `tools\pstf.py`** so steps 1-5 run without a keyboard (`tools\ingame.ps1 -Suite tbc`).
+6. **Pipe + `tools\pstf.py`** for live queries during a session (scripted runs already work through `launch.ps1`).
 
 ---
 

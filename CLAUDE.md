@@ -51,11 +51,16 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - **Default loop: `tools\check.ps1`**: build, L0 unit tests, static hook verification against the on-disk
   `Torment.exe`. Prints only errors and the summary.
 - `tools\deploy.ps1` copies `version.dll`, `pst_forever.dll` and `pst_forever\` into the game folder (closes the game first).
-- `tools\ingame.ps1 -Suite NAME` runs an in-game test suite and returns its exit code.
+- **`tools\launch.ps1 [-Save PREFIX] [-Lua FILE] [-Close]`**: starts the game straight into a save (newest by default)
+  and runs FILE in the engine's Lua state once the world is up; prints our log lines; exit 0 = loaded and the
+  script raised no error. ~3 s to a loaded save. Smoke test: `tools\launch.ps1 -Lua tests\ingame\smoke.lua -Close`.
+  How: sets Baldur.lua `Last Save PST`, env `PSTF_AUTOLOAD=1`/`PSTF_RUN_LUA`, the `dev` module presses Continue.
+  Baldur.lua on this machine has `Cheats=1` (console) and `Disable Movies=1` (skips ALL movies, story ones too);
+  backup of the original in `buildackup\`.
 - `python tools\pstf.py CMD` queries a running game over the dev pipe (`lua`, `actors`, `actor ID`, `hooks`, `shot`).
 - RE tooling guards: `python -m pytest tests/tools -q` (exe hashes, dump completeness, key mappings).
 - RE pipeline: `bash tools/re_pipeline.sh` (see `docs/ARCHITECTURE.md` §2); ~2.5 h, run in the background.
-- Exist now: `check.ps1`, `deploy.ps1` (`-Remove` = back to vanilla). Not yet: `ingame.ps1`, `pstf.py`.
+- Exist now: `check.ps1`, `deploy.ps1` (`-Remove` = back to vanilla), `launch.ps1`. Not yet: `pstf.py` (pipe).
 - Symbol manifest is compiled in: `src/engine/symbols.h` (shared by the DLL and `pstf_verify`). Unit tests use
   `tests/unit/mini_test.h` (no doctest dependency).
 - Runtime log: `<game>\pst_forever\logs\pst_forever.log` (hook status, every examine line played).
@@ -80,7 +85,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - When you repeat a multi-step check or search twice, turn it into a script or `re.py` subcommand and list it here.
 - Prefer `re.py code X --lines` slices over whole functions; prefer `xref`/`find` over reading code.
 - Probes so far: runtime log above (`voice: examine strref N (ms) played`).
-- Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest`,
+- Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest/Screen`,
   callable from the in-game console (Ctrl+Space, needs `Cheats` or `Debug Mode` in Baldur.lua) or from a
   temporary `<game>\luaAuto.cfg` (runs at boot, before LoadOptions). Every call logs `lua: NAME -> value`.
   Details, engine facts and open questions for turn-based combat: `docs/TBC_RESEARCH.md`.

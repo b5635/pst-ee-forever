@@ -12,6 +12,7 @@
 #include "core/log.h"
 #include "core/patch.h"
 #include "engine/lua.h"
+#include "engine/screens.h"
 #include "engine/symbols.h"
 #include "engine/world.h"
 #include "modules/tbc/tbc_rules.h"
@@ -47,6 +48,9 @@ int __cdecl WorldTime(LuaState* L) {
   engine::LuaPushNumber(L, ok ? t : -1.0);
   engine::LuaPushBool(L, running);
   return 2;
+}
+int __cdecl Screen(LuaState* L) {
+  return Ret(L, "PSTF_Screen", std::string(engine::ScreenName(engine::ActiveScreen())));
 }
 int __cdecl RoundsForSeconds(LuaState* L) {
   const double s = engine::LuaNumberArg(L, 1, 0);
@@ -85,7 +89,8 @@ int __fastcall LuaAutoLoad(LuaState* L, const char* file, const char* mode) {
   } const fns[] = {{"PSTF_Version", Version},         {"PSTF_RoundLength", RoundLength},
                    {"PSTF_EngineMode", EngineMode},   {"PSTF_WorldTime", WorldTime},
                    {"PSTF_RoundsForSeconds", RoundsForSeconds},
-                   {"PSTF_TbcSim", TbcSim},           {"PSTF_SelfTest", SelfTest}};
+                   {"PSTF_TbcSim", TbcSim},           {"PSTF_SelfTest", SelfTest},
+                   {"PSTF_Screen", Screen}};
   for (const auto& f : fns) engine::LuaRegister(L, f.name, f.fn);
   Log("dev: %zu PSTF_* Lua functions registered (round length %u, engine mode %d)",
       sizeof(fns) / sizeof(fns[0]), engine::RoundLengthTicks(), engine::EngineMode());
