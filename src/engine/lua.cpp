@@ -60,6 +60,12 @@ double LuaNumberArg(LuaState* L, int idx, double fallback) {
   return isnum ? v : fallback;
 }
 
+std::string LuaStringArg(LuaState* L, int idx) {
+  if (LuaTop(L) < idx) return "";
+  const char* s = Fn<ToLStringFn>(sym::kRvaLuaToLString)(L, idx, nullptr);
+  return s ? s : "";
+}
+
 namespace {
 std::string Run(bool file, const char* what) {
   if (!LuaApiAvailable()) return "Lua API differs from the manifest";

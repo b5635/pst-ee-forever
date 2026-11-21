@@ -39,6 +39,7 @@ add_library(pst_forever SHARED
   src/core/config.cpp
   src/core/version_guard.cpp
   src/core/patch.cpp
+  src/core/crashlog.cpp
   src/engine/sound.cpp
   src/modules/voice/examine_voice.cpp
   src/engine/world.cpp
@@ -50,9 +51,14 @@ add_library(pst_forever SHARED
   src/core/shot.cpp
   src/engine/sprites.cpp
   src/engine/menu.cpp
+  src/engine/render.cpp
   src/modules/tbc/tbc_module.cpp
 )
 target_link_libraries(pst_forever PRIVATE pstf_logic bcrypt)
+# Map file: tools/crash.py names pst_forever.dll addresses from it.
+target_link_options(pst_forever PRIVATE /MAP /DEBUG /OPT:REF /OPT:ICF)
+# PDB for cdb/WinDbg (tools\dbg.ps1): symbols for our frames in the engine's crash dumps.
+target_compile_options(pst_forever PRIVATE /Zi)
 
 # L0 unit tests
 add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp)

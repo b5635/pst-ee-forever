@@ -31,6 +31,14 @@ function pstfBestImage(idx)
 	end
 	return ref or c.imageKnown
 end
+-- Turn-based: a portrait click selects only the party member whose turn it is.
+if Infinity_OnPortraitLClick and not pstfOrigPortraitL then
+	pstfOrigPortraitL = Infinity_OnPortraitLClick
+	Infinity_OnPortraitLClick = function(n)
+		if pstfTbc.on and n ~= pstfTbc.slot then return end
+		return pstfOrigPortraitL(n)
+	end
+end
 function pstfCard(i) return pstfTbc.on and pstfTbc.cards[i] or nil end
 function pstfCardOn(i) return pstfCard(i) ~= nil end
 function pstfCardImage(i)
@@ -188,8 +196,8 @@ std::string BuildHudLua(const HudView& v) {
   std::string s = "pstfTbc = {on=";
   s += v.on ? "true" : "false";
   char b[256];
-  std::snprintf(b, sizeof b, ",round=%u,party=%s,move=%.2f,maxMove=%.2f,used=%s,acting=%s,pathFt=%d,lx=%d,ly=%d",
-                v.round, v.party_turn ? "true" : "false", v.move_ft, v.max_ft,
+  std::snprintf(b, sizeof b, ",round=%u,slot=%d,party=%s,move=%.2f,maxMove=%.2f,used=%s,acting=%s,pathFt=%d,lx=%d,ly=%d",
+                v.round, v.slot, v.party_turn ? "true" : "false", v.move_ft, v.max_ft,
                 v.action_used ? "true" : "false", v.acting ? "true" : "false", v.path_ft, v.label_x,
                 v.label_y);
   s += b;

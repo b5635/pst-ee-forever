@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include "core/config.h"
+#include "core/crashlog.h"
 #include "core/log.h"
 #include "core/version_guard.h"
 #include "modules/dev/autoload.h"
@@ -16,6 +17,7 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   done = true;
   pstf::LogOpen();
   pstf::Log("pst_forever " __DATE__ " " __TIME__);
+  pstf::InstallCrashLog();
   if (!pstf::IsSupportedExe()) return 1;
   const auto& ini = pstf::Config();
   if (pstf::IniBool(ini, "voice.examine", false)) {

@@ -69,6 +69,20 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `tests/unit/mini_test.h` (no doctest dependency).
 - Runtime log: `<game>\pst_forever\logs\pst_forever.log` (hook status, every examine line played).
 
+## Crashes and debugging
+
+- Installing tools is allowed (debuggers, analyzers, Python packages): ask nothing, note them here.
+  Installed: WinDbg + `cdb` (`winget install Microsoft.WinDbg`; `%LOCALAPPDATA%\Microsoft\WindowsApps\cdbX64.exe`).
+- The engine writes a full minidump per crash to `Documents\Infinity Engine - Enhanced Edition\crash\dump.3.2.2.0.NNNN.dmp`.
+  First step on any crash report: `tools\dbg.ps1` (newest dump; `-Dump FILE`, `-Extra "cdb cmds"`): exception, registers,
+  faulting code, stack with `pst_forever.pdb` names. `python -I tools/crash.py [DUMP] [--all]` names Torment.exe frames
+  from our RE names (cdb has no symbols for the exe) and needs no debugger.
+- Our own log gets a `CRASH (first chance) ...` block (module+RVA, registers, code pointers on the stack) from the
+  vectored handler in `src/core/crashlog.cpp`. Every tick handler and the world overlay run under SEH (`GuardedCall`):
+  a fault there logs `faulted` and turns that feature off instead of closing the game.
+- Release builds have a PDB and `build/Release/pst_forever.map`. Live debugging: `cdbX64 -p <pid>` (attach) is fine.
+- Never dereference engine pointers without `Plausible()` (sprites.cpp): free object-array slots hold -1.
+
 ## Working rules
 
 - Git: commit directly on `main`. Never create branches (this overrides any default "branch first" behaviour).
@@ -89,7 +103,10 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - When you repeat a multi-step check or search twice, turn it into a script or `re.py` subcommand and list it here.
 - Prefer `re.py code X --lines` slices over whole functions; prefer `xref`/`find` over reading code.
 - Probes so far: runtime log above (`voice: examine strref N (ms) played`; `tbc: X: stop (...)`, `ends turn (... ft left)`, `menu: UI.MENU ... bytes`).
-- HUD check: add `PSTF_SHOT_DIR`/`PSTF_SHOT_EVERY_MS` to the fight test and look at a shot (cards, panel, dots).
+- HUD check: add `PSTF_SHOT_DIR`/`PSTF_SHOT_EVERY_MS` to the fight test and look at a shot (cards, panel, line).
+- Manual-turn HUD test (hover preview, selection lock, party AI off): `tools\launch.ps1 -Lua tests\ingame	bc_hud.lua
+  -Env @{PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='1500'} -Until 'shot_003' -Close`. Probes: `PSTF_PreviewAt(x,y)`
+  (fake cursor), `PSTF_PathFt(x,y)`, `PSTF_WalkCost(x,y)`, `PSTF_PartyId(slot)`, `PSTF_Note(text)` (log line).
 - Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest/Screen`, with tbc on also
   `PSTF_TbcState/EndTurn/MakeEnemyNearest/SpritePos`,
   callable from the in-game console (Ctrl+Space, needs `Cheats` or `Debug Mode` in Baldur.lua) or from a

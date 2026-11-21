@@ -334,7 +334,15 @@ An earlier run without staging started when the hostile walked up on its own, an
 - Movement line: path cells from index +0x44F0 to count +0x4478, decoded as `AIUpdateWalk`;
   world -> UI = (p - view + viewport rect) / zoom, as `CGameAreaNotes::UpdateButtonPositions`.
 
-### 9.3 Open
-- Path preview on hover (before the click): needs `CPathSearch::FindPath` on a snapshot from the
-  game thread; the search thread owns the shared snapshot today.
+### 9.3 Hover preview, line, turn control (done)
+- Line: `CVidMode::DrawLine2d` (win 14049D870) after `CGameArea::Render` inside `RenderZoomed` (zoom-scaled);
+  args (vid, x1, y1, x2, y2, CRect* clip = area+0x650, uint 0xBBGGRR (alpha >= 0xAA), half_width, start_trim,
+  end_trim, dash (-1 solid), gap, textured); draw space = world - (area+0x698 view - rect left/top).
+- Preview: A* (`path_preview.h`) on `CSearchBitmap::GetCost` (area+0xA38; terrain = sprite vtbl+0x148();
+  personal space as `SetTarget`), cursor = area+0x25C - rect + view. Not `CPathSearch`: the search thread
+  uses snapshots; ours reads the live bitmap on the game thread (read-only).
+- Selection lock: sprite +0x3914 selected flag; `UnselectAll`/`SelectCharacter(id,0)`/`SelectToolbar`.
+- Party AI off during fights: Lua `game:GetPartyAI()` / `game:ToggleAI()`; party turn start = `ClearAI`.
+
+### 9.4 Open
 - Camera follow on turn start (`CInfinity::SetViewPosition`, win 140309630, unconfirmed).

@@ -18,6 +18,7 @@ void LuaPushString(LuaState* L, const char* s);
 void LuaPushBool(LuaState* L, bool v);
 int LuaTop(LuaState* L);
 double LuaNumberArg(LuaState* L, int idx, double fallback);  // fallback if absent / not a number
+std::string LuaStringArg(LuaState* L, int idx);              // "" if absent (numbers are converted)
 
 // Runs a Lua file in the engine's global state (g_lua). Returns "" on success, else the error text.
 // Game thread only, outside any engine Lua call (we use it from the frame tick).

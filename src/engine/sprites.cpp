@@ -16,7 +16,10 @@ uint64_t Game() {
   return c ? R<uint64_t>(c + sym::kOffChitinGame) : 0;
 }
 
-bool IsSprite(uint64_t p) { return p && R<uint64_t>(p) == sym::kVaSpriteVtable; }
+// Free object-array slots hold -1 (crash dumps 2026-11-21: read of FFFFFFFFFFFFFFFF while scanning
+// the array). Only dereference plausible user-mode heap pointers.
+bool Plausible(uint64_t p) { return p >= 0x10000 && p < 0x00007FFFFFFF0000ull && (p & 7) == 0; }
+bool IsSprite(uint64_t p) { return Plausible(p) && R<uint64_t>(p) == sym::kVaSpriteVtable; }
 
 // CGameObjectArray::GetDeny without the lock: index = id >> 16 & 0x7FFF, seq = low word.
 uint64_t Lookup(int32_t id) {
@@ -51,7 +54,7 @@ SpriteInfo Info(uint64_t p) {
     s.has_path = R<uint64_t>(p + sym::kOffSpritePath) != 0;
     const uint64_t anim = R<uint64_t>(p + sym::kOffSpriteAnim);
     // Only PST character animations carry the bestiary field.
-    if (anim && R<uint64_t>(anim) == sym::kVaAnimPstVtable) s.bestiary = R<int32_t>(anim + sym::kOffAnimBestiary);
+    if (Plausible(anim) && R<uint64_t>(anim) == sym::kVaAnimPstVtable) s.bestiary = R<int32_t>(anim + sym::kOffAnimBestiary);
   }
   return s;
 }
@@ -82,7 +85,7 @@ std::vector<std::pair<int, int>> PathPoints(int32_t id) {
   const uint64_t p = HudAvailable() ? Lookup(id) : 0;
   if (!p) return out;
   const uint64_t cells = R<uint64_t>(p + sym::kOffSpritePath);
-  if (!cells) return out;
+  if (!Plausible(cells)) return out;
   const int gx = R<int16_t>(sym::kVaGridActualX), gy = R<int16_t>(sym::kVaGridActualY);
   const int sx = R<uint8_t>(sym::kVaGridSquareX), sy = R<uint8_t>(sym::kVaGridSquareY);
   const int from = R<int16_t>(p + sym::kOffSpritePathIndex), n = R<int16_t>(p + sym::kOffSpritePathCount);
@@ -98,7 +101,7 @@ bool WorldToUi(int x, int y, int* ux, int* uy) {
   const uint64_t g = HudAvailable() ? Game() : 0;
   if (!g) return false;
   const uint64_t area = R<uint64_t>(g + sym::kOffGameAreas + 8ull * R<uint8_t>(g + sym::kOffGameVisibleIdx));
-  if (!area) return false;
+  if (!Plausible(area)) return false;
   const uint64_t inf = area + sym::kOffAreaInfinity;
   const float zoom = R<float>(area + sym::kOffAreaZoom);
   const int sx = x - R<int32_t>(inf + sym::kOffInfView) + R<int32_t>(inf + sym::kOffInfRect);
@@ -107,6 +110,107 @@ bool WorldToUi(int x, int y, int* ux, int* uy) {
   *ux = static_cast<int>(sx / z);
   *uy = static_cast<int>(sy / z);
   return true;
+}
+
+namespace {
+bool SelectOk() {
+  static const int ok = [] {
+    const uint32_t need[] = {sym::kRvaPortraitSelect, sym::kRvaUnselectAll, sym::kRvaSelectChar,
+                             sym::kRvaSelectToolbar, sym::kRvaSelectedFlag};
+    int found = 0;
+    for (const auto& s : sym::kAll)
+      for (uint32_t r : need)
+        if (s.rva == r) {
+          if (!CheckSymbol(s)) return 0;
+          ++found;
+        }
+    return found == 5 ? 1 : 0;
+  }();
+  return ok != 0;
+}
+}  // namespace
+
+namespace {
+bool CostOk() {
+  static const int ok = [] {
+    const uint32_t need[] = {sym::kRvaCostPs, sym::kRvaCostTerrain, sym::kRvaGetCostCall, sym::kRvaGetCost,
+                             sym::kRvaImpassableCmp, sym::kRvaMouseStore};
+    int found = 0;
+    for (const auto& s : sym::kAll)
+      for (uint32_t r : need)
+        if (s.rva == r) {
+          if (!CheckSymbol(s)) return 0;
+          ++found;
+        }
+    return found == 6 ? 1 : 0;
+  }();
+  return ok != 0;
+}
+uint64_t VisibleArea() {
+  const uint64_t g = Game();
+  if (!g) return 0;
+  const uint64_t a = R<uint64_t>(g + sym::kOffGameAreas + 8ull * R<uint8_t>(g + sym::kOffGameVisibleIdx));
+  return Plausible(a) ? a : 0;
+}
+}  // namespace
+
+bool CursorWorld(int* x, int* y) {
+  const uint64_t area = HudAvailable() && CostOk() ? VisibleArea() : 0;
+  if (!area) return false;
+  const int mx = R<int32_t>(area + sym::kOffAreaMouse), my = R<int32_t>(area + sym::kOffAreaMouse + 4);
+  const uint64_t inf = area + sym::kOffAreaInfinity;
+  const int l = R<int32_t>(inf + sym::kOffInfRect), t = R<int32_t>(inf + sym::kOffInfRect + 4);
+  const int r = R<int32_t>(inf + sym::kOffInfRect + 8), b = R<int32_t>(inf + sym::kOffInfRect + 12);
+  if (mx < l || mx > r || my < t || my > b) return false;
+  *x = mx - l + R<int32_t>(inf + sym::kOffInfView);
+  *y = my - t + R<int32_t>(inf + sym::kOffInfView + 4);
+  return true;
+}
+
+int CellCoster::Cost(int cx, int cy, int16_t* pixel) const {
+  if (!ok() || cx < 0 || cy < 0 || cx >= width || cy >= height) return 0xFF;
+  int32_t cell[2] = {cx, cy};
+  int16_t out = 0;
+  using GetCostFn = uint8_t(__fastcall*)(uint64_t, const int32_t*, const uint8_t*, uint8_t, int16_t*, int);
+  const int c = reinterpret_cast<GetCostFn>(Va(sym::kRvaGetCost))(bitmap, cell, terrain, personal_space, &out, flags);
+  if (pixel) *pixel = out;
+  return c;
+}
+
+CellCoster CosterFor(int32_t id) {
+  CellCoster c;
+  const uint64_t p = HudAvailable() && CostOk() ? Lookup(id) : 0;
+  if (!p) return c;
+  const uint64_t area = R<uint64_t>(p + sym::kOffSpriteArea);
+  if (!Plausible(area)) return c;
+  if (R<uint8_t>(p + sym::kOffSpritePsFlag) & 4) {
+    c.personal_space = R<uint8_t>(p + sym::kOffSpritePs);
+  } else {
+    const uint64_t anim = R<uint64_t>(p + sym::kOffSpriteAnim);
+    if (!Plausible(anim)) return c;
+    using PsFn = uint8_t(__fastcall*)(uint64_t);
+    c.personal_space = reinterpret_cast<PsFn>(R<uint64_t>(R<uint64_t>(anim) + sym::kVtblAnimPersonalSpace))(anim);
+  }
+  using TerrainFn = const uint8_t*(__fastcall*)(uint64_t);
+  c.terrain = reinterpret_cast<TerrainFn>(R<uint64_t>(R<uint64_t>(p) + sym::kVtblSpriteTerrain))(p);
+  c.bitmap = area + sym::kOffAreaSearch;
+  c.width = R<int32_t>(c.bitmap + 312);
+  c.height = R<int32_t>(c.bitmap + 316);
+  if (c.width <= 0 || c.height <= 0 || c.width > 4096 || c.height > 4096) c.bitmap = 0;
+  return c;
+}
+
+bool IsSelected(int32_t id) {
+  const uint64_t p = SelectOk() ? Lookup(id) : 0;
+  return p && R<int32_t>(p + sym::kOffSpriteSelected) != 0;
+}
+
+void SelectOnly(int32_t id) {
+  const uint64_t g = SelectOk() && SpritesAvailable() ? Game() : 0;
+  if (!g) return;
+  reinterpret_cast<void(__fastcall*)(uint64_t)>(Va(sym::kRvaUnselectAll))(g);
+  if (id != -1) reinterpret_cast<int64_t(__fastcall*)(uint64_t, int32_t, uint8_t)>(Va(sym::kRvaSelectChar))(g, id, 0);
+  reinterpret_cast<void(__fastcall*)(uint64_t)>(Va(sym::kRvaSelectToolbar))(g);
 }
 
 bool SpritesAvailable() {

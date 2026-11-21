@@ -395,7 +395,8 @@ TEST_CASE("tbc hud: menu text and Lua data") {
   const std::string m = BuildHudMenu();
   CHECK(m.find("name 'PSTF_TBC'") != std::string::npos);
   CHECK(m.find("name \"pstfCardImg12\"") != std::string::npos);
-  CHECK(m.find("name \"pstfDot40\"") != std::string::npos);
+  CHECK(m.find("pstfDot1\"") == std::string::npos);  // the line is drawn by the engine now
+  CHECK(m.find("pstfOrigPortraitL") != std::string::npos);
   CHECK(m.find("action \"PSTF_EndTurn()\"") != std::string::npos);
   CHECK(std::count(m.begin(), m.end(), '`') == 2);  // one inline Lua chunk
   CHECK(std::count(m.begin(), m.end(), '{') == std::count(m.begin(), m.end(), '}'));
@@ -416,8 +417,35 @@ TEST_CASE("tbc hud: menu text and Lua data") {
   v.cards.push_back(c);
   v.dots = {1, 2};
   const std::string lua = BuildHudLua(v);
-  CHECK(lua.find("round=2,party=true,move=12.50,maxMove=31.00") != std::string::npos);
+  CHECK(lua.find("round=2,slot=-1,party=true,move=12.50,maxMove=31.00") != std::string::npos);
   CHECK(lua.find("{id=7,best=43,name=274,hp=5,maxhp=10,foe=false,active=true,done=false,str=\"a b\"}") !=
         std::string::npos);
   CHECK(lua.find("dots={1,2},rdots={}") != std::string::npos);
+}
+
+#include "modules/tbc/path_preview.h"
+
+TEST_CASE("tbc preview: A* around a wall, smoothed to turning points") {
+  // 10x10 open grid with a wall at x=5, y=0..7 (gap at y=8,9).
+  auto cost = [](int x, int y) { return (x == 5 && y <= 7) ? kImpassable : 1; };
+  const auto p = FindCellPath({1, 1}, {8, 1}, cost, 10000, 10, 10);
+  CHECK(!p.empty());
+  CHECK(p.front().x == 1 && p.front().y == 1);
+  CHECK(p.back().x == 8 && p.back().y == 1);
+  for (size_t i = 1; i < p.size(); ++i) CHECK(LineWalkable(p[i - 1], p[i], cost));
+  bool below = false;
+  for (const Pt& q : p) below = below || q.y >= 8;
+  CHECK(below);              // it goes round through the gap
+  CHECK(p.size() <= 5);      // smoothed, not one point per cell
+  // Straight line when nothing is in the way.
+  const auto s = FindCellPath({0, 0}, {9, 0}, [](int, int) { return 1; }, 10000, 10, 10);
+  CHECK(s.size() == 2);
+  // Unreachable goal and blocked goal give nothing; so does a tiny search budget.
+  CHECK(FindCellPath({1, 1}, {5, 3}, cost, 10000, 10, 10).empty());
+  auto boxed = [](int x, int y) { return (x >= 6 && y >= 6 && (x == 6 || y == 6)) ? kImpassable : 1; };
+  CHECK(FindCellPath({1, 1}, {8, 8}, boxed, 10000, 10, 10).empty());
+  CHECK(FindCellPath({1, 1}, {8, 1}, cost, 5, 10, 10).empty());
+  // Uniform cost 5 (the engine's open ground): with min_cost the search stays narrow.
+  auto five = [](int, int) { return 5; };
+  CHECK(FindCellPath({0, 0}, {60, 40}, five, 200, 100, 100, 5).size() == 2);
 }

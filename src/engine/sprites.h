@@ -42,4 +42,25 @@ std::vector<std::pair<int, int>> PathPoints(int32_t id);
 // World point of the visible area -> UI (menu) coordinates, as the engine places map notes.
 bool WorldToUi(int x, int y, int* ux, int* uy);
 
+// Selection, the engine's way (as a portrait click: UnselectAll + SelectCharacter + SelectToolbar).
+bool IsSelected(int32_t id);
+
+// Cursor position in the world of the visible area (false when it is outside the world viewport).
+bool CursorWorld(int* x, int* y);
+
+// Walk cost of search-map cells for one creature, as CGameSprite::SetTarget asks the engine
+// (CSearchBitmap::GetCost with its terrain table and personal space). 0xFF = impassable.
+struct CellCoster {
+  uint64_t bitmap = 0;
+  const uint8_t* terrain = nullptr;
+  uint8_t personal_space = 1;
+  int flags = 0;
+  int width = 0, height = 0;  // search map in cells (CSearchBitmap +312/+316, GetCost's bounds)  // GetCost's last argument (SetTarget passes 1); 0 = terrain only
+  bool ok() const { return bitmap && terrain; }
+  int Cost(int cx, int cy, int16_t* pixel = nullptr) const;
+};
+CellCoster CosterFor(int32_t id);
+void SelectOnly(int32_t id);  // -1: select nobody
+
+
 }  // namespace pstf::engine

@@ -3,6 +3,7 @@
 
 #include <vector>
 
+#include "core/crashlog.h"
 #include "core/log.h"
 #include "core/patch.h"
 #include "engine/symbols.h"
@@ -18,7 +19,16 @@ int g_state = 0;  // 0 not tried, 1 installed, -1 failed
 void __fastcall FrameTick(void* chitin) {
   g_sync(chitin);
   ++g_frame;
-  for (TickFn fn : g_handlers) fn(g_frame);
+  for (TickFn& fn : g_handlers) {
+    if (!fn) continue;
+    uint32_t code = 0;
+    if (!GuardedCall(fn, g_frame, &code)) {
+      // A bug in a module must not take the game down: that module stops ticking.
+      Log("tick: handler %zu faulted (%08X) at frame %llu; it is turned off for this session",
+          static_cast<size_t>(&fn - g_handlers.data()), code, static_cast<unsigned long long>(g_frame));
+      fn = nullptr;
+    }
+  }
 }
 
 bool Install() {

@@ -16,7 +16,7 @@
 namespace pstf::tbc {
 
 constexpr int kHudCards = 12;
-constexpr int kHudDots = 40;
+constexpr int kHudDots = 0;  // the line is drawn in the world pass now (engine DrawLine2d)
 
 struct HudCard {
   int32_t id = -1;
@@ -32,6 +32,7 @@ struct HudView {
   uint32_t round = 0;
   std::vector<HudCard> cards;  // initiative order
   bool party_turn = false;
+  int slot = -1;               // party slot whose turn it is (-1: not a party turn)
   double move_ft = 0, max_ft = 0;
   bool action_used = false, acting = false;
   std::string msg;             // short notice ("No action left this turn")

@@ -146,6 +146,17 @@ int wmain(int argc, wchar_t** argv) {
     if (p[0] != 0x40 || p[1] != 1 || p[4] != 0x40 || p[5] != 1) Fail("grid is not 320x320", "GRID_ACTUAL");
   }
 
+  call_to(sym::kRvaPortraitSelect, sym::kImageBase + sym::kRvaUnselectAll, "portrait click -> UnselectAll");
+  call_to(sym::kRvaPortraitSelect + 18, sym::kImageBase + sym::kRvaSelectChar, "portrait click -> SelectCharacter");
+
+  call_to(sym::kRvaAreaRenderCall, sym::kVaAreaRender, "RenderZoomed -> CGameArea::Render");
+  call_to(sym::kRvaRenderActionsLine, sym::kImageBase + sym::kRvaDrawLine2d, "RenderActions -> DrawLine2d");
+  call_to(sym::kRvaGetCostCall, sym::kImageBase + sym::kRvaGetCost, "SetTarget -> GetCost");
+  rip(sym::kRvaImpassableCmp, 6, 2, sym::kVaCostImpassable, "COST_IMPASSABLE");
+  if (auto* p = img.At(static_cast<uint32_t>(sym::kVaCostImpassable - sym::kImageBase), 1)) {
+    if (p[0] != 0xFF) Fail("COST_IMPASSABLE is not 0xFF", "COST_IMPASSABLE");
+  }
+
   // Static initialiser of ROUND_LENGTH (.data) is the non-PST default; LoadOptions stores 51.
   if (auto* p = img.At(static_cast<uint32_t>(sym::kVaRoundLength - sym::kImageBase), 4)) {
     uint32_t v = 0;

@@ -305,6 +305,65 @@ constexpr uint32_t kRvaVisibleArea = 0x1A5B94, kRvaScreenCoords = 0x305AB0, kRva
 constexpr uint32_t kOffGameVisibleIdx = 0xA178, kOffGameAreas = 0xA180, kOffAreaInfinity = 0x5D8;
 constexpr uint32_t kOffAreaZoom = 0xA14, kOffInfView = 0x60, kOffInfRect = 0x78;
 
+// Selection (turn-based: only the active party member is selected). CInfGame::OnPortraitLClick
+// (lin 36E870, win 1402EA411): call UnselectAll; mov edx,[rbx+rbp*4+0A200h]; mov r8b,1; mov rcx,rbx;
+// call SelectCharacter; then SelectToolbar. Selected flag: sprite +0x3914 (CGameSprite::Select win
+// 1403E4CCD sets 1, Unselect 1403F0546 sets 0; lin this+3647*4 = +0x38FC).
+inline constexpr uint8_t kPortraitSelectBytes[] = {0xE8, 0xAA, 0x19, 0x01, 0x00, 0x8B, 0x94, 0xAB, 0x00, 0xA2, 0x00, 0x00,
+                                                   0x41, 0xB0, 0x01, 0x48, 0x8B, 0xCB, 0xE8, 0x08, 0x7E, 0x00, 0x00};
+inline constexpr uint8_t kUnselectAllBytes[] = {0x40, 0x53, 0x55, 0x41, 0x56, 0x48, 0x83, 0xEC,
+                                                0x30, 0x48, 0x8B, 0xD9, 0x48, 0x81, 0xC1, 0x90};
+inline constexpr uint8_t kSelectCharBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C,
+                                               0x24, 0x18, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55};
+inline constexpr uint8_t kSelectToolbarBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x30, 0x33, 0xC0,
+                                                  0xC7, 0x81, 0x28, 0x9C, 0x00, 0x00, 0x64, 0x00};
+inline constexpr uint8_t kSelectedFlagBytes[] = {0xC7, 0x81, 0x14, 0x39, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaPortraitSelect = 0x2EA411, kRvaUnselectAll = 0x2FBDC0, kRvaSelectChar = 0x2F2230;
+constexpr uint32_t kRvaSelectToolbar = 0x2F24D0, kRvaSelectedFlag = 0x3E4CCD, kOffSpriteSelected = 0x3914;
+
+// Movement line, drawn by the engine in the world pass. CGameArea::RenderZoomed (lin 1BC300, win
+// 14019F8A0) brackets `call CGameArea::Render` (14019F91C) with DrawBeginScaled/DrawEndScaled; we draw
+// right after Render returns, in the same (zoom-scaled) space. Line: CVidMode::DrawLine2d (lin 6774B0,
+// win 14049D870; called by CGameSprite::RenderActions at 1403DF80A): (vid, x1, y1, x2, y2, CRect* clip,
+// uint color, float half_width, float start_trim, float end_trim, float dash(-1 solid), float gap,
+// bool textured). Draw space = world - (view at area+0x698 - rect left at area+0x650) (RenderActions
+// 1403DF4F3). CVidMode = [g_pBaldurChitin]+0x268 (RenderZoomed 14019F8DD).
+inline constexpr uint8_t kAreaRenderCallBytes[] = {0xE8, 0xDF, 0xEB, 0xFF, 0xFF};
+inline constexpr uint8_t kDrawLine2dBytes[] = {0x48, 0x8B, 0xC4, 0x44, 0x89, 0x48, 0x20, 0x44,
+                                               0x89, 0x40, 0x18, 0x89, 0x50, 0x10, 0x55, 0x41};
+inline constexpr uint8_t kRenderActionsLineBytes[] = {0xE8, 0x61, 0xE0, 0x0B, 0x00};
+inline constexpr uint8_t kRenderViewBytes[] = {0x44, 0x8B, 0xA9, 0x98, 0x06, 0x00, 0x00, 0x44, 0x2B, 0xA9, 0x50,
+                                               0x06, 0x00, 0x00, 0x44, 0x8B, 0xA1, 0x9C, 0x06, 0x00, 0x00};
+inline constexpr uint8_t kVidModeBytes[] = {0x48, 0x8B, 0xB8, 0x68, 0x02, 0x00, 0x00};
+constexpr uint32_t kRvaAreaRenderCall = 0x19F91C, kRvaDrawLine2d = 0x49D870, kRvaRenderActionsLine = 0x3DF80A;
+constexpr uint32_t kRvaRenderView = 0x3DF4F3, kRvaVidMode = 0x19F8DD;
+constexpr uint64_t kVaAreaRender = 0x14019E500ull;
+constexpr uint32_t kOffChitinVidMode = 0x268, kOffAreaRenderView = 0x698, kOffAreaRect = 0x650;
+// Walk cost of one search-map cell, the engine's way (CGameSprite::SetTarget lin 51E5F0, win
+// 1403E9376..1403E93DE): personal space = (sprite+0x3958 & 4) ? byte sprite+0x3960 : anim vtbl+0xC0();
+// terrain table = sprite vtbl+0x148(); CSearchBitmap at area+0xA38; GetCost(bitmap, CPoint* cell,
+// terrain, ps, short* out, int 1) (lin 33F3D0, win 1402ADAB0); COST_IMPASSABLE byte 14062E58A (0xFF).
+inline constexpr uint8_t kCostPsBytes[] = {0xF6, 0x87, 0x58, 0x39, 0x00, 0x00, 0x04, 0x74, 0x0A, 0x44,
+                                           0x0F, 0xB6, 0xB7, 0x60, 0x39, 0x00, 0x00, 0xEB, 0x14, 0x48,
+                                           0x8B, 0x8F, 0x50, 0x39, 0x00, 0x00, 0x48, 0x8B, 0x01, 0xFF,
+                                           0x90, 0xC0, 0x00, 0x00, 0x00};
+inline constexpr uint8_t kCostTerrainBytes[] = {0x48, 0x8B, 0x5F, 0x18, 0x48, 0x8B, 0xCF, 0x48, 0x8B,
+                                                0x17, 0x48, 0x81, 0xC3, 0x38, 0x0A, 0x00, 0x00, 0xFF,
+                                                0x92, 0x48, 0x01, 0x00, 0x00};
+inline constexpr uint8_t kGetCostCallBytes[] = {0xE8, 0xD8, 0x46, 0xEC, 0xFF};
+inline constexpr uint8_t kGetCostBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x20, 0x56, 0x57, 0x41,
+                                            0x54, 0x41, 0x55, 0x41, 0x56, 0x48, 0x83, 0xEC};
+inline constexpr uint8_t kImpassableCmpBytes[] = {0x3A, 0x05, 0xAC, 0x51, 0x24, 0x00};
+constexpr uint32_t kRvaCostPs = 0x3E9376, kRvaCostTerrain = 0x3E939D, kRvaGetCostCall = 0x3E93D3;
+constexpr uint32_t kRvaGetCost = 0x2ADAB0, kRvaImpassableCmp = 0x3E93D8;
+constexpr uint64_t kVaCostImpassable = 0x14062E58Aull;
+constexpr uint32_t kOffSpritePsFlag = 0x3958, kOffSpritePs = 0x3960, kOffAreaSearch = 0xA38;
+constexpr uint32_t kVtblAnimPersonalSpace = 0xC0, kVtblSpriteTerrain = 0x148;
+// Cursor: CGameArea::OnMouseMove (lin 1B1410, win 14019D8A2) stores the mouse point at area+0x25C
+// (CInfinity screen space); world = point - rect(+0x78) + view(+0x60) (CInfinity::GetWorldCoordinates).
+inline constexpr uint8_t kMouseStoreBytes[] = {0x48, 0x8B, 0x0F, 0x45, 0x33, 0xE4, 0x48, 0x89, 0x8B, 0x5C, 0x02, 0x00, 0x00};
+constexpr uint32_t kRvaMouseStore = 0x19D8A2, kOffAreaMouse = 0x25C;
+
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 inline constexpr Symbol kAll[] = {
     PSTF_SYM("entry", kEntryRva, kEntryBytes, "PE AddressOfEntryPoint"),
@@ -383,6 +442,22 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CInfinity::GetScreenCoordinates", kRvaScreenCoords, kScreenCoordsBytes,
              "lin 3A8110 / win 140305AB0"),
     PSTF_SYM("AreaNotes.zoom", kRvaZoom, kZoomBytes, "win 1401A5BDD"),
+    PSTF_SYM("OnPortraitLClick.select", kRvaPortraitSelect, kPortraitSelectBytes, "lin 36E870 / win 1402EA411"),
+    PSTF_SYM("CInfGame::UnselectAll", kRvaUnselectAll, kUnselectAllBytes, "lin 36A0D0 / win 1402FBDC0"),
+    PSTF_SYM("CInfGame::SelectCharacter", kRvaSelectChar, kSelectCharBytes, "lin 36A1A0 / win 1402F2230"),
+    PSTF_SYM("CInfGame::SelectToolbar", kRvaSelectToolbar, kSelectToolbarBytes, "lin 36A4F0 / win 1402F24D0"),
+    PSTF_SYM("CGameSprite::Select.flag", kRvaSelectedFlag, kSelectedFlagBytes, "lin 509460 / win 1403E4CCD"),
+    PSTF_SYM("RenderZoomed.render", kRvaAreaRenderCall, kAreaRenderCallBytes, "lin 1BC300 / win 14019F91C"),
+    PSTF_SYM("RenderZoomed.vidmode", kRvaVidMode, kVidModeBytes, "win 14019F8DD"),
+    PSTF_SYM("CVidMode::DrawLine2d", kRvaDrawLine2d, kDrawLine2dBytes, "lin 6774B0 / win 14049D870"),
+    PSTF_SYM("RenderActions.line", kRvaRenderActionsLine, kRenderActionsLineBytes, "lin 5610A0 / win 1403DF80A"),
+    PSTF_SYM("RenderActions.view", kRvaRenderView, kRenderViewBytes, "win 1403DF4F3"),
+    PSTF_SYM("SetTarget.personalSpace", kRvaCostPs, kCostPsBytes, "lin 51E5F0 / win 1403E9376"),
+    PSTF_SYM("SetTarget.terrain", kRvaCostTerrain, kCostTerrainBytes, "win 1403E939D"),
+    PSTF_SYM("SetTarget.getCost", kRvaGetCostCall, kGetCostCallBytes, "win 1403E93D3"),
+    PSTF_SYM("CSearchBitmap::GetCost", kRvaGetCost, kGetCostBytes, "lin 33F3D0 / win 1402ADAB0"),
+    PSTF_SYM("SetTarget.impassable", kRvaImpassableCmp, kImpassableCmpBytes, "win 1403E93D8"),
+    PSTF_SYM("OnMouseMove.store", kRvaMouseStore, kMouseStoreBytes, "lin 1B1410 / win 14019D8A2"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.

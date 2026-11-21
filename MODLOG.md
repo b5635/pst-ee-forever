@@ -142,3 +142,35 @@ on the game thread; today the line appears once the move is ordered, and the wal
 budget). Manual party turns and the End Turn button were not clicked in this test (party AI ran the
 turns). Camera does not follow the active creature. Effect-duration rebase and opportunity attacks
 still open.
+
+## 2026-11-21: crashes fixed, crash tooling, hover path preview, selection lock, no party auto-attack
+
+**Crash.** All 4 engine dumps (Documents\Infinity Engine - Enhanced Edition\crash) were ours: `IsSprite` read
+`[-1]` while scanning the object array from the frame tick (free slots hold -1). Confirmed with cdb
+(`mov rax,[rdx]`, rdx = FFFFFFFFFFFFFFFF, rdi = object array slot, r14 = sprite vtable). Fix: `Plausible()`
+before every engine pointer dereference. Tooling: WinDbg/cdb installed, `tools\dbg.ps1`, `tools/crash.py`,
+vectored crash log in our log, SEH guard around tick handlers and the overlay, PDB + map in Release.
+
+**Hover preview + line.** Drawn by the engine itself in the world pass: `CGameArea::RenderZoomed` calls
+`CGameArea::Render` (redirected at 14019F91C); right after it we call `CVidMode::DrawLine2d` (the line
+`CGameSprite::RenderActions` uses) with a dark outline and a gold (feet left) / red (beyond) core, a diamond
+at the end, length label from the menu. Before the click: A* on the engine's own cell cost
+(`CSearchBitmap::GetCost` with the creature's terrain table and personal space, as `SetTarget` asks it),
+string-pulled; after the click: the engine's real path cells. Unreachable spot: red cross.
+
+**Turn control.** Only the active party member stays selected (per frame: `UnselectAll` + `SelectCharacter`
++ `SelectToolbar`, the portrait-click sequence; the portrait Lua click is also guarded); nobody on enemy turns.
+Party AI is switched off for the fight with the engine's `game:ToggleAI()` and restored after; party turns
+start with `ClearAI`, so party members never attack on their own.
+
+**Verified in game.** `tbc_hud.lua` (manual turns): "party AI on: false", selection lock, preview 51.7 ft
+around the slab with gold/red split (screenshot). `tbc_fight.lua` (party AI) full fight, exit 0, no faults.
+
+**Gotchas.**
+1. `near` is a Windows macro (minwindef.h): never name a variable `near`/`far`.
+2. Open ground costs 5 per cell in the terrain table: the A* heuristic must scale by the minimum cost.
+3. No corner-cut rule: isometric corridors are diagonal stairs of cells; with it the Mortuary splits apart.
+4. The search map is 272x320 cells here (CSearchBitmap +312/+316), not GRID_ACTUAL 320x320.
+5. Chain deploy after a successful check only (`check && deploy`); a failed build left the old DLL running.
+
+**Not done.** Mouse hover not driven by a real mouse in tests (probe instead); End Turn button click untested.
