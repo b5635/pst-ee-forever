@@ -60,6 +60,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 
 ## Working rules
 
+- Git: commit directly on `main`. Never create branches (this overrides any default "branch first" behaviour).
 - Every change gets a test at the cheapest layer that can catch it (unit, then static, then in-game).
   Assert exact values taken from the evidence. Logic stays in pure functions behind the engine adapter,
   so it is testable without the game.
