@@ -19,7 +19,9 @@ bool EffectClockInstalled();
 void ShiftEffectClock(int32_t id, int32_t ticks);
 // Delayed effects that `resolves_now(ticks to onset)` says are part of the spell resolving keep running
 // on world time (never shifted) until they fire; ResolvingOnsets counts those still pending.
-using OnsetFn = bool (*)(int32_t left);
+// resolves_now(ticks to onset, opcode): 0 = round-clocked, 1 = the spell resolving (world time, the
+// caster's turn waits for it), 2 = presentation only (world time, nobody waits).
+using OnsetFn = int (*)(int32_t left, int opcode);
 void SetOnsetRule(OnsetFn resolves_now);
 int ResolvingOnsets(int32_t id);
 void ForgetOnsets();  // fight over
@@ -44,10 +46,13 @@ struct EffectView {
 std::vector<EffectView> TimedEffects(int32_t id);
 int PersistentCount(int32_t id);
 
-// Projectiles of creatures for which `held(caster id)` is true do not advance (vtable slot 3 of each
-// projectile class met in the area is redirected, after checking it is an engine CGameObject vtable).
-using HeldFn = bool (*)(int32_t caster);
-void SetProjectileHold(HeldFn held);
+// Every projectile's AIUpdate asks `run(caster id, projectile id, lingers)` first and is skipped on
+// false (vtable slot 3 of each projectile class met in the area is redirected, after checking it is
+// an engine CGameObject vtable). `lingers`: an area cloud or Swarm Curse that has landed and now
+// pulses its effects on a tick countdown.
+using ProjGateFn = bool (*)(int32_t caster, int32_t projectile, bool lingers);
+void SetProjectileGate(ProjGateFn run);
+bool ProjectileLingers(int32_t projectile);
 void WatchProjectiles();  // call per frame: hooks the vtables of new projectiles
 
 // --- pacing --------------------------------------------------------------------------------------
@@ -60,6 +65,18 @@ uint8_t MoveScale(int32_t id);  // current move scale (GetMoveScale)
 void KeepBattleMusic(int32_t id, int ticks);
 
 // Camera: the view's top left in world pixels (false outside an area) and moving it.
+// Line of sight in a fight: in the area `anchor` (a party member) stands in, the vis-map tiles within
+// `radius` px of each creature in `ids` become explored and visible (slot-14 bit, not a party
+// member's), so the party sees every combatant; tiles marked by the previous call and not by this one
+// lose that bit again. An empty list clears all.
+void RevealCombatants(int32_t anchor, const std::vector<int32_t>& ids, int radius);
+
+// Item use: true once for each creature whose UseItem/UseItemPoint action ran since the last call.
+bool InstallItemUseHooks();
+bool TookItemAction(int32_t id);
+
+// The engine's cursor mode (CInfGame state word): 0 = normal, other = aiming a spell, ability or item.
+int GameCursorState();
 bool ViewCenter(int* x, int* y);
 void CenterView(int x, int y);
 

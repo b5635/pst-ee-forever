@@ -225,3 +225,24 @@ buttons for Dak'kon, a click enters the engine's cast cursor. `tbc_hud2.lua` scr
 **Open.** Cloudkill on Dead Nations undead does nothing (poison/death immune): test it on living foes.
 Ice Knife misses leave its knife hovering until the 120-tick cap. Hotbar shows up to 12 per category
 (the engine's array size).
+
+## 2026-11-21: lingering spells by round, item visuals, items take the action, waits, sight (module `tbc`)
+
+**Problems (user play in Curst and the Hive).** Swarm Curse hit every 75 ticks of world time during
+Dak'kon's own turn; the Whispering Flask showed no Aid sparkle; items did not use the action; enemies
+whose script only waited stood around; characters walked in place; the hover path line showed while
+aiming spells; enemies out of view were invisible during their turns; the dice panel was in the way.
+
+**Changes.** Lingering spells (Swarm Curse, area clouds) get one round of pulse ticks per caster round;
+flying projectiles hold the caster's turn up to 300 ticks (Adder's Kiss hits in the cast turn);
+presentation onsets (glows, sounds, BAMs) play on world time; UseItem/UseItemPoint hooks make any item
+use take the action and its own ForceSpell follow-up is not stopped; waits always become an attack
+order when no action was taken; DropPath also ends the walk sequence; no hover line in cursor mode;
+combatants are visible during a fight (vis-map bit 14); dice panel off, save sound with the engine's
+"Save vs." line. New ini keys: `dice_panel`, `save_sounds`, `combat_sight`. Details: TBC_RESEARCH §11.
+
+**Verified.** `tools\check.ps1` (41 unit cases, 120 symbols). Hive save: `tbc_hive.lua` (flask sparkle on
+screen, both items take the action, swarm one pulse per round, Adder's first hit in its turn, save sound
+played), `tbc_rules.lua` (Blur -75 per own turn, Adder later hits at the victim's turn start),
+`tbc_sim.lua` (5 rounds, 38 turns, no faults).
+

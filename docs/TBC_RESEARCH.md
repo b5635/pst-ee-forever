@@ -387,3 +387,49 @@ become 4 (no expiry during someone else's turn).
 - Hit chance: needs = THAC0 - AC (derived stats +0x10 / +0x06, Hit win 140414888), 5..95 %.
 - Dice: attack = FeedBack(this, 4, total, hit, roll) at 140415759; target from the three Swing -> Hit calls;
   saves = CheckSave inline hook (flags effect +0x40, bonus +0x44; rolls in the per-type bytes).
+
+## 11. Lingering spells, item follow-ups, waits, sight (2026-11-21, evening)
+
+### 11.1 Lingering spells pulse once per caster round
+- PST:EE has no PRO files: Swarm Curse is `CPsSpellSwarmCurse` (AIUpdate lin 2F8E30, win 1402783F0), clouds,
+  Pacify and Tasha's are `CProjectileArea` (AIUpdate lin 308680, win 140262180). Both fly until "arrived"
+  (+0x3E8 on Windows, both AIUpdates test it first), then count down one tick per AIUpdate. Swarm Curse
+  damages when its duration counter (+0x3E6) is a multiple of 75 (`-13981 * v <= 0x369`).
+- Before: they ran in world time during the whole caster turn (the user's log: three swarm hits 75 ticks
+  apart in Dak'kon's long turn). Now `PulseBudget` (`round_rules.h`): 120 ticks from landing, then 75
+  ticks from each of the caster's turn starts; the AIUpdate gate (`SetProjectileGate`) skips it once spent.
+  Verified: one pulse per thug per round, in Dak'kon's turns (`tbc_hive.lua`).
+- Flying projectiles (Adder's Kiss circles 60 ticks before it flies) hold the caster's turn up to 300
+  ticks, so the first hit lands in the cast turn; lingering ones and onsets up to 120.
+
+### 11.2 Presentation onsets play on world time
+- Aid (SPPR201, from the Whispering Flask's op146) has its sparkle as op369 with a 5 s delay and its
+  sound as op174 15 s later. On a 75-tick step the onset rule round-clocked them (shown a round late).
+  `OnsetKind(left, opcode)`: glow/colour/sound/BAM opcodes (9, 50-52, 61, 140, 141, 174, 215, 369-373) are
+  presentation: world time, nobody waits for them.
+
+### 11.3 Items and their follow-up casts
+- `CGameSprite::UseItem` (lin 4D5180, win 140436690) / `UseItemPoint` (lin 4D6CB0, win 140437B90) run each
+  tick the action is current; a quick item can start and end between two frames, so a 5-byte inline hook
+  notes the user and the economy takes the action (UseItem = 34).
+- op146 makes the user `ForceSpell` (113) the item's spell: the economy saw a second action and stopped it
+  (no Aid, no sparkle). `IsForcedCast` (113, 114, 181, 337) within 30 ticks of the action is the same action.
+
+### 11.4 Waits, walking in place, cursor mode, sight
+- Waits (63, 83, 85, 130, 200, 368, 410, 411) on AI turns: no action yet (also after walking or fleeing:
+  RunAwayFromNoLeaveArea 355, ReturnToSavedPlace 449 are moves) = attack order; else the turn ends.
+- Walking in place: `CGameSprite::DropPath` keeps the walk sequence; `CMessageDropPath::Run` (lin 293C30,
+  win 1402355D0) also sets SEQ_READY (7) when the sequence (+0x4428) is SEQ_WALK (10). `engine::DropPath`
+  now does the same through `SetSequence` (lin 50A270, win 1403E8800).
+- Cursor mode: `CInfGame::SetState` (win 1402F3240) stores it at CInfGame+0x78B0; non-zero = aiming a spell,
+  ability or item: no hover path line then.
+- Sight: `CGameSprite::Render` draws a sprite only if the vis-map tile under it (area+0xB88: tiles, +8
+  width; 32 px tiles) has EXPLORED 0x8000 and a VISIBILITY_MASK 0x7FFF bit (one per character slot 0-14).
+  In a fight the tiles within 96 px of each non-party combatant get bit 14 (no party member's) + explored;
+  last frame's marks lose bit 14 again; all cleared at the fight's end.
+
+### 11.5 Saves
+- The dice panel is off (`dice_panel=0`). The save sound plays in the frame `CheckSave` ran: CheckSave
+  itself posts the "Save vs. ...: N" line (`CMessageHandler::AddMessage`, lin 1FBED0 lines 130-180), so
+  the sound and the line come together.
+

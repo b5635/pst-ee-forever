@@ -462,6 +462,46 @@ constexpr uint32_t kOffBarCount = 0x294;
 // (140173050: movzx eax, byte [rcx+8]; ret) at slot 1: the check that a vtable met at runtime is one.
 inline constexpr uint8_t kGetObjectTypeBytes[] = {0x0F, 0xB6, 0x41, 0x08, 0xC3};
 constexpr uint32_t kRvaGetObjectType = 0x173050, kVtblObjAIUpdate = 0x18, kOffProjSource = 0x68;
+// Visibility: CGameSprite::Render (lin 562A10, win 1403DD820) takes the area's CVisibilityMap at
+// area+0xB88 (1403DD9D5 `lea rbx,[rdx+0B88h]`: +0 tile words, +8 width in tiles) and draws a sprite
+// only if the tile word under it has EXPLORED_FLAG 0x8000 (rdata 14063976C) and any bit of
+// VISIBILITY_MASK 0x7FFF (140639770): one bit per character slot (GetCharacterId: slots 0..14), tiles
+// 32 x 32 px (rdata 140639772/3). Area size in px: area+0x688 / +0x68C.
+inline constexpr uint8_t kVisMapLeaBytes[] = {0x48, 0x8D, 0x9A, 0x88, 0x0B, 0x00, 0x00};
+inline constexpr uint8_t kVisMaskBytes[] = {0x00, 0x80, 0x14, 0x18, 0xFF, 0x7F, 0x20, 0x20};
+constexpr uint32_t kRvaVisMapLea = 0x3DD9D5, kRvaVisMasks = 0x63976C, kOffAreaVisMap = 0xB88, kOffAreaWidthPx = 0x688,
+                   kOffAreaHeightPx = 0x68C;
+constexpr uint16_t kVisExplored = 0x8000, kVisCombat = 0x4000;  // slot 14: no party member uses it
+constexpr int kVisTile = 32;
+// Stopping a walk: CMessageDropPath::Run (lin 293C30, win 1402355D0) drops the path and, if the
+// sprite's sequence (+0x4428) is SEQ_WALK (10, rdata 1406490FE), sets SEQ_READY (7, rdata 1406490F6)
+// through CGameSprite::SetSequence (lin 50A270, win 1403E8800); else the walk cycle keeps playing in place.
+inline constexpr uint8_t kDropPathSeqBytes[] = {0x0F, 0xB6, 0x05, 0xEA, 0x3A, 0x41, 0x00, 0x66, 0x39, 0x81, 0x28, 0x44,
+                                                0x00, 0x00, 0x75, 0x11, 0x0F, 0xB6, 0x15, 0xD2, 0x3A, 0x41, 0x00};
+inline constexpr uint8_t kSetSequenceBytes[] = {0x40, 0x55, 0x53, 0x56, 0x41, 0x54, 0x48, 0x8B, 0xEC, 0x48, 0x83, 0xEC};
+constexpr uint32_t kRvaDropPathSeq = 0x23560D, kRvaSetSequence = 0x3E8800, kOffSpriteSequence = 0x4428;
+constexpr uint16_t kSeqReady = 7, kSeqWalk = 10;
+// Item use: the action handlers CGameSprite::UseItem(target) (lin 4D5180, win 140436690) and
+// UseItemPoint() (lin 4D6CB0, win 140437B90) run every tick the action is current; a quick item can
+// start and finish between two frames. Prologues: `mov [rsp+18h|10h], rbx` (5 bytes) first.
+inline constexpr uint8_t kUseItemBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55};
+inline constexpr uint8_t kUseItemPointBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18};
+constexpr uint32_t kRvaUseItem = 0x436690, kRvaUseItemPoint = 0x437B90;
+// Cursor mode: CInfGame::SetState(state, arg) (lin 36DA40, win 1402F3240) stores the state word at
+// CInfGame+0x78B0 (1402F327A `mov [rbx+78B0h], si`): 0 = normal, other = aiming a spell/ability/item.
+inline constexpr uint8_t kGameStateStoreBytes[] = {0x66, 0x89, 0xB3, 0xB0, 0x78, 0x00, 0x00};
+constexpr uint32_t kRvaGameStateStore = 0x2F327A, kOffGameState = 0x78B0;
+// Lingering spells: CProjectileArea::AIUpdate (lin 308680, win 140262180: clouds, Pacify, Tasha's) and
+// CPsSpellSwarmCurse::AIUpdate (lin 2F8E30, win 1402783F0) fly until "arrived" (+0x3E8, both test it
+// first: 140262222 / 140278422 `cmp dword [reg+3E8h], 0`), then count down one tick per AIUpdate and
+// pulse their effects (area: every +0x3EC ticks; swarm: every 75 ticks of its duration counter).
+inline constexpr uint8_t kAreaAIBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x0F, 0xB7, 0x41, 0x60, 0x48, 0x8B, 0xD9};
+inline constexpr uint8_t kSwarmAIBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x48, 0x89,
+                                            0x7C, 0x24, 0x20, 0x55, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57};
+inline constexpr uint8_t kAreaArrivedBytes[] = {0x83, 0xBB, 0xE8, 0x03, 0x00, 0x00, 0x00};
+inline constexpr uint8_t kSwarmArrivedBytes[] = {0x83, 0xB9, 0xE8, 0x03, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaAreaAI = 0x262180, kRvaSwarmAI = 0x2783F0, kRvaAreaArrived = 0x262222,
+                   kRvaSwarmArrived = 0x278422, kOffProjArrived = 0x3E8;
 
 // Camera: CInfGame::CenterOnGroupLeader (lin 36D7F0, win 1402D31C0) ends with
 // jmp CInfinity::SetViewPosition(inf = area+0x5D8, x - w/2, y - h/2, 1) (lin 3AE2B0, win 140309630).
@@ -590,6 +630,16 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("PostRenderButton.icon", kRvaBarIcon, kBarIconBytes, "lin 3602F0 / win 1402C82F5"),
     PSTF_SYM("PostRenderButton.disabled", kRvaBarDisabled, kBarDisabledBytes, "win 1402C8097"),
     PSTF_SYM("CGameObject::GetObjectType", kRvaGetObjectType, kGetObjectTypeBytes, "lin 176FB0 / win 140173050"),
+    PSTF_SYM("CGameSprite::Render.vismap", kRvaVisMapLea, kVisMapLeaBytes, "lin 562A10 / win 1403DD9D5"),
+    PSTF_SYM("CMessageDropPath::Run.seq", kRvaDropPathSeq, kDropPathSeqBytes, "lin 293C30 / win 14023560D"),
+    PSTF_SYM("CGameSprite::SetSequence", kRvaSetSequence, kSetSequenceBytes, "lin 50A270 / win 1403E8800"),
+    PSTF_SYM("CGameSprite::UseItem", kRvaUseItem, kUseItemBytes, "lin 4D5180 / win 140436690"),
+    PSTF_SYM("CGameSprite::UseItemPoint", kRvaUseItemPoint, kUseItemPointBytes, "lin 4D6CB0 / win 140437B90"),
+    PSTF_SYM("CInfGame::SetState.store", kRvaGameStateStore, kGameStateStoreBytes, "lin 36DA40 / win 1402F327A"),
+    PSTF_SYM("CProjectileArea::AIUpdate", kRvaAreaAI, kAreaAIBytes, "lin 308680 / win 140262180"),
+    PSTF_SYM("CPsSpellSwarmCurse::AIUpdate", kRvaSwarmAI, kSwarmAIBytes, "lin 2F8E30 / win 1402783F0"),
+    PSTF_SYM("CProjectileArea.arrived", kRvaAreaArrived, kAreaArrivedBytes, "win 140262222"),
+    PSTF_SYM("CPsSpellSwarmCurse.arrived", kRvaSwarmArrived, kSwarmArrivedBytes, "win 140278422"),
     PSTF_SYM("CInfinity::SetViewPosition", kRvaSetViewPos, kSetViewPosBytes, "lin 3AE2B0 / win 140309630"),
     PSTF_SYM("CenterOnGroupLeader.jmp", kRvaCenterLeaderJmp, kCenterLeaderJmpBytes, "lin 36D7F0 / win 1402D3266"),
 };
@@ -598,6 +648,7 @@ inline constexpr Symbol kAll[] = {
 inline constexpr Symbol kData[] = {
     PSTF_SYM("CGameSprite.vtbl.ProcessAI", kRvaSlotProcessAI, kSlotProcessAIBytes,
              "vtable win 140649328 slot 35 / lin E57298 slot 36"),
+    PSTF_SYM("CVisibilityMap flags/masks/square", kRvaVisMasks, kVisMaskBytes, "rdata win 14063976C"),
     PSTF_SYM("AnimPst.vtbl.SetRunning", kRvaSlotSetRunning, kSlotSetRunningBytes,
              "vtable win 1406470B0 +0x1F0 / lin slot 63"),
 };

@@ -111,6 +111,10 @@ struct State {
   engine::RollEvent dice;
   uint32_t dice_t0 = 0;
   bool dice_sound = false;           // save result sound still to play (at the verdict)
+  bool dice_panel = false;           // [tbc] dice_panel: the d20 panel for attack rolls and saves
+  bool sight = true;                 // [tbc] combat_sight: every combatant is in view during a fight
+  bool items = false;                // item use hooks installed: an instant item use takes the action
+  bool save_sounds = true;           // [tbc] save_sounds: success/fail sound with the engine's "Save vs." line
   Pt dice_ui{-1, -1};
   Pt hover_at{-1, -1};               // test probe PSTF_HoverAt: this world point instead of the cursor
   bool rolls = false;                // the roll hooks are installed
@@ -128,16 +132,31 @@ struct State {
   uint32_t resolve_ticks = 0;        // world ticks the turn has waited for its spell to land
   uint32_t since_action = 1000;      // world ticks since its action stopped running
   bool resolving_logged = false;
+  PulseBudget pulses;                // lingering spells: one round of pulse ticks per caster round
 } g;
 
 // The creature's spell is still on its way (a projectile object it cast is in the area): its turn
-// waits, at most one round of world time (persistent clouds keep going on their own).
+// waits for flying ones (Adder's Kiss circles 60 ticks before it flies) and for lingering ones that
+// still have pulse ticks this round (the round's pulse lands in the caster's turn).
 constexpr uint32_t kResolveCapTicks = 120;  // Cone of Cold / Ice Knife go off 100 ticks after landing
-int CasterProjectiles(int32_t id, uint64_t area) {
-  int n = 0;
-  for (const auto& o : engine::AllObjects())
-    if (o.source == id && o.area == area && o.type == 0) ++n;  // CProjectile* (type 0, caster +0x68)
+constexpr uint32_t kFlightCapTicks = 300;   // a projectile still flying after 20 s is held to next turn
+struct Pending {
+  int flying = 0, lingering = 0;
+};
+Pending CasterProjectiles(int32_t id, uint64_t area) {
+  Pending n;
+  for (const auto& o : engine::AllObjects()) {
+    if (o.source != id || o.area != area || o.type != 0) continue;  // CProjectile* (type 0, caster +0x68)
+    if (!engine::ProjectileLingers(o.id)) ++n.flying;
+    else if (!g.pulses.Spent(o.id)) ++n.lingering;
+  }
   return n;
+}
+std::vector<int32_t> LingeringOf(int32_t id) {
+  std::vector<int32_t> v;
+  for (const auto& o : engine::AllObjects())
+    if (o.source == id && o.type == 0 && engine::ProjectileLingers(o.id)) v.push_back(o.id);
+  return v;
 }
 
 bool Contains(const std::vector<int32_t>& v, int32_t id) {
@@ -145,6 +164,14 @@ bool Contains(const std::vector<int32_t>& v, int32_t id) {
 }
 
 bool Held(int32_t id) { return g.running && id != g.current && Contains(g.in, id); }
+
+// Projectiles move in their caster's turn; a landed cloud or swarm also stops once it has used this
+// round's pulse ticks. Casters outside the fight are not paced.
+bool ProjectileRuns(int32_t caster, int32_t proj, bool lingers) {
+  if (!g.running || !Contains(g.in, caster)) return true;
+  if (caster != g.current) return false;
+  return !lingers || g.pulses.Run(proj);
+}
 
 void __fastcall HookProcessAI(void* sprite) {
   if (Held(engine::SpriteIdOf(sprite))) {
@@ -261,9 +288,11 @@ void EndFight(const char* why) {
   }
   if (g.run)
     for (int32_t id : g.in) engine::ForceRun(id, false, g.run_scale_other);
+  if (g.sight && !g.party.empty()) engine::RevealCombatants(g.party[0], {}, 0);
   g.nudged = -1;
   g.running = false;
   engine::ForgetOnsets();
+  g.pulses.Clear();
   g.in.clear();
   g.hp_seen.clear();
   g.current = -1;
@@ -385,6 +414,12 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.clog_action = 0xFFFF;
   g.follow = false;
   if (next == -1) return;
+  if (g.round_effects) {
+    for (int32_t p : LingeringOf(next)) {
+      g.pulses.NewRound(p);
+      CLog("SPELL", Name(next) + ": lingering spell " + std::to_string(p) + " gets this round's pulse");
+    }
+  }
   if (g.round_effects && engine::EffectClockInstalled()) {
     engine::SpriteInfo before;
     const bool had = engine::GetSprite(next, &before);
@@ -577,12 +612,17 @@ uint32_t DiceMs() { return g.dice_on ? GetTickCount() - g.dice_t0 : 0; }
 void PlayResultSound(bool good) {
   if (g.sound_dir.empty()) return;
   const std::wstring f = g.sound_dir + (good ? L"save_success.wav" : L"save_failed.wav");
-  PlaySoundW(f.c_str(), nullptr, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+  const BOOL ok = PlaySoundW(f.c_str(), nullptr, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+  Log("tbc: save sound %s (%s)", good ? "success" : "failed", ok ? "playing" : "not played");
 }
 
 // New rolls from the engine hooks: the last one involving a combatant goes on the dice panel.
 void TakeRolls() {
+  bool sound = false, sound_good = false;
   for (const auto& e : engine::TakeRollEvents()) {
+    // CheckSave posts its "Save vs. ...: N" feedback line in the same call that queued this event:
+    // the sound goes with that line, this frame (the last save of the frame wins).
+    if (e.kind == engine::RollEvent::Save && g.save_sounds) sound = true, sound_good = e.success;
     if (!g.running || !Contains(g.in, e.actor)) continue;
     Log("tbc: roll: %s %s d20 %d total %d needs %d -> %s", Who(e.actor).c_str(),
         e.kind == engine::RollEvent::Attack ? ("attacks " + Who(e.target)).c_str() : "saves", e.roll, e.total, e.needs,
@@ -596,11 +636,13 @@ void TakeRolls() {
         std::snprintf(b, sizeof b, " saving throw: d20 %d, total %d -> %s", e.roll, e.total, e.success ? "SAVED" : "failed");
       CLog("ROLL", Name(e.actor) + b);
     }
+    if (!g.dice_panel) continue;
     g.dice = e;
     g.dice_on = true;
     g.dice_t0 = GetTickCount();
-    g.dice_sound = e.kind == engine::RollEvent::Save;
+    g.dice_sound = false;
   }
+  if (sound) PlayResultSound(sound_good);
   if (g.dice_on && g.dice_sound && DiceTiming::Verdict(DiceMs())) {
     g.dice_sound = false;
     PlayResultSound(g.dice.success);
@@ -764,7 +806,10 @@ void UpdateHud(uint32_t now) {
     g.line_preview = false;
     g.unreachable = false;
     if (!v.party_turn) nodes.clear();  // enemies' and allies' paths are not shown
-    if (nodes.empty() && g.econ.party && g.econ.MoveLeft() && !g.econ.acting) nodes = HoverPreview(me);
+    // Aiming a spell, ability or item: no hover line (the engine's own path shows once the order
+    // needs a walk, e.g. a touch spell out of reach).
+    const bool aiming = engine::GameCursorState() != 0;
+    if (nodes.empty() && g.econ.party && g.econ.MoveLeft() && !g.econ.acting && !aiming) nodes = HoverPreview(me);
     const Pt from{me.x, me.y};
     g.line.clear();
     if (!nodes.empty()) {
@@ -822,6 +867,12 @@ void OnTick(uint64_t frame) {
   if (g.round_effects && engine::EffectClockInstalled() && dt > 0 && dt < 1000)
     for (int32_t id : g.in) engine::ShiftEffectClock(id, static_cast<int32_t>(dt));
   if (g.music && !g.party.empty()) engine::KeepBattleMusic(g.party[0], 150);
+  if (g.sight && !g.party.empty()) {
+    std::vector<int32_t> foes;
+    for (int32_t id : g.in)
+      if (PartySlot(id) < 0) foes.push_back(id);
+    engine::RevealCombatants(g.party[0], foes, 96);  // the party sees everyone in the fight
+  }
   if (g.round_effects) engine::WatchProjectiles();
   TestTick();  // after the clock shift: tests read the same remaining ticks the engine compares
   if (!g.running) return;
@@ -874,7 +925,9 @@ void OnTick(uint64_t frame) {
     }
   }
   g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
-  const EconomyStep st = g.econ.Feed(dt, moved, s.has_path, s.action);
+  // A quick item used between two frames still takes the action (UseItem = 34).
+  const uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
+  const EconomyStep st = g.econ.Feed(dt, moved, s.has_path, fed);
   g.hold_current = st.hold_walk;
   if (st.nudge) {
     // Its own script picked nothing (many creatures only wait or wander): the engine's attack on the
@@ -917,11 +970,15 @@ void OnTick(uint64_t frame) {
   }
   g.since_action = g.econ.acting ? 0 : g.since_action + dt;
   bool wait_spell = false;
-  if ((st.end_turn || g.end_requested) && g.resolve_ticks < kResolveCapTicks) {
-    int n = CasterProjectiles(cur, s.area);
-    for (int32_t id : g.in) n += engine::ResolvingOnsets(id);  // e.g. Cone of Cold's 100-tick onset
+  if ((st.end_turn || g.end_requested) && g.resolve_ticks < kFlightCapTicks) {
+    const Pending pend = CasterProjectiles(cur, s.area);
+    int n = pend.flying;
+    if (g.resolve_ticks < kResolveCapTicks) {
+      n += pend.lingering;
+      for (int32_t id : g.in) n += engine::ResolvingOnsets(id);  // e.g. Cone of Cold's 100-tick onset
+    }
     // A projectile appears up to a second after the cast animation ends: give it 25 ticks.
-    if (n > 0 || (g.econ.action_used && g.since_action < 25)) {
+    if (n > 0 || (g.econ.action_used && g.since_action < 25 && g.resolve_ticks < kResolveCapTicks)) {
       wait_spell = true;
       g.resolve_ticks += dt;
       if (!g.resolving_logged) {
@@ -1018,7 +1075,8 @@ int __cdecl LuaSpritePos(engine::LuaState* L) {
   engine::LuaPushNumber(L, ok ? s.y : -1);
   engine::LuaPushNumber(L, ok ? s.hp : -1);
   engine::LuaPushNumber(L, ok ? s.ea : -1);
-  return 4;
+  engine::LuaPushNumber(L, ok ? s.name_ref : -1);  // TLK name (Infinity_FetchString)
+  return 5;
 }
 
 // Test probe: PSTF_PreviewAt(x, y) makes the hover preview use this world point instead of the
@@ -1303,6 +1361,9 @@ bool InstallTbc(const IniMap& ini) {
   g.run_scale_other = static_cast<uint8_t>(IniInt(ini, "tbc.run_scale", 11));
   g.music = IniBool(ini, "tbc.battle_music", true);
   g.camera = IniBool(ini, "tbc.camera_follow", true);
+  g.dice_panel = IniBool(ini, "tbc.dice_panel", false);
+  g.save_sounds = IniBool(ini, "tbc.save_sounds", true);
+  g.sight = IniBool(ini, "tbc.combat_sight", true);
   {
     const int feet = IniInt(ini, "tbc.move_feet", 31);
     g.move_feet = feet > 0 ? feet : 31;
@@ -1370,9 +1431,10 @@ bool InstallTbc(const IniMap& ini) {
   g_process_ai = reinterpret_cast<SpriteFn>(pai);
   if (!AddTickHandler(&OnTick)) return false;
   if (g.round_effects && !engine::InstallEffectClock(&FrozenCombatant)) g.round_effects = false;
-  if (g.round_effects) engine::SetOnsetRule(&OnsetResolvesNow);
+  if (g.round_effects) engine::SetOnsetRule(&OnsetKind);
   // A spell's projectile (a flying knife, a cloud) moves only in its caster's turn.
-  if (g.round_effects) engine::SetProjectileHold([](int32_t caster) { return Held(caster); });
+  if (g.round_effects) engine::SetProjectileGate(&ProjectileRuns);
+  g.items = engine::InstallItemUseHooks();
   {
     char* v = nullptr;
     size_t n = 0;

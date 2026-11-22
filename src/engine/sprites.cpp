@@ -24,6 +24,18 @@ bool Plausible(uint64_t p) { return p >= 0x10000 && p < 0x00007FFFFFFF0000ull &&
 bool IsSprite(uint64_t p) { return Plausible(p) && R<uint64_t>(p) == sym::kVaSpriteVtable; }
 
 // CGameObjectArray::GetDeny without the lock: index = id >> 16 & 0x7FFF, seq = low word.
+// Any object (sprite, projectile, ...) by id, 0 if the slot does not hold it.
+uint64_t LookupAny(int32_t id) {
+  if (id == -1 || (id & 0x8000)) return 0;
+  const int idx = (id >> 16) & 0x7FFF;
+  if (idx > R<int16_t>(sym::kVaObjMax) || static_cast<int16_t>(id) >= R<int16_t>(sym::kVaObjNext))
+    return 0;
+  const uint64_t e = sym::kVaObjArray + 16ull * idx;
+  if (R<uint16_t>(e) != static_cast<uint16_t>(id)) return 0;
+  const uint64_t p = R<uint64_t>(e + 8);
+  return Plausible(p) && R<int32_t>(p + sym::kOffSpriteId) == id ? p : 0;
+}
+
 uint64_t Lookup(int32_t id) {
   if (id == -1 || (id & 0x8000)) return 0;
   const int idx = (id >> 16) & 0x7FFF;
@@ -41,6 +53,7 @@ bool HudOk();
 // Adapter-internal (engine/sprite_ptr.h): raw lookups for other files of src/engine only.
 uint64_t LookupSprite(int32_t id) { return SpritesAvailable() ? Lookup(id) : 0; }
 uint64_t GameObject() { return Game(); }
+uint64_t LookupObject(int32_t id) { return SpritesAvailable() ? LookupAny(id) : 0; }
 bool PlausiblePtr(uint64_t p) { return Plausible(p); }
 
 namespace {
@@ -333,8 +346,18 @@ void ClearAI(int32_t id) {
 }
 
 void DropPath(int32_t id) {
-  if (const uint64_t p = Lookup(id))
-    reinterpret_cast<void(__fastcall*)(uint64_t)>(Va(sym::kRvaDropPath))(p);
+  const uint64_t p = Lookup(id);
+  if (!p) return;
+  reinterpret_cast<void(__fastcall*)(uint64_t)>(Va(sym::kRvaDropPath))(p);
+  // As CMessageDropPath does: a walk cut short goes back to the ready stance (no running in place).
+  static const int seq_ok = [] {
+    int found = 0;
+    for (const auto& s : sym::kAll)
+      if ((s.rva == sym::kRvaDropPathSeq || s.rva == sym::kRvaSetSequence) && CheckSymbol(s)) ++found;
+    return found == 2 ? 1 : 0;
+  }();
+  if (seq_ok && R<uint16_t>(p + sym::kOffSpriteSequence) == sym::kSeqWalk)
+    reinterpret_cast<void(__fastcall*)(uint64_t, int16_t)>(Va(sym::kRvaSetSequence))(p, sym::kSeqReady);
 }
 
 bool MakeEnemy(int32_t id) {

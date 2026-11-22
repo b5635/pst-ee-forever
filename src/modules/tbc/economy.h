@@ -41,6 +41,15 @@ inline bool IsMoveAction(uint16_t id) {
     case 215:  // FollowObjectFormation
     case 297:  // MoveToSavedLocation
     case 386:  // MoveToObjectOffset
+    case 108:  // EscapeArea
+    case 200:  // RandomWalkContinuous
+    case 329:  // TriggerWalkTo
+    case 355:  // RunAwayFromNoLeaveArea
+    case 397:  // RunToObjectFollow
+    case 410:  // RandomWalkTime
+    case 411:  // RandomWalkContinuousTime
+    case 447:  // TimedMoveToPoint
+    case 449:  // ReturnToSavedPlace
       return true;
     default:
       return false;
@@ -62,7 +71,19 @@ inline bool IsIdleAction(uint16_t id) {
 // Ambient idling from a creature's script (GemRB fork CombatDirector::WaitSeconds, same idea): Wait,
 // SmallWait, WaitRandom, RandomWalk, RandomTurn. In an AI's turn it never spends time: before the
 // creature has done anything it is replaced by an attack (the nudge), after that it ends the turn.
-inline bool IsWaitAction(uint16_t id) { return id == 63 || id == 83 || id == 368 || id == 85 || id == 130; }
+// Casts the engine queues itself when an item or effect fires a spell (op146 "cast spell": the
+// Whispering Flask makes its user ForceSpell Aid SPPR201): ForceSpell, ForceSpellPoint,
+// ReallyForceSpell, ReallyForceSpellPoint.
+inline bool IsForcedCast(uint16_t id) { return id == 113 || id == 114 || id == 181 || id == 337; }
+
+inline bool IsWaitAction(uint16_t id) {
+  switch (id) {
+    case 63: case 83: case 368: case 85: case 130: case 200: case 410: case 411:  // waits, random walks/turns
+      return true;
+    default:
+      return false;
+  }
+}
 
 // One search-map cell is 16 x 12 pixels and one foot (Feet2Pixels in GemRB; the engine's own
 // "nearby" ellipse dx^2 + 16 dy^2 / 9 uses the same 4:3 aspect).
@@ -97,6 +118,8 @@ struct Economy {
   uint32_t total = 0, idle = 0;
   bool did_something = false;
   uint16_t last_action = 0;
+  uint32_t since_act = 1000;  // ticks since the action stopped running
+  static constexpr uint32_t kFollowUpTicks = 30;  // a forced cast this soon after is part of it
   bool nudged = false;
 
   Economy() = default;
@@ -109,11 +132,12 @@ struct Economy {
     EconomyStep out;
     total += dt;
     if (!party && IsWaitAction(action)) {
-      // Waits are ignored: no movement, no time. Not acted yet: fight instead; acted (also when its
-      // script cut a running attack short with a wait): the turn is over (GemRB fork ActStep).
+      // Waits are ignored: no movement, no time. No action yet (it may have walked or fled): it picks
+      // one, the nearest foe; acted (also when its script cut a running attack short with a wait),
+      // or still waiting after that order: the turn is over (GemRB fork ActStep).
       acting = false;
       out.hold_walk = !MoveLeft();
-      if (!did_something && !nudged) {
+      if (!action_used && !nudged) {
         nudged = true;
         out.nudge = true;
         idle = 0;
@@ -133,7 +157,10 @@ struct Economy {
       if (acting) acting = false;   // e.g. chasing a target mid-round: the action stays used
     } else if (!idle_action && !walk_action && !has_path) {
       if (!acting) {
-        if (action_used) {
+        if (action_used && IsForcedCast(action) && since_act <= kFollowUpTicks) {
+          acting = true;  // the item's (or spell's) own follow-up cast: the same action goes on
+          act_ticks = 0;
+        } else if (action_used) {
           out.stop = Stop::NoAction;
         } else {
           acting = true;
@@ -154,6 +181,7 @@ struct Economy {
         out.stop = Stop::RoundDone;  // one attack round, then stop repeating
       }
     }
+    since_act = acting ? 0 : since_act + dt;
     last_action = action;
     const bool busy = acting || has_path || (!idle_action && out.stop == Stop::None);
     idle = busy ? 0 : idle + dt;

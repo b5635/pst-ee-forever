@@ -2,10 +2,12 @@
 #include "engine/combat.h"
 
 #include <cstdio>
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <map>
 #include <unordered_map>
+#include <vector>
 
 #include <windows.h>
 
@@ -49,7 +51,7 @@ uint64_t Stats(uint64_t p) {
 // --- round clock ---------------------------------------------------------------------------------
 FrozenFn g_frozen = nullptr;
 OnsetFn g_onset = nullptr;
-std::unordered_map<uint64_t, bool> g_onsets;  // delayed effect -> resolves now (seen once)
+std::unordered_map<uint64_t, int> g_onsets;  // delayed effect -> OnsetFn kind (seen once)
 bool g_clock = false;
 
 extern "C" bool __cdecl PstfPersistFrozen(void* sprite) {
@@ -147,7 +149,7 @@ int ResolvingOnsets(int32_t id) {
     const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
     if (type < 6 || type > 8) return;
     const auto it = g_onsets.find(eff);
-    if (it != g_onsets.end() && it->second) ++n;
+    if (it != g_onsets.end() && it->second == 1) ++n;
   });
   return n;
 }
@@ -164,10 +166,11 @@ void ShiftEffectClock(int32_t id, int32_t ticks) {
     if (type >= 6 && type <= 8 && g_onset && ticks > 0) {
       auto it = g_onsets.find(eff);
       if (it == g_onsets.end()) {
-        const bool now_ = g_onset(static_cast<int32_t>(t - now));
-        it = g_onsets.emplace(eff, now_).first;
-        if (now_) Log("combat: %X: onset in %d ticks resolves now (opcode %d)", static_cast<unsigned>(id),
-                      static_cast<int32_t>(t - now), R<int32_t>(eff + sym::kOffEffOpcode));
+        const int op = R<int32_t>(eff + sym::kOffEffOpcode);
+        const int kind = g_onset(static_cast<int32_t>(t - now), op);
+        it = g_onsets.emplace(eff, kind).first;
+        if (kind) Log("combat: %X: onset in %d ticks %s (opcode %d)", static_cast<unsigned>(id),
+                      static_cast<int32_t>(t - now), kind == 1 ? "resolves now" : "plays now (presentation)", op);
       }
       if (it->second) {  // the spell resolving: world time, and its list is checked every tick
         W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
@@ -238,7 +241,7 @@ int PersistentCount(int32_t id) {
 
 // --- projectiles held with their caster ------------------------------------------------------------
 namespace {
-HeldFn g_proj_held = nullptr;
+ProjGateFn g_proj_gate = nullptr;
 using ObjFn = void(__fastcall*)(void*);
 std::map<uint64_t, ObjFn> g_proj_orig;  // vtable -> original AIUpdate
 
@@ -255,11 +258,22 @@ bool InExeSection(uint64_t va, bool code) {
   return false;
 }
 
+bool LingerOk() {
+  static const int ok =
+      AllOk({sym::kRvaAreaAI, sym::kRvaSwarmAI, sym::kRvaAreaArrived, sym::kRvaSwarmArrived}) ? 1 : 0;
+  return ok != 0;
+}
+
 void __fastcall HookProjAI(void* obj) {
   const uint64_t o = reinterpret_cast<uint64_t>(obj);
   const auto it = g_proj_orig.find(R<uint64_t>(o));
   if (it == g_proj_orig.end()) return;  // cannot happen: only hooked vtables call here
-  if (g_proj_held && g_proj_held(R<int32_t>(o + sym::kOffProjSource))) return;
+  if (g_proj_gate) {
+    const uint64_t fn = reinterpret_cast<uint64_t>(it->second);
+    const bool lingers = (fn == sym::kImageBase + sym::kRvaAreaAI || fn == sym::kImageBase + sym::kRvaSwarmAI) &&
+                         LingerOk() && R<int32_t>(o + sym::kOffProjArrived) != 0;
+    if (!g_proj_gate(R<int32_t>(o + sym::kOffProjSource), R<int32_t>(o + sym::kOffSpriteId), lingers)) return;
+  }
   it->second(obj);
 }
 
@@ -281,10 +295,20 @@ bool HookVtable(uint64_t vtbl) {
 }
 }  // namespace
 
-void SetProjectileHold(HeldFn held) { g_proj_held = held; }
+void SetProjectileGate(ProjGateFn run) { g_proj_gate = run; }
+
+bool ProjectileLingers(int32_t projectile) {
+  const uint64_t p = LookupObject(projectile);
+  if (!p || R<uint8_t>(p + 8) != 0 || !LingerOk()) return false;
+  const auto it = g_proj_orig.find(R<uint64_t>(p));
+  if (it == g_proj_orig.end()) return false;
+  const uint64_t fn = reinterpret_cast<uint64_t>(it->second);
+  return (fn == sym::kImageBase + sym::kRvaAreaAI || fn == sym::kImageBase + sym::kRvaSwarmAI) &&
+         R<int32_t>(p + sym::kOffProjArrived) != 0;
+}
 
 void WatchProjectiles() {
-  if (!g_proj_held) return;
+  if (!g_proj_gate) return;
   const int max = R<int16_t>(sym::kVaObjMax);
   for (int i = 0; i <= max; ++i) {
     const uint64_t e = sym::kVaObjArray + 16ull * i;
@@ -365,6 +389,97 @@ bool CameraOk() {
   return ok != 0;
 }
 }  // namespace
+
+namespace {
+uint64_t g_reveal_area = 0;  // compare only
+std::vector<int32_t> g_revealed;
+}  // namespace
+
+void RevealCombatants(int32_t anchor, const std::vector<int32_t>& ids, int radius) {
+  static const int ok = AllOk({sym::kRvaVisMapLea, sym::kRvaVisMasks}) ? 1 : 0;
+  if (!ok) return;
+  // The area the party stands in now; marks from another area are forgotten, never written (that
+  // area may be gone).
+  const uint64_t ap = LookupSprite(anchor);
+  const uint64_t area = ap ? R<uint64_t>(ap + sym::kOffSpriteArea) : 0;
+  if (area != g_reveal_area) g_revealed.clear();
+  g_reveal_area = area;
+  if (!area || !PlausiblePtr(area)) return;
+  const uint64_t tiles = R<uint64_t>(area + sym::kOffAreaVisMap);
+  const int w = R<int16_t>(area + sym::kOffAreaVisMap + 8);
+  const int h = (R<int32_t>(area + sym::kOffAreaHeightPx) + sym::kVisTile - 1) / sym::kVisTile;
+  if (!PlausiblePtr(tiles) || w <= 0 || h <= 0 || w > 4096 || h > 4096) return;
+  std::vector<int32_t> now;
+  const int r = radius / sym::kVisTile;
+  for (int32_t id : ids) {
+    const uint64_t p = LookupSprite(id);
+    if (!p || R<uint64_t>(p + sym::kOffSpriteArea) != area) continue;
+    const int tx = R<int32_t>(p + sym::kOffSpritePos) / sym::kVisTile;
+    const int ty = R<int32_t>(p + sym::kOffSpritePos + 4) / sym::kVisTile;
+    for (int dy = -r; dy <= r; ++dy)
+      for (int dx = -r; dx <= r; ++dx) {
+        const int x = tx + dx, y = ty + dy;
+        if (dx * dx + dy * dy > r * r + r || x < 0 || y < 0 || x >= w || y >= h) continue;
+        now.push_back(y * w + x);
+      }
+  }
+  std::sort(now.begin(), now.end());
+  now.erase(std::unique(now.begin(), now.end()), now.end());
+  for (int32_t t : g_revealed)
+    if (!std::binary_search(now.begin(), now.end(), t))
+      W<uint16_t>(tiles + 2ull * t, static_cast<uint16_t>(R<uint16_t>(tiles + 2ull * t) & ~sym::kVisCombat));
+  for (int32_t t : now)
+    W<uint16_t>(tiles + 2ull * t, static_cast<uint16_t>(R<uint16_t>(tiles + 2ull * t) | sym::kVisCombat | sym::kVisExplored));
+  g_revealed.swap(now);
+}
+
+namespace {
+using UseItemFn = int64_t(__fastcall*)(void*, void*);
+using UseItemPointFn = int64_t(__fastcall*)(void*);
+UseItemFn g_use_item = nullptr;
+UseItemPointFn g_use_item_point = nullptr;
+std::vector<int32_t> g_item_users;
+void NoteItemUser(void* sprite) {
+  const int32_t id = sprite ? R<int32_t>(reinterpret_cast<uint64_t>(sprite) + sym::kOffSpriteId) : -1;
+  if (id != -1 && g_item_users.size() < 64 &&
+      std::find(g_item_users.begin(), g_item_users.end(), id) == g_item_users.end())
+    g_item_users.push_back(id);
+}
+int64_t __fastcall HookUseItem(void* self, void* target) {
+  NoteItemUser(self);
+  return g_use_item(self, target);
+}
+int64_t __fastcall HookUseItemPoint(void* self) {
+  NoteItemUser(self);
+  return g_use_item_point(self);
+}
+}  // namespace
+
+bool InstallItemUseHooks() {
+  if (g_use_item) return true;
+  if (!AllOk({sym::kRvaUseItem, sym::kRvaUseItemPoint})) return false;
+  const uint64_t a = InlineHook(*Find(sym::kRvaUseItem), 5, reinterpret_cast<void*>(&HookUseItem));
+  if (!a) return false;
+  g_use_item = reinterpret_cast<UseItemFn>(a);
+  const uint64_t b = InlineHook(*Find(sym::kRvaUseItemPoint), 5, reinterpret_cast<void*>(&HookUseItemPoint));
+  if (!b) return false;
+  g_use_item_point = reinterpret_cast<UseItemPointFn>(b);
+  Log("combat: item use hooks installed");
+  return true;
+}
+
+bool TookItemAction(int32_t id) {
+  const auto it = std::find(g_item_users.begin(), g_item_users.end(), id);
+  const bool took = it != g_item_users.end();
+  g_item_users.clear();  // one frame's worth: only the active creature is asked
+  return took;
+}
+
+int GameCursorState() {
+  static const int ok = AllOk({sym::kRvaGameStateStore}) ? 1 : 0;
+  const uint64_t g = ok ? GameObject() : 0;
+  return g ? R<int16_t>(g + sym::kOffGameState) : 0;
+}
 
 bool ViewCenter(int* x, int* y) {
   const uint64_t area = CameraOk() ? ViewArea() : 0;

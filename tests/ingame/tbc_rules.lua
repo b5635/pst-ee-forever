@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
--- Turn-based effect rules in a real fight (Dead Nations save):
+-- Turn-based effect rules in a real fight (Hive save 000000126; a Hive thug is the enemy):
 --   * the Nameless One (CON 20: 1 HP per 75 ticks) regains exactly 1 HP at the start of his turn and
 --     never otherwise;
 --   * Blur (SPWI216) cast by party member 2 counts down 75 ticks (one round) per own turn start and
@@ -8,12 +8,12 @@
 --     loses HP from it only during the caster's turn (the first hit, the turn waits for the spell) or
 --     right at the start of its own turns (the delayed hits); enemy melee on it is told apart by turn;
 --   * the caster's turn does not end before its spell has resolved (no projectile of it left).
--- Run: tools\launch.ps1 -Lua tests\ingame\tbc_rules.lua -Env @{PSTF_TEST_TICK='1'} -Until 'TEST PASS|TEST FAIL' -Close -Timeout 400
+-- Run: tools\launch.ps1 -Save 000000126 -Lua tests\ingame\tbc_rules.lua -Env @{PSTF_TEST_TICK='1'} -Until 'TEST PASS|TEST FAIL' -Close -Timeout 400
 local tno, a, b = PSTF_PartyId(0), PSTF_PartyId(1), PSTF_PartyId(2)
 local function hp(id) local _, _, h = PSTF_SpritePos(id, 1) return h end
 local function fail(msg) PSTF_Note('TEST FAIL: ' .. msg) pstfTestTick = nil end
 -- the strongest creature close to the party becomes the enemy
-local enemy = 0x320032
+local enemy = 0x180018
 if os_con20 then C:Eval('ChangeStat(Myself,41,20,1)', 0) end
 local frames, cur, turnStart, round = 0, -1, 0, 0
 local started = false
@@ -31,6 +31,7 @@ local adderDot = 0
 local function window(id) return cur == id and frames - turnStart <= 45 end
 function pstfTestTick()
 	frames = frames + 1
+	if frames == 2 then PSTF_EvalAs(a, 'AddXPObject(Myself,3000000)') end  -- real levels, no forced caster level
 	if frames == 3 then C:Eval('ApplyDamage(Myself,25,0)', 0) end
 	if frames == 8 then
 		PSTF_MakeEnemy(enemy)
@@ -76,8 +77,8 @@ function pstfTestTick()
 	end
 	if id ~= -1 and party and frames - turnStart > 4 then
 		if issued == -1 then
-			if id == a and not acted[a] then C:Eval('ForceSpell(Myself,2216)', 1) acted[a] = true issued = frames
-			elseif id == a and acted[a] and not acted.adder then C:Eval('ForceSpell(Player3,2201)', 1) acted.adder = true issued = frames adderTurn = frames
+			if id == a and not acted[a] then C:Eval('SpellNoDec(Myself,2216)', 1) acted[a] = true issued = frames
+			elseif id == a and acted[a] and not acted.adder then C:Eval('SpellNoDec(Player3,2201)', 1) acted.adder = true issued = frames adderTurn = frames
 			else issued = 0 end
 		elseif issued > 0 then
 			if (frames - issued) % 6 == 0 and frames - issued <= 90 then

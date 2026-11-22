@@ -538,6 +538,58 @@ TEST_CASE("tbc waits are ignored on AI turns: attack instead, or the turn is ove
   CHECK(!p.Feed(1, 0, false, 368).nudge);   // party turns: the player decides
 }
 
+TEST_CASE("tbc waits: a creature that only fled or walked still picks an action") {
+  CHECK(IsMoveAction(355) && IsMoveAction(449) && IsWaitAction(410) && !IsWaitAction(355));
+  Economy f(31, 51, false);
+  f.Feed(1, 0, false, 29);                  // RunAwayFrom (Curst Citizen, user log 14:32:45)
+  f.Feed(10, 0.6, true, 355);               // RunAwayFromNoLeaveArea: walking, 6 ft
+  auto st = f.Feed(1, 0, false, 368);       // then WaitRandom
+  CHECK(st.nudge && !st.end_turn && !f.action_used);
+  CHECK(f.Feed(1, 0, false, 368).end_turn); // still waiting after the order: done
+}
+
+TEST_CASE("tbc items: the item takes the action, its own follow-up cast is not stopped") {
+  Economy d(31, 51, true);
+  d.Feed(1, 0, false, 34);                 // UseItem Whispering Flask (SPICE)
+  CHECK(d.action_used && d.acting);
+  d.Feed(1, 0, false, 0);                  // item used
+  auto st = d.Feed(1, 0, false, 113);      // its op146 makes him ForceSpell Aid (SPPR201)
+  CHECK(st.stop == Stop::None && d.acting);
+  for (int i = 0; i < 20; ++i) d.Feed(1, 0, false, 0);
+  for (int i = 0; i < 20; ++i) d.Feed(1, 0, false, 0);
+  CHECK(d.Feed(1, 0, false, 113).stop == Stop::NoAction);  // a cast long after: a second action
+  Economy e(31, 51, true);
+  e.Feed(1, 0, false, 3);
+  CHECK(e.Feed(1, 0, false, 31).stop == Stop::NoAction || e.acting);  // Spell is no follow-up
+}
+
+TEST_CASE("tbc onsets: presentation plays now, spells resolve, damage over time is clocked") {
+  CHECK(OnsetKind(75, 369) == 2);  // Aid's sparkle (SPPR201 op369, 5 s delay) from the Whispering Flask
+  CHECK(OnsetKind(225, 174) == 2); // its sound 15 s later
+  CHECK(OnsetKind(45, 374) == 1);  // Adder's Kiss spell hit (op374, 3 s delay): the spell resolving
+  CHECK(OnsetKind(75, 12) == 0);   // a damage hit one round on: clocked
+}
+
+TEST_CASE("tbc lingering spells: one round of pulse ticks per caster round") {
+  PulseBudget b;
+  int ran = 0;
+  for (int i = 0; i < 200; ++i) ran += b.Run(7) ? 1 : 0;  // the cast round, from landing
+  CHECK(ran == PulseBudget::kFirst && b.Spent(7));
+  b.NewRound(7);  // caster's next turn
+  ran = 0;
+  for (int i = 0; i < 200; ++i) ran += b.Run(7) ? 1 : 0;
+  CHECK(ran == 75 && b.Spent(7) && !b.Spent(8));
+  // Swarm Curse pulses every 75 ticks of its counter: one pulse per round after the first.
+  b.Clear();
+  int counter = 300, pulses = 0;  // ticks of duration left
+  auto tick = [&] { if (b.Run(9)) { --counter; if (counter % 75 == 0) ++pulses; } };
+  for (int i = 0; i < 500; ++i) tick();
+  CHECK(pulses == 1);             // 300 -> 180 in the cast round: the pulse at 225
+  b.NewRound(9);
+  for (int i = 0; i < 500; ++i) tick();
+  CHECK(pulses == 2);             // 180 -> 105: the pulse at 150
+}
+
 TEST_CASE("tbc combat log: line format and action names") {
   CHECK(CombatLogLine(12, 5, 3, 7, 808714, 2, 12, "TURN", "Dak'kon (880088) hp 35/42") ==
         "12:05:03.007 w808714 R2 +0012 | TURN   Dak'kon (880088) hp 35/42");

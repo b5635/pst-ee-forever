@@ -6,5 +6,6 @@
 namespace pstf::engine {
 uint64_t LookupSprite(int32_t id);  // CGameSprite* by id, 0 if none
 uint64_t GameObject();              // CInfGame*, 0 if none
+uint64_t LookupObject(int32_t id);  // any CGameObject* by id (projectiles too), 0 if none
 bool PlausiblePtr(uint64_t p);      // user-mode heap pointer (free object slots hold -1)
 }  // namespace pstf::engine

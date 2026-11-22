@@ -36,8 +36,10 @@ inline std::string ActionName(uint16_t id) {
     case 181: return "ReallyForceSpell";
     case 191: return "SpellNoDec";
     case 337: return "ReallyForceSpellPoint";
+    case 355: return "RunAwayFromNoLeaveArea";
     case 368: return "WaitRandom";
     case 401: return "RunningAttackNoSound";
+    case 449: return "ReturnToSavedPlace";
     default: return "action " + std::to_string(id);
   }
 }

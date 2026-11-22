@@ -104,7 +104,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - Prefer `re.py code X --lines` slices over whole functions; prefer `xref`/`find` over reading code.
 - Probes so far: runtime log above (`voice: examine strref N (ms) played`; `tbc: X: stop (...)`, `ends turn (... ft left)`, `menu: UI.MENU ... bytes`).
 - HUD check: add `PSTF_SHOT_DIR`/`PSTF_SHOT_EVERY_MS` to the fight test and look at a shot (cards, panel, line).
-- Manual-turn HUD test (hover preview, selection lock, party AI off): `tools\launch.ps1 -Lua tests\ingame	bc_hud.lua
+- Manual-turn HUD test (hover preview, selection lock, party AI off): `tools\launch.ps1 -Lua tests\ingame\tbc_hud.lua
   -Env @{PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='1500'} -Until 'shot_003' -Close`. Probes: `PSTF_PreviewAt(x,y)`
   (fake cursor), `PSTF_PathFt(x,y)`, `PSTF_WalkCost(x,y)`, `PSTF_PartyId(slot)`, `PSTF_Note(text)` (log line).
 - Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest/Screen`, with tbc on also
@@ -117,6 +117,14 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   (queue BCS on any creature; 1 = take over), `PSTF_MakeEnemy`, `PSTF_SetHp`, `PSTF_Effects/HasEffect(id, op)`,
   `PSTF_Objects([caster|-3])`, `PSTF_Stats(id)`, `PSTF_HoverAt(x,y)`, `PSTF_RollProbe(kind, ok, roll)`, `PSTF_BarSlots()`.
   Env `PSTF_FEEDBACK_LOG=1` logs every engine FeedBack (why a cast failed); `PSTF_TBC_NOFIGHT=1` = probes, no fights.
-- In-game suites: `tests\ingame	bc_rules.lua` (round clock: Blur, Adder's Kiss, regen), `tbc_spells.lua`,
+- In-game suites: `tests\ingame\tbc_rules.lua` (round clock: Blur, Adder's Kiss, regen), `tbc_spells.lua` (needs the Dead Nations save, no longer on disk),
   `tbc_bar.lua` (hotbar), `tbc_hud2.lua` (hover/dice screenshots). After a run: `bash tools/tlog.sh [pattern]`.
-- Spells in tests: `ReallyForceSpellLevel(target, 2xxx, 12)` (ForceSpell fails below the SPL's minimum level).
+- Spells in tests as in a real game: `AddXPObject(Myself,3000000)` (real level-ups), then
+  `SpellNoDec(target, 2xxx)` (PST:EE: needs the caster's own level, not memorised); items with
+  `GiveItemCreate("RES",Myself,1,0,0)` + `UseItem("RES",Myself)`. No forced caster levels.
+- Test save: the Hive, `-Save 000000126` (many Hive thugs to turn hostile; `tbc_rules`, `tbc_sim`, `tbc_hive`).
+  `tbc_hive.lua`: Swarm Curse pacing, Adder's Kiss, Whispering Flask/Embalming take the action, save sound.
+- Game resources: `python -I tools/ieres.py spl|itm NAME` (effects per header), `named REGEX` (SPL/ITM by TLK
+  name), `find REGEX [EXT]`, `raw NAME.EXT [OUT]` (override, then chitin.key/BIFs).
+- Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
+  read it first after a fight.
