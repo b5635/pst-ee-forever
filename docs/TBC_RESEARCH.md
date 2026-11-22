@@ -396,11 +396,15 @@ become 4 (no expiry during someone else's turn).
   (+0x3E8 on Windows, both AIUpdates test it first), then count down one tick per AIUpdate. Swarm Curse
   damages when its duration counter (+0x3E6) is a multiple of 75 (`-13981 * v <= 0x369`).
 - Before: they ran in world time during the whole caster turn (the user's log: three swarm hits 75 ticks
-  apart in Dak'kon's long turn). Now `PulseBudget` (`round_rules.h`): 120 ticks from landing, then 75
-  ticks from each of the caster's turn starts; the AIUpdate gate (`SetProjectileGate`) skips it once spent.
+  apart in Dak'kon's long turn). Now `PulseBudget` (`round_rules.h`): 75 ticks from landing, then 75
+  ticks from each of the caster's turn starts (75 from landing too: any 75 ticks hold exactly one swarm
+  pulse; 120 gave two in the cast round); the AIUpdate gate (`SetProjectileGate`) skips it once spent.
   Verified: one pulse per thug per round, in Dak'kon's turns (`tbc_hive.lua`).
 - Flying projectiles (Adder's Kiss circles 60 ticks before it flies) hold the caster's turn up to 300
   ticks, so the first hit lands in the cast turn; lingering ones and onsets up to 120.
+
+- Adder's Kiss was deferred a round (the user's report): its op374 casting feature sits 3 ticks out (type
+  7), and the onset rule's "within 3 ticks of a 75-tick step" read that as step 0. Now <= 3 ticks = now.
 
 ### 11.2 Presentation onsets play on world time
 - Aid (SPPR201, from the Whispering Flask's op146) has its sparkle as op369 with a 5 s delay and its

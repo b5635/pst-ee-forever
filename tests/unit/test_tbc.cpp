@@ -513,6 +513,7 @@ TEST_CASE("tbc onsets: 5-second steps are damage over time, other short delays r
   CHECK(!OnsetResolvesNow(75) && !OnsetResolvesNow(74) && !OnsetResolvesNow(150));  // Adder's Kiss hits
   CHECK(OnsetResolvesNow(100) && OnsetResolvesNow(99));  // Cone of Cold onset
   CHECK(OnsetResolvesNow(20) && OnsetResolvesNow(0));    // impact a moment later
+  CHECK(OnsetResolvesNow(3) && OnsetKind(3, 374) == 1);  // Adder's Kiss casting feature, 3 ticks out
   CHECK(!OnsetResolvesNow(113) && !OnsetResolvesNow(500));  // a round and a half or more: clocked
 }
 
@@ -584,10 +585,10 @@ TEST_CASE("tbc lingering spells: one round of pulse ticks per caster round") {
   int counter = 300, pulses = 0;  // ticks of duration left
   auto tick = [&] { if (b.Run(9)) { --counter; if (counter % 75 == 0) ++pulses; } };
   for (int i = 0; i < 500; ++i) tick();
-  CHECK(pulses == 1);             // 300 -> 180 in the cast round: the pulse at 225
+  CHECK(pulses == 1);             // 300 -> 225 in the cast round: the pulse at 225
   b.NewRound(9);
   for (int i = 0; i < 500; ++i) tick();
-  CHECK(pulses == 2);             // 180 -> 105: the pulse at 150
+  CHECK(pulses == 2);             // 225 -> 150: the pulse at 150
 }
 
 TEST_CASE("tbc combat log: line format and action names") {

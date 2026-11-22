@@ -15,7 +15,9 @@ constexpr int32_t kRoundTicks5s = 75;  // 5 game seconds x 15 ticks: one combat 
 //     projectile's impact), it is the spell resolving: it runs on world time now and the caster's turn
 //     waits for it.
 inline bool OnsetResolvesNow(int32_t left) {
-  if (left <= 0) return true;
+  // A few ticks away is now (Adder's Kiss' op374 casting feature sits 3 ticks out: the old
+  // "within 3 of a 75-tick step" test read it as step 0 and deferred the spell a round).
+  if (left <= 3) return true;
   if (left >= kRoundTicks5s + kRoundTicks5s / 2) return false;
   const int32_t m = left % kRoundTicks5s;
   const bool on_step = m <= 3 || m >= kRoundTicks5s - 3;  // a tick or two may pass before we see it
@@ -43,9 +45,10 @@ inline int OnsetKind(int32_t left, int opcode) {
 
 // Lingering spells (area clouds, Swarm Curse) pulse on a tick countdown once they have landed. Each
 // gets one round of ticks per round of its caster: kFirst from landing (the first pulse belongs to the
-// round it was cast in), then kRound from the start of each of the caster's turns.
+// round it was cast in), then kRound from the start of each of the caster's turns. Swarm Curse pulses
+// every 75 ticks of its counter, so every 75-tick window holds exactly one pulse (120 gave two).
 struct PulseBudget {
-  static constexpr int32_t kFirst = 120, kRound = kRoundTicks5s;
+  static constexpr int32_t kFirst = kRoundTicks5s, kRound = kRoundTicks5s;  // any 75 ticks hold exactly one swarm pulse
   std::map<int32_t, int32_t> left;  // projectile id -> AIUpdate ticks it may still run this round
   bool Run(int32_t proj) {
     auto it = left.try_emplace(proj, kFirst).first;
