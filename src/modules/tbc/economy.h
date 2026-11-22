@@ -59,6 +59,11 @@ inline bool IsIdleAction(uint16_t id) {
   }
 }
 
+// Ambient idling from a creature's script (GemRB fork CombatDirector::WaitSeconds, same idea): Wait,
+// SmallWait, WaitRandom, RandomWalk, RandomTurn. In an AI's turn it never spends time: before the
+// creature has done anything it is replaced by an attack (the nudge), after that it ends the turn.
+inline bool IsWaitAction(uint16_t id) { return id == 63 || id == 83 || id == 368 || id == 85 || id == 130; }
+
 // One search-map cell is 16 x 12 pixels and one foot (Feet2Pixels in GemRB; the engine's own
 // "nearby" ellipse dx^2 + 16 dy^2 / 9 uses the same 4:3 aspect).
 constexpr double kPxPerFootX = 16.0, kPxPerFootY = 12.0;
@@ -103,6 +108,21 @@ struct Economy {
   EconomyStep Feed(uint32_t dt, double moved_ft, bool has_path, uint16_t action) {
     EconomyStep out;
     total += dt;
+    if (!party && IsWaitAction(action)) {
+      // Waits are ignored: no movement, no time. Not acted yet: fight instead; acted (also when its
+      // script cut a running attack short with a wait): the turn is over (GemRB fork ActStep).
+      acting = false;
+      out.hold_walk = !MoveLeft();
+      if (!did_something && !nudged) {
+        nudged = true;
+        out.nudge = true;
+        idle = 0;
+      } else {
+        out.end_turn = true;
+      }
+      last_action = action;
+      return out;
+    }
     if (moved_ft > 0 && moved_ft < kTeleportFt) {
       move_ft = move_ft > moved_ft ? move_ft - moved_ft : 0.0;
       did_something = true;

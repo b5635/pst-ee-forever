@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,6 +43,7 @@
 #include "engine/world.h"
 #include "modules/dev/lua_bridge.h"
 #include "modules/tbc/census.h"
+#include "modules/tbc/combat_log.h"
 #include "modules/tbc/director.h"
 #include "modules/tbc/economy.h"
 #include "modules/tbc/hud.h"
@@ -113,6 +115,15 @@ struct State {
   Pt hover_at{-1, -1};               // test probe PSTF_HoverAt: this world point instead of the cursor
   bool rolls = false;                // the roll hooks are installed
   uint32_t bar_t0 = 0;               // GetTickCount of the last hotbar collection (0 = due)
+  // Combat log (logs\combat.log): creature names from the TLK (registered through Lua), last HP seen,
+  // the world tick the current turn started at, the active creature's last action.
+  std::string clog_path;
+  FILE* clog = nullptr;
+  std::map<int32_t, std::string> names;
+  std::map<int32_t, int> hp_seen;
+  uint32_t turn_w0 = 0;
+  uint16_t clog_action = 0xFFFF;
+  bool follow = false;               // the camera keeps the active creature centred while it moves
   std::wstring sound_dir;            // <game>/pst_forever/sounds/
   uint32_t resolve_ticks = 0;        // world ticks the turn has waited for its spell to land
   uint32_t since_action = 1000;      // world ticks since its action stopped running
@@ -180,15 +191,81 @@ std::string Who(int32_t id) {
   return b;
 }
 
+// --- combat log -------------------------------------------------------------------------------------
+std::string Name(int32_t id) {
+  char b[16];
+  std::snprintf(b, sizeof b, " (%X)", static_cast<unsigned>(id));
+  const auto it = g.names.find(id);
+  return (it != g.names.end() && !it->second.empty() ? it->second : Who(id)) + b;
+}
+
+void CLog(const char* kind, const std::string& text) {
+  if (g.clog_path.empty()) return;
+  if (!g.clog) {
+    fopen_s(&g.clog, g.clog_path.c_str(), "a");
+    if (!g.clog) return;
+  }
+  SYSTEMTIME t;
+  GetLocalTime(&t);
+  const uint32_t round = g.dir ? g.dir->Round() : 0;
+  const uint32_t into = g.current != -1 && g.last_time >= g.turn_w0 ? g.last_time - g.turn_w0 : 0;
+  const std::string line = CombatLogLine(t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, g.last_time, round, into, kind, text);
+  std::fputs(line.c_str(), g.clog);
+  std::fputc('\n', g.clog);
+  std::fflush(g.clog);
+}
+
+// Names come from the TLK through the engine's Lua (Infinity_FetchString), once per creature.
+void RegisterNames(const std::vector<int32_t>& ids) {
+  std::string code;
+  for (int32_t id : ids) {
+    if (g.names.count(id)) continue;
+    engine::SpriteInfo o;
+    if (!engine::GetSprite(id, &o)) continue;
+    g.names[id] = "";
+    if (o.name_ref >= 0)
+      code += "PSTF_SetName(" + std::to_string(id) + ", Infinity_FetchString(" + std::to_string(o.name_ref) + ")) ";
+  }
+  if (!code.empty()) engine::LuaDoString(code.c_str());
+}
+
+std::string HpText(int32_t id) {
+  engine::SpriteInfo o;
+  if (!engine::GetSprite(id, &o)) return "gone";
+  return std::to_string(o.hp) + "/" + std::to_string(o.max_hp);
+}
+
+// Every combatant's HP change, with whose turn it happened in.
+void LogHpChanges() {
+  for (int32_t id : g.in) {
+    engine::SpriteInfo o;
+    if (!engine::GetSprite(id, &o)) continue;
+    const auto it = g.hp_seen.find(id);
+    if (it != g.hp_seen.end() && it->second != o.hp) {
+      char b[64];
+      std::snprintf(b, sizeof b, " %d -> %d (%+d)", it->second, o.hp, o.hp - it->second);
+      CLog(o.hp < it->second ? "DAMAGE" : "HEAL", Name(id) + b + (g.current != -1 ? ", in the turn of " + Name(g.current) : ""));
+    }
+    g.hp_seen[id] = o.hp;
+  }
+}
+
 void EndFight(const char* why) {
   if (!g.running) return;
   Log("tbc: fight %u over (%s) after %u rounds", g.fights, why, g.dir ? g.dir->Round() : 0);
+  {
+    std::string hps;
+    for (int32_t id : g.in) hps += "\n      " + Name(id) + " hp " + HpText(id);
+    CLog("END", "fight " + std::to_string(g.fights) + " over (" + why + ") after " +
+                    std::to_string(g.dir ? g.dir->Round() : 0) + " rounds" + hps);
+  }
   if (g.run)
     for (int32_t id : g.in) engine::ForceRun(id, false, g.run_scale_other);
   g.nudged = -1;
   g.running = false;
   engine::ForgetOnsets();
   g.in.clear();
+  g.hp_seen.clear();
   g.current = -1;
   g.dir.reset();
   g.hold_current = false;
@@ -227,6 +304,20 @@ void StartFight(const std::vector<Seen>& join, uint32_t now) {
   std::string order;
   for (int32_t id : g.dir->Order()) order += (order.empty() ? "" : ", ") + Who(id);
   Log("tbc: fight %u starts, %zu combatants, order: %s", g.fights, who.size(), order.c_str());
+  RegisterNames(g.dir->Order());
+  {
+    std::string lines;
+    for (int32_t id : g.dir->Order()) {
+      const Combatant* c = g.dir->Find(id);
+      engine::CombatStats st;
+      engine::GetCombatStats(id, &st);
+      char b[96];
+      std::snprintf(b, sizeof b, " %s hp %s, THAC0 %d, AC %d", c && c->r.side == Side::Hostile ? "foe  " : "party",
+                    HpText(id).c_str(), st.thac0, st.ac);
+      lines += "\n      " + Name(id) + b;
+    }
+    CLog("START", "fight " + std::to_string(g.fights) + ", " + std::to_string(who.size()) + " combatants in initiative order:" + lines);
+  }
   if (!g.auto_party) {
     // The party's AI scripts would attack on their own (retaliation, "attack nearest") whenever their
     // turn comes: in turn-based combat the player gives every order. The engine's own Toggle AI.
@@ -263,6 +354,7 @@ void Scan(uint32_t now) {
     const bool there = engine::GetSprite(id, &o) && o.area == g.area;
     Log("tbc: %s leaves the fight (%s, hp %d)", Who(id).c_str(),
         !there ? "left the area" : !o.alive ? "dead" : "out of range", there ? o.hp : 0);
+    CLog("LEAVE", Name(id) + (!there ? " left the area" : !o.alive ? " died" : " is out of range"));
     g.dir->Remove(id);
     g.in.erase(std::remove(g.in.begin(), g.in.end(), id), g.in.end());
   }
@@ -272,6 +364,8 @@ void Scan(uint32_t now) {
     g.in.push_back(s.id);
     engine::DropPath(s.id);
     Log("tbc: %s joins (round %u)", Who(s.id).c_str(), g.dir->Round());
+    RegisterNames({s.id});
+    CLog("JOIN", Name(s.id) + " hp " + HpText(s.id));
   }
   if (!g.dir->Running()) EndFight("one side is gone");
 }
@@ -287,6 +381,9 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.resolve_ticks = 0;
   g.resolving_logged = false;
   g.since_action = 1000;
+  g.turn_w0 = g.last_time;
+  g.clog_action = 0xFFFF;
+  g.follow = false;
   if (next == -1) return;
   if (g.round_effects && engine::EffectClockInstalled()) {
     engine::SpriteInfo before;
@@ -295,11 +392,18 @@ void OnTurnChange(int32_t prev, int32_t next) {
     Log("tbc: %s turn start: effects step %u ticks (hp %d, %d timed, %d persistent)", Who(next).c_str(),
         g.effect_round_ticks, had ? before.hp : -1, static_cast<int>(engine::TimedEffects(next).size()),
         engine::PersistentCount(next));
+    std::string timed;
+    for (const auto& e : engine::TimedEffects(next))
+      if (e.left > 0) timed += " op" + std::to_string(e.opcode) + ":" + std::to_string((e.left + 74) / 75) + "rd";
+    CLog("TURN", Name(next) + " hp " + HpText(next) + ", effects stepped one round" +
+                     (timed.empty() ? "" : ", timed left:" + timed) + ", " +
+                     std::to_string(engine::PersistentCount(next)) + " persistent");
   }
   if (g.run) {
     const uint8_t before = engine::MoveScale(next);
     engine::ForceRun(next, true, g.run_scale_other);
     Log("tbc: %s runs: move scale %u -> %u", Who(next).c_str(), before, engine::MoveScale(next));
+    CLog("RUN", Name(next) + " move scale " + std::to_string(before) + " -> " + std::to_string(engine::MoveScale(next)));
   }
   if (g.camera) {
     engine::SpriteInfo t;
@@ -483,6 +587,15 @@ void TakeRolls() {
     Log("tbc: roll: %s %s d20 %d total %d needs %d -> %s", Who(e.actor).c_str(),
         e.kind == engine::RollEvent::Attack ? ("attacks " + Who(e.target)).c_str() : "saves", e.roll, e.total, e.needs,
         e.success ? (e.kind == engine::RollEvent::Attack ? "hit" : "saved") : (e.kind == engine::RollEvent::Attack ? "miss" : "failed"));
+    {
+      char b[128];
+      if (e.kind == engine::RollEvent::Attack)
+        std::snprintf(b, sizeof b, " attacks %s: d20 %d, total %d, needs %d -> %s", Name(e.target).c_str(), e.roll, e.total,
+                      e.needs, e.success ? "HIT" : "miss");
+      else
+        std::snprintf(b, sizeof b, " saving throw: d20 %d, total %d -> %s", e.roll, e.total, e.success ? "SAVED" : "failed");
+      CLog("ROLL", Name(e.actor) + b);
+    }
     g.dice = e;
     g.dice_on = true;
     g.dice_t0 = GetTickCount();
@@ -744,6 +857,22 @@ void OnTick(uint64_t frame) {
   }
   const double moved = FeetBetween(g.last_x, g.last_y, s.x, s.y);
   g.last_x = s.x, g.last_y = s.y;
+  if (s.action != g.clog_action) {
+    CLog("ACTION", Name(cur) + " " + ActionName(s.action) + (s.has_path ? " (walking)" : ""));
+    g.clog_action = s.action;
+  }
+  // The camera follows the active creature while it moves (BG3); standing still, the player may scroll.
+  if (g.camera && !g.cam_t0 && moved > 0.01 && moved < Economy::kTeleportFt) {
+    int cx = 0, cy = 0;
+    if (engine::ViewCenter(&cx, &cy)) {
+      // ease toward it: a third of the gap per frame, at once if it is far off screen
+      const int dx = s.x - cx, dy = s.y - cy;
+      const bool distant = dx * dx + dy * dy > 600 * 600;
+      engine::CenterView(distant ? s.x : cx + dx / 3, distant ? s.y : cy + dy / 3);
+      if (!g.follow) CLog("CAMERA", "follows " + Name(cur));
+      g.follow = true;
+    }
+  }
   g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
   const EconomyStep st = g.econ.Feed(dt, moved, s.has_path, s.action);
   g.hold_current = st.hold_walk;
@@ -770,10 +899,13 @@ void OnTick(uint64_t frame) {
     // a queued SetInterrupt would itself be replaced). The engine lifts it when the queue is empty.
     engine::SetNoInterrupt(cur);
     Log("tbc: %s idle on its turn: ordered %s (%s)", Who(cur).c_str(), order.c_str(), ok ? "ok" : "failed");
+    CLog("AI", Name(cur) + (s.action ? " only waits (" + ActionName(s.action) + ", ignored)" : " chose nothing") +
+                   ": ordered " + order);
   }
   if (st.stop != Stop::None) {
     static const char* kStop[] = {"", "Can't get there this turn: no movement left",
                                   "No action left this turn", "Attack round done"};
+    CLog("STOP", Name(cur) + ": " + kStop[static_cast<int>(st.stop)]);
     Log("tbc: %s: stop (%s), action %u, %.1f/%.1f ft left", Who(cur).c_str(),
         kStop[static_cast<int>(st.stop)], s.action, g.econ.move_ft, g.econ.max_ft);
     engine::ClearAI(cur);
@@ -795,6 +927,7 @@ void OnTick(uint64_t frame) {
       if (!g.resolving_logged) {
         g.resolving_logged = true;
         if (n > 0) Log("tbc: %s: turn waits for its spell (%d projectile%s or onsets)", Who(cur).c_str(), n, n == 1 ? "" : "s");
+        if (n > 0) CLog("SPELL", Name(cur) + ": turn waits for its spell to land (" + std::to_string(n) + " projectiles/onsets)");
         else g.resolving_logged = false;
       }
     }
@@ -804,6 +937,16 @@ void OnTick(uint64_t frame) {
     for (int32_t id : g.in) {
       engine::SpriteInfo o;
       if (engine::GetSprite(id, &o)) hps += " " + Who(id) + "=" + std::to_string(o.hp);
+    }
+    {
+      char b[160];
+      const char* why = g.end_requested ? "End Turn"
+                        : (!g.econ.party && IsWaitAction(s.action)) ? "its script only waits (ignored)"
+                        : g.econ.action_used && !g.econ.MoveLeft() ? "action and movement spent"
+                        : g.econ.action_used ? "acted" : "nothing to do";
+      std::snprintf(b, sizeof b, " ends turn: %s; action %s, %.1f of %.1f ft walked, %u ticks", why,
+                    g.econ.action_used ? "used" : "unused", g.econ.max_ft - g.econ.move_ft, g.econ.max_ft, g.econ.total);
+      CLog("END", Name(cur) + b);
     }
     Log("tbc: %s ends turn (%s, action %s, %.1f/%.1f ft left, busy %u ticks, total %u) hp:%s",
         Who(cur).c_str(), g.end_requested ? "End Turn" : "economy",
@@ -817,6 +960,7 @@ void OnTick(uint64_t frame) {
   }
   LockSelection();
   if (g.rolls) TakeRolls();
+  LogHpChanges();
   UpdateHud(now);
 }
 
@@ -1060,6 +1204,11 @@ int __cdecl LuaRollProbe(engine::LuaState* L) {
   Log("lua: PSTF_RollProbe -> %s", g.dice_on ? "shown" : "no fight");
   return 0;
 }
+// PSTF_SetName(id, name): the HUD's Lua tells the combat log a creature's TLK name.
+int __cdecl LuaSetName(engine::LuaState* L) {
+  g.names[static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1))] = engine::LuaStringArg(L, 2);
+  return 0;
+}
 // PSTF_WorldTicks() -> the world clock.
 int __cdecl LuaWorldTicks(engine::LuaState* L) {
   uint32_t t = 0;
@@ -1176,6 +1325,15 @@ bool InstallTbc(const IniMap& ini) {
     std::wstring dir(exe);
     dir = dir.substr(0, dir.find_last_of(L"\\/") + 1);
     g.sound_dir = dir + L"pst_forever\\sounds\\";
+    char exe8[MAX_PATH] = {};
+    GetModuleFileNameA(nullptr, exe8, MAX_PATH);
+    std::string d8(exe8);
+    d8 = d8.substr(0, d8.find_last_of("\\/") + 1);
+    g.clog_path = d8 + "pst_forever\\logs\\combat.log";
+    if (FILE* f = nullptr; fopen_s(&f, g.clog_path.c_str(), "w") == 0 && f) {  // fresh each game start
+      std::fputs("# pst_forever combat log: wall clock, world tick, round, ticks into the turn | event\n", f);
+      std::fclose(f);
+    }
   }
   if (!engine::SpritesAvailable() || !engine::ScreensAvailable() || !engine::WorldApiAvailable()) {
     Log("tbc: engine functions differ from the manifest; turn-based combat off");
@@ -1252,6 +1410,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_TbcCurrent", &LuaTbcCurrent);
   dev::AddLuaFunction("PSTF_MakeEnemy", &LuaMakeEnemy);
   dev::AddLuaFunction("PSTF_WorldTicks", &LuaWorldTicks);
+  dev::AddLuaFunction("PSTF_SetName", &LuaSetName);
   dev::AddLuaFunction("PSTF_EvalAs", &LuaEvalAs);
   dev::AddLuaFunction("PSTF_FightId", &LuaFightId);
   dev::AddLuaFunction("PSTF_SetHp", &LuaSetHp);

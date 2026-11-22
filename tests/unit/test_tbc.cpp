@@ -303,6 +303,7 @@ TEST_CASE("tbc turn clock: budget of busy ticks, AI idle end, party waits") {
 
 // ---- action economy, movement line, HUD text ---------------------------------------------------
 #include "modules/tbc/economy.h"
+#include "modules/tbc/combat_log.h"
 #include "modules/tbc/hover.h"
 #include "modules/tbc/round_rules.h"
 #include "modules/tbc/hud.h"
@@ -513,4 +514,32 @@ TEST_CASE("tbc onsets: 5-second steps are damage over time, other short delays r
   CHECK(OnsetResolvesNow(100) && OnsetResolvesNow(99));  // Cone of Cold onset
   CHECK(OnsetResolvesNow(20) && OnsetResolvesNow(0));    // impact a moment later
   CHECK(!OnsetResolvesNow(113) && !OnsetResolvesNow(500));  // a round and a half or more: clocked
+}
+
+TEST_CASE("tbc waits are ignored on AI turns: attack instead, or the turn is over") {
+  CHECK(IsWaitAction(368) && IsWaitAction(63) && IsWaitAction(83) && IsWaitAction(85) && !IsWaitAction(3));
+  Economy a(31, 51, false);
+  auto st = a.Feed(1, 0, false, 368);  // first tick of its turn: WaitRandom from its script
+  CHECK(st.nudge && !st.end_turn);     // no 1-second think: the attack order goes out now
+  st = a.Feed(1, 0.5, true, 3);        // it walks up and attacks
+  CHECK(!st.end_turn && !st.nudge);
+  for (int i = 0; i < 51; ++i) st = a.Feed(1, 0, false, 3);
+  CHECK(st.stop == Stop::RoundDone);
+  st = a.Feed(1, 0, false, 368);       // script waits again: the turn ends at once
+  CHECK(st.end_turn);
+  Economy b(31, 51, false);
+  b.Feed(1, 0, false, 368);            // nudged
+  CHECK(b.Feed(1, 0, false, 63).end_turn);  // still only waiting after the order: turn over
+  Economy c(31, 51, false);
+  c.Feed(1, 0, false, 3);                   // attacking
+  c.Feed(5, 0.4, true, 3);                  // walking up to the target
+  CHECK(c.Feed(1, 0, false, 368).end_turn); // its script cuts in with WaitRandom: turn over at once
+  Economy p(31, 51, true);
+  CHECK(!p.Feed(1, 0, false, 368).nudge);   // party turns: the player decides
+}
+
+TEST_CASE("tbc combat log: line format and action names") {
+  CHECK(CombatLogLine(12, 5, 3, 7, 808714, 2, 12, "TURN", "Dak'kon (880088) hp 35/42") ==
+        "12:05:03.007 w808714 R2 +0012 | TURN   Dak'kon (880088) hp 35/42");
+  CHECK(ActionName(368) == "WaitRandom" && ActionName(3) == "Attack" && ActionName(999) == "action 999");
 }
