@@ -53,4 +53,32 @@ bool IniBool(const IniMap& ini, const std::string& key, bool fallback) {
   return fallback;
 }
 
+// Whole number, decimal or 0x-prefixed; anything else (or missing) is the fallback.
+int IniInt(const IniMap& ini, const std::string& key, int fallback) {
+  auto it = ini.find(key);
+  if (it == ini.end() || it->second.empty()) return fallback;
+  const std::string& v = it->second;
+  const bool neg = v[0] == '-';
+  const size_t i = neg ? 1 : 0;
+  const bool hex = v.size() > i + 1 && v[i] == '0' && (v[i + 1] == 'x' || v[i + 1] == 'X');
+  const int base = hex ? 16 : 10;
+  long long n = 0;
+  bool any = false;
+  for (size_t k = i; k < v.size(); ++k) {
+    const char c = v[k];
+    int d;
+    if (c >= '0' && c <= '9') d = c - '0';
+    else if (hex && c >= 'a' && c <= 'f') d = c - 'a' + 10;
+    else if (hex && c >= 'A' && c <= 'F') d = c - 'A' + 10;
+    else if (hex && (c == 'x' || c == 'X') && k == i + 1) continue;
+    else return fallback;
+    if (d >= base) return fallback;
+    if (n > (0x7FFFFFFFll + 1) / base) return fallback;
+    n = n * base + d;
+    any = true;
+  }
+  if (!any || n > 0x7FFFFFFFll || n < -(0x7FFFFFFFll + 1)) return fallback;
+  return static_cast<int>(v[0] == '-' ? -n : n);
+}
+
 }  // namespace pstf

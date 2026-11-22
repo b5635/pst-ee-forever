@@ -102,23 +102,31 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 
 - When you repeat a multi-step check or search twice, turn it into a script or `re.py` subcommand and list it here.
 - Prefer `re.py code X --lines` slices over whole functions; prefer `xref`/`find` over reading code.
-- Probes so far: runtime log above (`voice: examine strref N (ms) played`; `tbc: X: stop (...)`, `ends turn (... ft left)`, `menu: UI.MENU ... bytes`).
+- Probes so far: runtime log above (`voice: examine strref N (ms) played`; `tbc: X: stop (...)`, `ends turn (... ft left)`, `menu: UI.MENU ... bytes`;
+  `smooth: interpolation installed, N ms iterations (~R draws/s, EE tick M ms = T ticks/s, fps F)` and `lua note: smooth: ok frames=.. ticks=..`).
 - HUD check: add `PSTF_SHOT_DIR`/`PSTF_SHOT_EVERY_MS` to the fight test and look at a shot (cards, panel, line).
 - Manual-turn HUD test (hover preview, selection lock, party AI off): `tools\launch.ps1 -Lua tests\ingame\tbc_hud.lua
   -Env @{PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='1500'} -Until 'shot_003' -Close`. Probes: `PSTF_PreviewAt(x,y)`
   (fake cursor), `PSTF_PathFt(x,y)`, `PSTF_WalkCost(x,y)`, `PSTF_PartyId(slot)`, `PSTF_Note(text)` (log line).
 - Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest/Screen`, with tbc on also
-  `PSTF_TbcState/EndTurn/MakeEnemyNearest/SpritePos`,
+  `PSTF_TbcState/EndTurn/MakeEnemyNearest/SpritePos`, with `[smooth] interpolation=1` also
+  `PSTF_SmoothState/Frames/Ticks/TickMs/Fps` (draw iterations vs world ticks, EE's tick interval and fps),
   callable from the in-game console (Ctrl+Space, needs `Cheats` or `Debug Mode` in Baldur.lua) or from a
   temporary `<game>\luaAuto.cfg` (runs at boot, before LoadOptions). Every call logs `lua: NAME -> value`.
   Details, engine facts and open questions for turn-based combat: `docs/TBC_RESEARCH.md`.
-- Test-driver probes (env `PSTF_TEST_TICK=1`: Lua `pstfTestTick()` runs every frame after the round-clock
-  shift): `PSTF_TbcCurrent()` (id, round, party, used, acting, ft), `PSTF_FightId(i)`, `PSTF_EvalAs(id, bcs[, 1])`
+- Test-driver probes (env `PSTF_TEST_TICK=1`: Lua `pstfTestTick()` runs after the round-clock shift on the
+  iterations that advance the world — with `[smooth] interpolation=1` the extra draw-only iterations are
+  skipped, so frame counts in tests stay calibrated to the tick rate):
+  `PSTF_TbcCurrent()` (id, round, party, used, acting, ft), `PSTF_FightId(i)`, `PSTF_EvalAs(id, bcs[, 1])`
   (queue BCS on any creature; 1 = take over), `PSTF_MakeEnemy`, `PSTF_SetHp`, `PSTF_Effects/HasEffect(id, op)`,
   `PSTF_Objects([caster|-3])`, `PSTF_Stats(id)`, `PSTF_HoverAt(x,y)`, `PSTF_RollProbe(kind, ok, roll)`, `PSTF_BarSlots()`.
   Env `PSTF_FEEDBACK_LOG=1` logs every engine FeedBack (why a cast failed); `PSTF_TBC_NOFIGHT=1` = probes, no fights.
 - In-game suites: `tests\ingame\tbc_rules.lua` (round clock: Blur, Adder's Kiss, regen), `tbc_spells.lua` (needs the Dead Nations save, no longer on disk),
-  `tbc_bar.lua` (hotbar), `tbc_hud2.lua` (hover/dice screenshots). After a run: `bash tools/tlog.sh [pattern]`.
+  `tbc_bar.lua` (hotbar), `tbc_hud2.lua` (hover/dice screenshots), `smooth.lua` (frame interpolation: the loop
+  iterates faster than the world ticks while `tick_ms` still equals EE's own; run
+  `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\smooth.lua -Env @{PSTF_TEST_TICK='1'} -Until 'smooth: ok|TEST FAIL' -Close -Timeout 200`).
+  After a run: `bash tools/tlog.sh [pattern]` — `bash` is broken on this machine (WSL `/bin/bash` missing), so
+  grep the log with `Select-String -Path '<game>\pst_forever\logs\pst_forever.log' -Pattern 'smooth|tbc:'`.
 - Spells in tests as in a real game: `AddXPObject(Myself,3000000)` (real level-ups), then
   `SpellNoDec(target, 2xxx)` (PST:EE: needs the caster's own level, not memorised); items with
   `GiveItemCreate("RES",Myself,1,0,0)` + `UseItem("RES",Myself)`. No forced caster levels.

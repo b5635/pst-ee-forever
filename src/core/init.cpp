@@ -7,6 +7,7 @@
 #include "core/log.h"
 #include "core/version_guard.h"
 #include "modules/dev/autoload.h"
+#include "modules/smooth/smooth_module.h"
 #include "modules/tbc/tbc_module.h"
 #include "modules/dev/lua_bridge.h"
 #include "modules/voice/examine_voice.h"
@@ -26,12 +27,14 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
     pstf::Log("voice: examine voice disabled in ini");
   }
   // The tbc HUD and End Turn button call PSTF_* functions, so tbc needs the Lua bridge too.
-  if (pstf::IniBool(ini, "dev.lua", false) || pstf::IniBool(ini, "tbc.enabled", false)) {
+  if (pstf::IniBool(ini, "dev.lua", false) || pstf::IniBool(ini, "tbc.enabled", false) ||
+      pstf::IniBool(ini, "smooth.interpolation", false)) {
     pstf::dev::InstallLuaBridge();
   } else {
     pstf::Log("dev: Lua bridge disabled in ini");
   }
   pstf::dev::InstallAutoload(ini);
+  pstf::smooth::InstallSmooth(ini);
   pstf::tbc::InstallTbc(ini);
   return 0;
 }

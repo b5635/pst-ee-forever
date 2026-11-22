@@ -53,6 +53,8 @@ add_library(pst_forever SHARED
   src/engine/menu.cpp
   src/engine/render.cpp
   src/engine/combat.cpp
+  src/engine/frame.cpp
+  src/modules/smooth/smooth_module.cpp
   src/modules/tbc/tbc_module.cpp
 )
 target_link_libraries(pst_forever PRIVATE pstf_logic bcrypt winmm)

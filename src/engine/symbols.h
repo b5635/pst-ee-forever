@@ -364,6 +364,67 @@ constexpr uint32_t kVtblAnimPersonalSpace = 0xC0, kVtblSpriteTerrain = 0x148;
 inline constexpr uint8_t kMouseStoreBytes[] = {0x48, 0x8B, 0x0F, 0x45, 0x33, 0xE4, 0x48, 0x89, 0x8B, 0x5C, 0x02, 0x00, 0x00};
 constexpr uint32_t kRvaMouseStore = 0x19D8A2, kOffAreaMouse = 0x25C;
 
+// --- frame interpolation -------------------------------------------------------------------------
+// EE advances the world exactly once per main-loop iteration (CTimerWorld::UpdateTime win 1402B3490 /
+// lin 345D00: `++tick % 100000`, called once per iteration from CScreenWorld::AsynchronousUpdate at
+// 14035432E) and caps the iteration to 1000/fps ms (CChitin::Update win 1404A6350: SDL_Delay at
+// 1404A65A2). Draw rate therefore equals tick rate: walk motion lands as whole-pixel steps at the tick
+// rate. We keep the tick rate (game speed stays exactly vanilla) and let the loop run faster, drawing
+// each mover between where it was at the start of the current tick and where it is now.
+// Loop hooks, CBaldurChitin vtable (win 140620308; lin _ZTV13CBaldurChitin E44D78):
+//   slot 29 (+0xE8) CBaldurChitin::AsynchronousUpdate 14013FDF0 = the world update, called at
+//     1404A6494 (`call qword [r10+0E8h]`, five zero args); slot 0 (+0x00) CBaldurChitin::SynchronousUpdate
+//     140144250 = the draw pass (DrawClear, engine render slots, Flip), called at 1404A64D8.
+inline constexpr uint8_t kSlotChitinAsyncBytes[] = {0xF0, 0xFD, 0x13, 0x40, 0x01, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaSlotChitinAsync = 0x6203F0;
+constexpr uint64_t kVaChitinAsyncUpdate = 0x14013FDF0ull;
+inline constexpr uint8_t kDelayCallBytes[] = {0xE8, 0x29, 0xB5, 0x02, 0x00};  // -> SDL_Delay 1404D1AD0
+constexpr uint32_t kRvaDelayCall = 0x4A65A2;
+constexpr uint64_t kVaSDLDelay = 0x1404D1AD0ull;
+// fps = EE's tick/frame rate (runtime value from Baldur.lua; CChitin::InitInstance 1404A667D clamps
+// 10..90 else 40, CGameOptions::SetOption case 71 sets max(30, 10*(opt+3))). Only the read site is
+// pinned: the global's value changes at runtime, so it is never checked.
+inline constexpr uint8_t kFpsReadBytes[] = {0x8B, 0x05, 0x8A, 0x9A, 0x3B, 0x00};  // mov eax,[rip+dword_1407211FC]
+constexpr uint32_t kRvaFpsRead = 0x36776C;                                        // CScreenWorld::TimerSynchronousUpdate
+constexpr uint64_t kVaEngineFps = 0x1407211FCull;
+// The world screen's draw pass also runs game logic (music fade, pending object lists):
+// CScreenWorld::TimerSynchronousUpdate 140367740 calls CInfGame::SynchronousUpdate (1402F8C40) at
+// 140367824. On a draw-only iteration that call must not happen.
+inline constexpr uint8_t kGameSyncCallBytes[] = {0xE8, 0x17, 0x14, 0xF9, 0xFF};
+constexpr uint32_t kRvaGameSyncCall = 0x367824;
+constexpr uint64_t kVaGameSyncUpdate = 0x1402F8C40ull;
+// Sub-tick walk position: the engine already carries the fraction a tick cannot spend, as Q10 fixed
+// point per creature (CGameSprite::AIUpdateWalk lin 51FFA0 / win 1403B6D20):
+//   step = (moveScale*dx << 10) / dist  -> sprite+0x4434/+0x4438 (writes 1403B7433 / 1403B7476;
+//     moveScale = anim vtbl+0x88, see AnimPst::SetRunning 1403A4FA0)
+//   acc += step                        -> sprite+0x442C/+0x4430 (reads 1403B76A4, add 1403B76B2)
+//   pos = acc >> 10 (x); (acc_y*3)>>2>>10 (y: 12 px up/down per 16 px across) (1403B76E3, 1403B76F8)
+//   the pos before the step is saved at sprite+0x4444/+0x444C (1403B76CE, 1403B76D5) and restored when
+//   the step is blocked (1403B792E/1403B7935) — so acc is the creature's exact position while walking.
+inline constexpr uint8_t kWalkStepXReadBytes[] = {0x48, 0x8B, 0x8E, 0x34, 0x44, 0x00, 0x00};  // mov rcx,[rsi+4434h]
+inline constexpr uint8_t kWalkAccXReadBytes[] = {0x48, 0x8B, 0x9E, 0x2C, 0x44, 0x00, 0x00};   // mov rbx,[rsi+442Ch]
+inline constexpr uint8_t kWalkAccYAddBytes[] = {0x01, 0x8E, 0x30, 0x44, 0x00, 0x00};          // add [rsi+4430h],ecx
+inline constexpr uint8_t kWalkPosXBytes[] = {0x89, 0x7E, 0x0C};                              // mov [rsi+0Ch],edi
+inline constexpr uint8_t kWalkPosYBytes[] = {0x44, 0x89, 0x5E, 0x10};                        // mov [rsi+10h],r11d
+constexpr uint32_t kRvaWalkStepXRead = 0x3B769D, kRvaWalkAccXRead = 0x3B76A4, kRvaWalkAccYAdd = 0x3B76B2;
+constexpr uint32_t kRvaWalkPosX = 0x3B76E3, kRvaWalkPosY = 0x3B76F8;
+constexpr uint32_t kOffSpriteWalkAccX = 0x442C, kOffSpriteWalkAccY = 0x4430;
+constexpr uint32_t kOffSpriteWalkStepX = 0x4434, kOffSpriteWalkStepY = 0x4438;
+// Draw paths that read the object pos (+0x0C/+0x10) and can be wrapped around a temporary shift.
+// Prologues are whole instructions up to the first RIP-relative one (InlineHook copy_len = len).
+inline constexpr uint8_t kSpriteRenderBytes[] = {0x40, 0x55, 0x56, 0x41, 0x56, 0x48, 0x8D, 0xAC, 0x24,
+                                                 0x60, 0xFF, 0xFF, 0xFF, 0x48, 0x81, 0xEC, 0xA0, 0x01, 0x00, 0x00};
+constexpr uint32_t kRvaSpriteRender = 0x3DD820;  // CGameSprite::Render lin 562A10 (pos reads 0x3DD9EA/0x3DDA1F)
+inline constexpr uint8_t kHealthBarRenderBytes[] = {0x4C, 0x8B, 0xDC, 0x55, 0x57, 0x49, 0x8D, 0xAB,
+                                                    0x48, 0xFF, 0xFF, 0xFF, 0x48, 0x81, 0xEC, 0xA8, 0x01, 0x00, 0x00};
+constexpr uint32_t kRvaHealthBarRender = 0x3E1110;  // CGameSprite::RenderHealthBar (pos reads 0x3E1187/0x3E11C2)
+inline constexpr uint8_t kMarkersRenderBytes[] = {0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x56, 0x48,
+                                                  0x8B, 0xEC, 0x48, 0x83, 0xEC, 0x60, 0x48, 0x8B, 0x41, 0x18};
+constexpr uint32_t kRvaMarkersRender = 0x3E1A50;  // CGameSprite::RenderMarkers (pos reads 0x3E1A75/0x3E1AAA)
+inline constexpr uint8_t kTemporalRenderBytes[] = {0x4C, 0x8B, 0xDC, 0x55, 0x56, 0x57, 0x41, 0x57,
+                                                   0x49, 0x8D, 0x6B, 0xA1, 0x48, 0x81, 0xEC, 0xD8, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaTemporalRender = 0x3DF110;  // CGameTemporal::Render (projectiles draw through it; pos 0x3DF172/0x3DF15C)
+
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 // --- round clock for effects (turn-based: effects advance one round at their owner's turn) -------
 // CGameSprite::ProcessEffectList (lin 4E21F0, win 1404231E0) runs the persistent effects (poison,
@@ -642,6 +703,19 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CPsSpellSwarmCurse.arrived", kRvaSwarmArrived, kSwarmArrivedBytes, "win 140278422"),
     PSTF_SYM("CInfinity::SetViewPosition", kRvaSetViewPos, kSetViewPosBytes, "lin 3AE2B0 / win 140309630"),
     PSTF_SYM("CenterOnGroupLeader.jmp", kRvaCenterLeaderJmp, kCenterLeaderJmpBytes, "lin 36D7F0 / win 1402D3266"),
+    PSTF_SYM("Chitin.Update.delay", kRvaDelayCall, kDelayCallBytes, "lin 6603A0 / win 1404A65A2"),
+    PSTF_SYM("TimerSyncUpdate.gamesync", kRvaGameSyncCall, kGameSyncCallBytes, "lin 42D330 / win 140367824"),
+    PSTF_SYM("TimerSyncUpdate.fps", kRvaFpsRead, kFpsReadBytes, "lin 42D330 / win 14036776C"),
+    PSTF_SYM("AIUpdateWalk.walkStepX", kRvaWalkStepXRead, kWalkStepXReadBytes, "lin 51FFA0 / win 1403B769D"),
+    PSTF_SYM("AIUpdateWalk.walkAccX", kRvaWalkAccXRead, kWalkAccXReadBytes, "lin 51FFA0 / win 1403B76A4"),
+    PSTF_SYM("AIUpdateWalk.walkAccY", kRvaWalkAccYAdd, kWalkAccYAddBytes, "lin 51FFA0 / win 1403B76B2"),
+    PSTF_SYM("AIUpdateWalk.posX", kRvaWalkPosX, kWalkPosXBytes, "lin 51FFA0 / win 1403B76E3"),
+    PSTF_SYM("AIUpdateWalk.posY", kRvaWalkPosY, kWalkPosYBytes, "lin 51FFA0 / win 1403B76F8"),
+    PSTF_SYM("CGameSprite::Render", kRvaSpriteRender, kSpriteRenderBytes, "lin 562A10 / win 1403DD820"),
+    PSTF_SYM("CGameSprite::RenderHealthBar", kRvaHealthBarRender, kHealthBarRenderBytes,
+             "lin 5074D0 / win 1403E1110"),
+    PSTF_SYM("CGameSprite::RenderMarkers", kRvaMarkersRender, kMarkersRenderBytes, "lin 508150 / win 1403E1A50"),
+    PSTF_SYM("CGameTemporal::Render", kRvaTemporalRender, kTemporalRenderBytes, "lin 504110 / win 1403DF110"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.
@@ -651,6 +725,8 @@ inline constexpr Symbol kData[] = {
     PSTF_SYM("CVisibilityMap flags/masks/square", kRvaVisMasks, kVisMaskBytes, "rdata win 14063976C"),
     PSTF_SYM("AnimPst.vtbl.SetRunning", kRvaSlotSetRunning, kSlotSetRunningBytes,
              "vtable win 1406470B0 +0x1F0 / lin slot 63"),
+    PSTF_SYM("CBaldurChitin.vtbl.AsyncUpdate", kRvaSlotChitinAsync, kSlotChitinAsyncBytes,
+             "vtable win 140620308 slot 29 / lin E44D78 slot 29"),
 };
 #undef PSTF_SYM
 

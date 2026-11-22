@@ -105,6 +105,7 @@ engine objects. Asset decoding may run on workers and hand results to the game t
 | `hires` upscaled areas/sprites | PVRZ/texture upload, sprite frame upload, draw calls | GL-level texture substitution keeps engine coordinates; assets from the GemRB pipeline (`D:\gemrb\tools\upscale`, outputs in `C:\Games\GemRB\upscaled`) re-keyed to EE resrefs |
 | `lighting` dynamic lights, depth | area render pass, sprite draw, SwapBuffers | GemRB `LIGHTING_PLAN.md` data (`lights.txt`, height/normal maps per WED) + our own GLSL pass |
 | `voice` examine voice-over | string display paths (infopoint/description/feedback) | plays WAV keyed by strref; voices from `D:\pst-voiceover-engine` (has EE CSVs). First check whether TLK sound resrefs alone already work |
+| `smooth` sub-tick frame interpolation | `CBaldurChitin::AsynchronousUpdate` vtable slot, `SDL_Delay` in `CChitin::Update`, `CInfGame::SynchronousUpdate` inside the world draw pass, `CGameSprite::Render`/`RenderHealthBar`/`RenderMarkers`, `CGameTemporal::Render` | EE ticks the world once per loop iteration and caps the loop to 1000/fps ms, so draw rate == tick rate. The loop iterates at a whole division of the tick interval (`k >= 2` iterations per tick, `[smooth] frame_rate` as the target draw rate), so EE's tick rate — walk speed, effect durations, songs, day/night — stays exactly the same; iterations between ticks draw only (no logic, no game-sync). Creatures interpolate from the engine's own Q10 walk accumulators, projectiles from their previous position; a draw hook shifts pos (+0x0C/+0x10) for the duration of one engine draw call and restores it. Logic, scripts, saves and combat timing stay vanilla; movement is displayed one tick late. Math in `modules/smooth/smooth_logic.h` (GemRB `TickInterpolation`, ported in spirit) |
 | `party8` 8 party members | every use of the 6-slot party arrays | **high risk**: `CInfGame::m_characters` is `Array<long,6>` (struct layout); needs relocation + patching of every `6` bound and the portrait UI |
 | `dev` | named pipe console, in-game test runner, probes | dev builds only, see 4.2 |
 
@@ -157,6 +158,15 @@ docs/                   this file, symbol map, feature plans
   `SPDX-License-Identifier: GPL-2.0-or-later` to every source file. Third-party libraries must be
   GPL-compatible (MinHook BSD-2, doctest MIT: fine). InfinityLoader/EEex ship no license file: reference
   only, copy no code.
+
+- **Frame rate is decoupled from the tick rate, not raised** (owner, 2026-11-21): raising EE's fps global
+  would scale walk speed, animation rate and the `tick % 15` effect gate, because the engine treats one
+  tick as one frame everywhere. Instead the smooth module keeps the tick rate and adds draw-only
+  iterations, which costs exactly one tick of display latency (same trade GemRB makes). Known side
+  effects, accepted as presentation: edge-scroll/keyboard panning accumulates per draw frame, so it moves
+  proportionally faster; UI screen animations and the tbc camera easing run at the draw rate; floating
+  damage and party-talk text (`CFloatMessage`/`CGameText`) keep the position they captured at spawn and
+  do not follow an interpolated sprite; picking stays one tick behind the drawn sprite.
 
 ## 7. Open decisions
 

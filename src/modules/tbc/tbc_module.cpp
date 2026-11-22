@@ -34,6 +34,7 @@
 #include "core/patch.h"
 #include "core/tick.h"
 #include "engine/combat.h"
+#include "engine/frame.h"
 #include "engine/lua.h"
 #include "engine/menu.h"
 #include "engine/render.h"
@@ -838,6 +839,9 @@ void UpdateHud(uint32_t now) {
 
 void TestTick() {
   if (!g.test_tick) return;
+  // Test scripts count these calls as "frames". With sub-tick interpolation the loop runs faster than
+  // the world, so the test tick stays on the iterations that actually advanced the world.
+  if (!engine::InterpTickFrame()) return;
   const std::string e = engine::LuaDoString("if pstfTestTick then pstfTestTick() end");
   if (!e.empty()) {
     Log("tbc: test tick error: %s", e.c_str());
@@ -846,6 +850,9 @@ void TestTick() {
 }
 
 void OnTick(uint64_t frame) {
+  // With sub-tick interpolation the loop runs faster than the world: turn decisions, scans and the test
+  // tick belong to the iterations that advanced the world, not to the extra draw-only ones.
+  if (!engine::InterpTickFrame()) return;
   if (!g.running) TestTick();
   if (engine::ActiveScreen() != engine::Screen::World) {
     EndFight("left the world screen");

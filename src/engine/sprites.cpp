@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "engine/sprites.h"
 
+#include <cstdlib>
+
 #include "core/patch.h"
 #include "engine/symbols.h"
 #include "engine/sprite_ptr.h"
@@ -11,6 +13,10 @@ namespace {
 template <class T>
 T R(uint64_t va) {
   return *reinterpret_cast<const volatile T*>(va);
+}
+
+void W32(uint64_t va, int32_t v) {
+  *reinterpret_cast<volatile int32_t*>(va) = v;
 }
 
 uint64_t Game() {
@@ -304,6 +310,86 @@ std::vector<ObjectInfo> AllObjects() {
     out.push_back(o);
   }
   return out;
+}
+
+bool SpriteMoveState(int32_t id, MoveState* out) {
+  if (!out) return false;
+  const uint64_t p = SpritesAvailable() ? Lookup(id) : 0;
+  if (!p) return false;
+  out->draw_x = R<int32_t>(p + sym::kOffSpritePos);
+  out->draw_y = R<int32_t>(p + sym::kOffSpritePos + 4);
+  const int32_t step_x = R<int32_t>(p + sym::kOffSpriteWalkStepX);
+  const int32_t step_y = R<int32_t>(p + sym::kOffSpriteWalkStepY);
+  if (step_x == 0 && step_y == 0) {
+    out->x = float(out->draw_x);
+    out->y = float(out->draw_y);
+    out->exact = false;
+    return true;
+  }
+  const int32_t acc_x = R<int32_t>(p + sym::kOffSpriteWalkAccX);
+  const int32_t acc_y = R<int32_t>(p + sym::kOffSpriteWalkAccY);
+  // The engine derives pos from the accumulators: x = acc_x >> 10, y = (acc_y*3 + round_term) >> 2 >> 10
+  // (1403B76DC..1403B76F4: lea eax,[rax+rax*2]; cdq; and edx,3; add; sar 2; sar 0Ah). The accumulators
+  // must agree with pos to be usable; a stale pair (after a teleport, a blocked step, a new area) falls
+  // back to the integer position.
+  const int ty = acc_y * 3;
+  const int yr = ((ty + (acc_y < 0 ? 3 : (ty & 3))) >> 2) >> 10;
+  if (std::abs((acc_x >> 10) - out->draw_x) > 1 || std::abs(yr - out->draw_y) > 1) {
+    out->x = float(out->draw_x);
+    out->y = float(out->draw_y);
+    out->exact = false;
+    return true;
+  }
+  out->x = float(acc_x) / 1024.0f;
+  out->y = (float(acc_y) * 0.75f) / 1024.0f;  // 12 px up/down per 16 px across (AIUpdateWalk 1403B76DC)
+  out->exact = true;
+  return true;
+}
+
+bool ObjectMoveState(int32_t id, MoveState* out) {
+  if (!out) return false;
+  const uint64_t p = SpritesAvailable() ? LookupObject(id) : 0;
+  if (!p) return false;
+  out->draw_x = R<int32_t>(p + sym::kOffSpritePos);
+  out->draw_y = R<int32_t>(p + sym::kOffSpritePos + 4);
+  out->x = float(out->draw_x);
+  out->y = float(out->draw_y);
+  out->exact = false;
+  return true;
+}
+
+bool ShiftSpritePos(int32_t id, int dx, int dy, int* old_x, int* old_y) {
+  const uint64_t p = SpritesAvailable() ? Lookup(id) : 0;
+  if (!p || !old_x || !old_y) return false;
+  *old_x = R<int32_t>(p + sym::kOffSpritePos);
+  *old_y = R<int32_t>(p + sym::kOffSpritePos + 4);
+  W32(p + sym::kOffSpritePos, *old_x + dx);
+  W32(p + sym::kOffSpritePos + 4, *old_y + dy);
+  return true;
+}
+
+void RestoreSpritePos(int32_t id, int x, int y) {
+  const uint64_t p = SpritesAvailable() ? Lookup(id) : 0;
+  if (!p) return;
+  W32(p + sym::kOffSpritePos, x);
+  W32(p + sym::kOffSpritePos + 4, y);
+}
+
+bool ShiftObjectPos(int32_t id, int dx, int dy, int* old_x, int* old_y) {
+  const uint64_t p = SpritesAvailable() ? LookupObject(id) : 0;
+  if (!p || !old_x || !old_y) return false;
+  *old_x = R<int32_t>(p + sym::kOffSpritePos);
+  *old_y = R<int32_t>(p + sym::kOffSpritePos + 4);
+  W32(p + sym::kOffSpritePos, *old_x + dx);
+  W32(p + sym::kOffSpritePos + 4, *old_y + dy);
+  return true;
+}
+
+void RestoreObjectPos(int32_t id, int x, int y) {
+  const uint64_t p = SpritesAvailable() ? LookupObject(id) : 0;
+  if (!p) return;
+  W32(p + sym::kOffSpritePos, x);
+  W32(p + sym::kOffSpritePos + 4, y);
 }
 
 bool EvalAs(int32_t id, const std::string& bcs) {

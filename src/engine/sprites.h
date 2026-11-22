@@ -64,6 +64,26 @@ struct CellCoster {
 CellCoster CosterFor(int32_t id);
 void SelectOnly(int32_t id);  // -1: select nobody
 
+// Sub-tick draw state (symbols.h "frame interpolation"). draw_x/draw_y are the integer positions the
+// engine draws at (object +0x0C/+0x10); x/y are exact positions. For a walking creature x/y carry the
+// fraction the engine keeps between ticks (Q10 at sprite+0x442C/+0x4430, y scaled 3/4), so x/y differ
+// from draw_x/draw_y; for anything else (a creature that is not walking, a projectile) they are the
+// integer position.
+struct MoveState {
+  float x = 0.0f, y = 0.0f;
+  int draw_x = 0, draw_y = 0;
+  bool exact = false;  // x/y carry a sub-pixel fraction
+};
+bool SpriteMoveState(int32_t id, MoveState* out);   // creature
+bool ObjectMoveState(int32_t id, MoveState* out);   // non-creature object (projectiles)
+
+// Temporary draw shift for the render pass (used by engine/frame.cpp on the game thread): pos becomes
+// draw + (dx, dy) and the old ints come back in old_x/old_y so the caller can put them back.
+bool ShiftSpritePos(int32_t id, int dx, int dy, int* old_x, int* old_y);
+void RestoreSpritePos(int32_t id, int x, int y);
+bool ShiftObjectPos(int32_t id, int dx, int dy, int* old_x, int* old_y);
+void RestoreObjectPos(int32_t id, int x, int y);
+
 // Every live object in the object array that is not a creature (projectiles, doors, ...): for probes
 // and for "the caster's spell is still resolving".
 struct ObjectInfo {
