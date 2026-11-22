@@ -20,3 +20,8 @@
 __pycache__/
 .pytest_cache/
 /tools/universal-modder/
+
+# binaries and databases (never commit)
+*.sqlite
+*.exe
+*.i64
