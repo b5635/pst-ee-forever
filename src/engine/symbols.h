@@ -424,6 +424,23 @@ constexpr uint32_t kRvaMarkersRender = 0x3E1A50;  // CGameSprite::RenderMarkers 
 inline constexpr uint8_t kTemporalRenderBytes[] = {0x4C, 0x8B, 0xDC, 0x55, 0x56, 0x57, 0x41, 0x57,
                                                    0x49, 0x8D, 0x6B, 0xA1, 0x48, 0x81, 0xEC, 0xD8, 0x00, 0x00, 0x00};
 constexpr uint32_t kRvaTemporalRender = 0x3DF110;  // CGameTemporal::Render (projectiles draw through it; pos 0x3DF172/0x3DF15C)
+// The engine's lock camera (the HUD's scroll-lock button; CScreenWorld+0xA58 = locked creature id, -1 off;
+// set by CScreenWorld::LockScrollSelected lin 423090 / win 14035AA20). Once per WORLD TICK,
+// CScreenWorld::AsynchronousUpdate (lin 4308B0 / win 140353B20, 140354EAF..140354FB1) sets
+//   SetScrollDest(area+0x5D8, {pos.x - viewW/2, pos.y - viewH/2 - anim->vf[0x1C0]()})  call at 140354F8F
+//   area+0x894 (scroll speed) = 0                                                         140354FB1
+// and CGameArea::Render (win 14019E500: dest read 14019E5F2, speed read 14019E687) hands the dest to
+// CInfinity::Scroll (win 1403084D0), which with speed 0 sets the view to it at once and clears it to -1.
+// So the view jumps to the newest tick position while movers are drawn sliding behind it.
+inline constexpr uint8_t kLockScrollDestCallBytes[] = {0xE8, 0xBC, 0x44, 0xFB, 0xFF};  // -> 140309450
+inline constexpr uint8_t kLockIdReadBytes[] = {0x41, 0x8B, 0x8E, 0x58, 0x0A, 0x00, 0x00};  // mov ecx,[r14+0A58h]
+inline constexpr uint8_t kLockSpeedStoreBytes[] = {0x66, 0x44, 0x89, 0xBA, 0x94, 0x08, 0x00, 0x00};
+inline constexpr uint8_t kAreaDestReadBytes[] = {0x4D, 0x8B, 0x8E, 0x98, 0x08, 0x00, 0x00};  // mov r9,[r14+898h]
+inline constexpr uint8_t kAreaSpeedReadBytes[] = {0x45, 0x0F, 0xB7, 0x86, 0x94, 0x08, 0x00, 0x00};
+constexpr uint32_t kRvaLockScrollDestCall = 0x354F8F, kRvaLockIdRead = 0x354EAF, kRvaLockSpeedStore = 0x354FB1;
+constexpr uint32_t kRvaAreaDestRead = 0x19E5F2, kRvaAreaSpeedRead = 0x19E687;
+constexpr uint64_t kVaSetScrollDest = 0x140309450ull;
+constexpr uint32_t kOffWorldScrollLock = 0xA58, kOffAreaScrollSpeed = 0x894;
 
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 // --- round clock for effects (turn-based: effects advance one round at their owner's turn) -------
@@ -716,6 +733,12 @@ inline constexpr Symbol kAll[] = {
              "lin 5074D0 / win 1403E1110"),
     PSTF_SYM("CGameSprite::RenderMarkers", kRvaMarkersRender, kMarkersRenderBytes, "lin 508150 / win 1403E1A50"),
     PSTF_SYM("CGameTemporal::Render", kRvaTemporalRender, kTemporalRenderBytes, "lin 504110 / win 1403DF110"),
+    PSTF_SYM("WorldAsync.lockScrollDest", kRvaLockScrollDestCall, kLockScrollDestCallBytes,
+             "lin 4308B0 / win 140354F8F"),
+    PSTF_SYM("WorldAsync.lockId", kRvaLockIdRead, kLockIdReadBytes, "lin 4308B0 / win 140354EAF"),
+    PSTF_SYM("WorldAsync.lockSpeed", kRvaLockSpeedStore, kLockSpeedStoreBytes, "lin 4308B0 / win 140354FB1"),
+    PSTF_SYM("CGameArea::Render.scrollDest", kRvaAreaDestRead, kAreaDestReadBytes, "lin 1BB560 / win 14019E5F2"),
+    PSTF_SYM("CGameArea::Render.scrollSpeed", kRvaAreaSpeedRead, kAreaSpeedReadBytes, "lin 1BB560 / win 14019E687"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.

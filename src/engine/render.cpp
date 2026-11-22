@@ -19,7 +19,12 @@ using DrawLine2dFn = void(__fastcall*)(void* vid, int x1, int y1, int x2, int y2
                                       float half_width, float start_trim, float end_trim, float dash, float gap,
                                       bool textured);
 AreaRenderFn g_render = nullptr;
-WorldDrawFn g_fn = nullptr;
+WorldDrawFn g_fn = nullptr;    // after the world pass: the movement line, the HUD lines
+// Before the world pass: presentation that must land on this frame (the cameras).
+constexpr int kMaxPre = 4;
+WorldDrawFn g_pre[kMaxPre] = {};
+bool g_pre_faulted[kMaxPre] = {};
+int g_pre_n = 0;
 bool g_faulted = false;
 
 // Valid while the callback runs.
@@ -27,8 +32,18 @@ void* g_vid = nullptr;
 uint64_t g_area = 0;
 
 void CallFn(uint64_t) { g_fn(); }
+void CallPre(uint64_t i) { g_pre[i](); }
 
 void __fastcall AreaRender(void* area, void* vid) {
+  // Presentation first: a camera step here is on the frame being drawn, not one frame late.
+  for (int i = 0; i < g_pre_n; ++i) {
+    if (g_pre_faulted[i]) continue;
+    uint32_t code = 0;
+    if (!GuardedCall(&CallPre, static_cast<uint64_t>(i), &code)) {
+      g_pre_faulted[i] = true;
+      Log("render: pre-draw hook %d faulted (%08X); it is turned off for this session", i, code);
+    }
+  }
   g_render(area, vid);
   if (!g_fn || g_faulted) return;
   g_vid = vid;
@@ -42,13 +57,9 @@ void __fastcall AreaRender(void* area, void* vid) {
   g_area = 0;
 }
 
-}  // namespace
-
-bool InstallWorldDraw(WorldDrawFn fn) {
-  if (g_render) {
-    g_fn = fn;
-    return true;
-  }
+// The hook on the world pass, installed once; both callbacks share it. False when the sites differ.
+bool InstallSite() {
+  if (g_render) return true;
   const sym::Symbol* site = nullptr;
   int ok = 0;
   for (const auto& s : sym::kAll) {
@@ -63,8 +74,21 @@ bool InstallWorldDraw(WorldDrawFn fn) {
     return false;
   }
   g_render = reinterpret_cast<AreaRenderFn>(original);
-  g_fn = fn;
   Log("render: world overlay installed at %llX", static_cast<unsigned long long>(sym::kImageBase + site->rva));
+  return true;
+}
+
+}  // namespace
+
+bool InstallWorldDraw(WorldDrawFn fn) {
+  if (!InstallSite()) return false;
+  g_fn = fn;
+  return true;
+}
+
+bool InstallWorldPreDraw(WorldDrawFn fn) {
+  if (!fn || g_pre_n >= kMaxPre || !InstallSite()) return false;
+  g_pre[g_pre_n++] = fn;
   return true;
 }
 

@@ -10,6 +10,10 @@ namespace pstf::engine {
 using WorldDrawFn = void (*)();
 bool InstallWorldDraw(WorldDrawFn fn);
 
+// Presentation hook that runs inside the draw pass BEFORE CGameArea::Render, so what it changes (the
+// camera) lands on the frame being drawn. Game thread only, guarded like the overlay.
+bool InstallWorldPreDraw(WorldDrawFn fn);
+
 // Only valid inside the WorldDrawFn callback. World coordinates (pixels). color = 0xBBGGRR.
 // half_width in pixels; the engine draws a strip with bevelled ends (alpha at least 0xAA).
 void DrawWorldLine(int x1, int y1, int x2, int y2, uint32_t color, float half_width);

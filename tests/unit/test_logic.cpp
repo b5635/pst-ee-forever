@@ -6,6 +6,7 @@
 #include "engine/symbols.h"
 #include "mini_test.h"
 #include "modules/smooth/smooth_logic.h"
+#include "modules/tbc/camera_logic.h"
 #include "modules/voice/voice_logic.h"
 
 using namespace pstf;
@@ -58,89 +59,127 @@ TEST_CASE("ini integers: decimal, hex, negative, garbage falls back") {
   CHECK(IniInt(ini, "tbc.missing", 60) == 60);
 }
 
-TEST_CASE("tick clock: alpha is the fraction of the tick, clamped, 0 before the tick") {
-  smooth::TickClock c;
-  c.enabled = true;
-  c.BeginTick(1000, 33);
-  CHECK(c.serial == 1);
-  CHECK(c.Alpha(1000) == 0.0f);
-  CHECK(c.Alpha(999) == 0.0f);
-  CHECK(c.Alpha(1016) == 16.0f / 33.0f);
-  CHECK(c.Alpha(1100) == 1.0f);
-  c.BeginTick(2000, 33);
-  CHECK(c.serial == 2);
-  CHECK(c.Alpha(2000) == 0.0f);
-  CHECK(!c.enabled || c.Alpha(0) == 0.0f);
-  smooth::TickClock off;
-  CHECK(off.Alpha(12345) == 0.0f);  // disabled, or never captured
-}
-
-TEST_CASE("tick clock serial skips 0, which means \"never captured\"") {
-  smooth::TickClock c;
-  c.serial = 0xFFFFFFFFu;
-  c.enabled = true;
-  c.BeginTick(5000, 33);
-  CHECK(c.serial == 1);
-}
-
-TEST_CASE("tick budget: accumulated real time spends one tick per world update") {
-  // 12 ms iterations with a 25 ms tick: a tick is taken whenever the accumulated time reaches tick_ms,
-  // so the long-run rate is the engine's own even though each short wait overshoots a little.
-  smooth::TickBudget c;
-  CHECK(!c.Due(0, 25));     // first call: nothing accumulated yet
-  CHECK(!c.Due(12, 25));    // 12 ms
-  CHECK(!c.Due(24, 25));    // 24 ms
-  CHECK(c.Due(36, 25));     // 36 ms -> one tick spent, 11 ms left
-  CHECK(!c.Due(48, 25));    // 23 ms
-  CHECK(c.Due(60, 25));     // 35 ms -> spent, 10 left
-  CHECK(!c.Due(72, 25));    // 22 ms
-  CHECK(c.Due(84, 25));     // 34 ms -> spent, 9 left
-  CHECK(!c.Due(96, 25));    // 21 ms
+TEST_CASE("tick pacer: accumulated real time spends one tick per world update") {
+  // 16.67 ms iterations (60 Hz) with a 33.33 ms tick (fps 30): a tick is taken whenever the accumulated
+  // time reaches tick_ms, so the long-run rate is the engine's own whatever the draw rate is.
+  smooth::TickPacer c;
+  const double tick = 1000.0 / 30.0, frame = 1000.0 / 60.0;
+  CHECK(!c.Due(0.0, tick));  // first call: nothing accumulated yet
+  int ticks = 0;
+  for (int i = 1; i <= 601; ++i) ticks += c.Due(i * frame, tick) ? 1 : 0;
+  CHECK(ticks == 300);  // 10 s (+ half a tick) of 60 Hz frames = 300 ticks at fps 30
+  // Alpha is the leftover as a fraction of a tick.
+  smooth::TickPacer a;
+  CHECK(!a.Due(0.0, 25.0));
+  CHECK(!a.Due(10.0, 25.0));
+  CHECK(a.Alpha(25.0) == 0.4f);
+  CHECK(a.Due(30.0, 25.0));  // 30 ms: one tick spent, 5 ms left
+  CHECK(a.Alpha(25.0) == 0.2f);
   // A long stall is capped: at most four catch-up ticks, never a burst from a loading screen.
-  smooth::TickBudget p;
-  CHECK(!p.Due(1000, 25));
-  CHECK(p.Due(1500, 25));   // 500 ms accumulated, capped to 100 ms
-  CHECK(p.Due(1500, 25));
-  CHECK(p.Due(1500, 25));
-  CHECK(p.Due(1500, 25));   // budget spent down to 0
-  CHECK(!p.Due(1500, 25));
+  smooth::TickPacer p;
+  CHECK(!p.Due(1000.0, 25.0));
+  CHECK(p.Due(1500.0, 25.0));  // 500 ms accumulated, capped to 100 ms
+  CHECK(p.Due(1500.0, 25.0));
+  CHECK(p.Due(1500.0, 25.0));
+  CHECK(p.Due(1500.0, 25.0));  // budget spent down to 0
+  CHECK(!p.Due(1500.0, 25.0));
+  CHECK(p.Alpha(25.0) == 0.0f);
 }
 
-TEST_CASE("interpolated offset: prev + delta*alpha, relative to the drawn position") {
-  smooth::DrawPos p;
-  p.Capture(100.0f, 50.0f, 1);
-  // Mid-tick: half of a 4 px step is shown, i.e. one tick behind the engine's position.
-  CHECK(smooth::InterpOffset(p, 104.0f, 50.0f, 104, 50, 1, 0.5f, 64.0f).dx == -2);
-  CHECK(smooth::InterpOffset(p, 104.0f, 50.0f, 104, 50, 1, 1.0f, 64.0f).dx == 0);
-  CHECK(smooth::InterpOffset(p, 104.0f, 50.0f, 104, 50, 1, 0.0f, 64.0f).dx == -4);
-  // Sub-pixel motion the tick cannot spend: the drawn int is unchanged, the exact position moved.
-  CHECK(smooth::InterpOffset(p, 100.0f, 50.0f, 100, 50, 1, 1.0f, 64.0f).dx == 0);
-  smooth::DrawPos q;
-  q.Capture(100.4f, 50.0f, 1);
-  CHECK(smooth::InterpOffset(q, 100.9f, 50.0f, 100, 50, 1, 1.0f, 64.0f).dx == 1);
-  CHECK(smooth::InterpOffset(q, 100.4f, 50.0f, 100, 50, 1, 1.0f, 64.0f).dx == 0);
-  // Negative coordinates round away from zero.
-  smooth::DrawPos n;
-  n.Capture(-100.5f, -20.0f, 1);
-  CHECK(smooth::InterpOffset(n, -100.5f, -20.0f, -101, -20, 1, 1.0f, 64.0f).dx == 0);
-  CHECK(smooth::Round(-0.5f) == -1);
-  CHECK(smooth::Round(0.5f) == 1);
+TEST_CASE("track: a walker stepping every other tick slides evenly over both ticks") {
+  // The walk from the smooth_lock.lua trace (fps 30): x 2079.25 -> 2083.00 on tick 2, nothing on tick
+  // 3, -> 2086.75 on tick 4. Shown over the 2-tick cadence, not over one tick and then a hold.
+  smooth::Track t;
+  t.Observe(7, 2075.5f, 100.0f, 1, 64.0f);  // first sight: shown where it is
+  float x = 0, y = 0;
+  t.At(1, 0.5f, &x, &y);
+  CHECK(x == 2075.5f && y == 100.0f);
+  t.Observe(7, 2079.25f, 100.0f, 2, 64.0f);  // a step after a 1-tick gap: span 1
+  CHECK(t.span == 1);
+  t.Observe(7, 2079.25f, 100.0f, 3, 64.0f);  // no step
+  t.Observe(7, 2083.0f, 100.0f, 4, 64.0f);   // a step 2 ticks later: span 2
+  CHECK(t.span == 2);
+  CHECK(t.ax == 2079.25f && t.bx == 2083.0f);
+  t.At(4, 0.0f, &x, &y);
+  CHECK(x == 2079.25f);
+  t.At(4, 0.5f, &x, &y);
+  CHECK(x == 2080.1875f);  // a quarter of the way: 0.5 of 2 ticks
+  t.Observe(7, 2083.0f, 100.0f, 5, 64.0f);  // the in-between tick: the slide goes on
+  t.At(5, 0.0f, &x, &y);
+  CHECK(x == 2081.125f);  // halfway, no hold
+  t.At(5, 0.5f, &x, &y);
+  CHECK(x == 2082.0625f);
+  t.Observe(7, 2086.75f, 100.0f, 6, 64.0f);  // next step arrives exactly when the slide ends
+  t.At(6, 0.0f, &x, &y);
+  CHECK(x == 2083.0f);
+  CHECK(t.ax == 2083.0f);
+  // At rest it is shown exactly where the engine has it (the engine's int is the floor).
+  t.At(9, 0.0f, &x, &y);
+  CHECK(x == 2086.75f);
+  CHECK(smooth::Pixel(x) == 2086);
+  CHECK(smooth::Pixel(-0.25f) == -1);
 }
 
-TEST_CASE("interpolated offset: nothing to do stays at the engine's position") {
-  smooth::DrawPos p;
-  p.Capture(100.0f, 50.0f, 7);
-  CHECK(smooth::InterpOffset(p, 104.0f, 50.0f, 104, 50, 8, 0.5f, 64.0f).dx == 0);  // new tick
-  CHECK(smooth::InterpOffset(p, 104.0f, 50.0f, 104, 50, 0, 0.5f, 64.0f).dx == 0);  // serial 0 = never
-  smooth::DrawPos fresh;  // captured never
-  CHECK(smooth::InterpOffset(fresh, 104.0f, 50.0f, 104, 50, 1, 0.5f, 64.0f).dx == 0);
-  // A jump past snap (teleport, area change) draws at its real position; exactly snap still slides.
-  CHECK(smooth::InterpOffset(p, 165.0f, 50.0f, 165, 50, 7, 0.5f, 64.0f).dx == 0);
-  CHECK(smooth::InterpOffset(p, 165.0f, 50.0f, 165, 50, 7, 0.5f, 64.0f).dy == 0);
-  CHECK(smooth::InterpOffset(p, 164.0f, 50.0f, 164, 50, 7, 0.5f, 64.0f).dx == -32);
-  CHECK(smooth::InterpOffset(p, 163.9f, 50.0f, 163, 50, 7, 0.5f, 64.0f).dx == -31);
-  CHECK(smooth::InterpOffset(p, 100.0f, 314.0f, 100, 314, 7, 0.5f, 64.0f).dy == 0);
-  CHECK(smooth::InterpOffset(p, 100.0f, 250.0f, 100, 250, 7, 0.5f, 256.0f).dy == -100);
+TEST_CASE("track: early steps never jump, starts keep the cadence, jumps and gaps reset") {
+  smooth::Track t;
+  t.Observe(7, 0.0f, 0.0f, 1, 64.0f);
+  t.Observe(7, 0.0f, 0.0f, 2, 64.0f);
+  t.Observe(7, 4.0f, 0.0f, 3, 64.0f);  // span 2 (2 ticks since tb = 1)
+  CHECK(t.span == 2);
+  t.Observe(7, 8.0f, 2.0f, 4, 64.0f);  // a step one tick later: the slide restarts where it was shown
+  CHECK(t.ax == 2.0f && t.ay == 0.0f);
+  CHECK(t.span == 1);
+  // Standing still for longer than kMaxSpan, then a step: the previous cadence is kept.
+  for (uint32_t s = 5; s <= 12; ++s) t.Observe(7, 8.0f, 2.0f, s, 64.0f);
+  t.Observe(7, 12.0f, 2.0f, 13, 64.0f);
+  CHECK(t.span == 1);
+  CHECK(t.ax == 8.0f);
+  // A jump past snap (teleport, area change) shows at its real position.
+  t.Observe(7, 100.0f, 2.0f, 14, 64.0f);
+  float x = 0, y = 0;
+  t.At(14, 0.0f, &x, &y);
+  CHECK(x == 100.0f);
+  // A missed tick (the object was not there) or another object in the same slot resets.
+  t.Observe(7, 104.0f, 2.0f, 16, 64.0f);
+  CHECK(t.ax == 104.0f && t.bx == 104.0f);
+  CHECK(t.Current(7, 16) && !t.Current(7, 17) && !t.Current(8, 16));
+  t.Observe(8, 50.0f, 2.0f, 17, 64.0f);
+  CHECK(t.id == 8 && t.ax == 50.0f);
+  smooth::Track fresh;
+  CHECK(!fresh.Current(-1, 0));
+}
+
+TEST_CASE("camera: eases in float by real time, then locks on the shown position") {
+  tbc::CameraEase c;
+  c.Reset(0, 0);
+  c.Step(100, 0, 0.0, 60.0, 6.0);  // no real time passed: the camera stays where it is
+  CHECK(c.X() == 0 && c.Y() == 0);
+  // One time constant (60 ms) closes 63 % of the gap; two 30 ms steps land on the same point, so the
+  // camera looks the same at any frame rate.
+  tbc::CameraEase a, b;
+  a.Reset(0, 0);
+  b.Reset(0, 0);
+  a.Step(100, 50, 30.0, 60.0, 6.0);
+  a.Step(100, 50, 30.0, 60.0, 6.0);
+  b.Step(100, 50, 60.0, 60.0, 6.0);
+  CHECK(a.X() == 63 && a.Y() == 32);
+  CHECK(std::fabs(a.x - b.x) < 1e-9 && std::fabs(a.y - b.y) < 1e-9);
+  // Short steps are not lost to truncation: 1.3 px * 0.2 still moves the camera.
+  tbc::CameraEase s;
+  s.Reset(0, 0);
+  s.x = 98.7;
+  s.Step(100, 0, 13.4, 60.0, 0.5);
+  CHECK(s.x > 98.7 && !s.locked);
+  // Within lock_px it locks, and from then on it IS the target, frame for frame.
+  tbc::CameraEase l;
+  l.Reset(95, 0);
+  l.Step(100, 0, 16.0, 60.0, 6.0);
+  CHECK(l.locked && l.X() == 100);
+  l.Step(102, 1, 16.0, 60.0, 6.0);
+  CHECK(l.X() == 102 && l.Y() == 1);
+  // Half an area away is shown at once.
+  CHECK(l.Distant(703, 1, 600));
+  CHECK(!l.Distant(702, 1, 600));
 }
 
 TEST_CASE("replay guard: same line while playing is skipped, others play") {

@@ -22,6 +22,7 @@
 #include <mmsystem.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -43,6 +44,7 @@
 #include "engine/symbols.h"
 #include "engine/world.h"
 #include "modules/dev/lua_bridge.h"
+#include "modules/tbc/camera_logic.h"
 #include "modules/tbc/census.h"
 #include "modules/tbc/combat_log.h"
 #include "modules/tbc/director.h"
@@ -103,6 +105,11 @@ struct State {
   bool camera = true;                // [tbc] camera_follow: centre on whoever's turn it is
   Pt cam_from{0, 0}, cam_to{0, 0};
   uint32_t cam_t0 = 0;               // GetTickCount at the pan start; 0 = no pan
+  bool cam_smooth = true;            // [tbc] camera_smooth: follow the DRAWN position, once per frame
+  bool cam_pre = false;              // the camera runs in the draw pass (true) or on ticks (false)
+  CameraEase cam_ease;               // eased view centre (camera_logic.h)
+  double cam_last = 0.0;             // CamNowMs of the previous camera step; 0 = first
+  uint64_t cam_steps = 0;            // camera follow steps since install (probe PSTF_CameraSteps)
   int32_t step_logged = -1;
   bool test_tick = false;            // env PSTF_TEST_TICK=1: call Lua pstfTestTick() every frame
   int32_t nudged = -1;               // AI creature we ordered this turn (its interrupt is restored)
@@ -141,6 +148,10 @@ struct State {
 // still have pulse ticks this round (the round's pulse lands in the caster's turn).
 constexpr uint32_t kResolveCapTicks = 120;  // Cone of Cold / Ice Knife go off 100 ticks after landing
 constexpr uint32_t kFlightCapTicks = 300;   // a projectile still flying after 20 s is held to next turn
+constexpr double kCamTauMs = 60.0;          // camera easing time constant (CameraEase::Step): the camera
+                                            // closes 63 % of the gap in 60 ms at any frame rate
+constexpr double kCamLockPx = 6.0;          // this close, the camera locks onto the shown position
+constexpr int kCamSnapPx = 600;             // a creature this far off the centre is centred at once
 struct Pending {
   int flying = 0, lingering = 0;
 };
@@ -447,6 +458,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
     if (engine::GetSprite(next, &t) && engine::ViewCenter(&cx, &cy)) {
       g.cam_from = {cx, cy};
       g.cam_to = {t.x, t.y};
+      engine::InterpDrawPos(next, &g.cam_to.x, &g.cam_to.y);  // pan to where the creature is shown
       g.cam_t0 = GetTickCount() | 1u;
     }
   }
@@ -887,14 +899,6 @@ void OnTick(uint64_t frame) {
   const int32_t cur = g.dir->Current();
   if (cur != g.current) OnTurnChange(g.current, cur);
   if (cur == -1) return;
-  if (g.cam_t0) {
-    // A quick pan (about a quarter second, eased) to whoever's turn it is.
-    const double t = std::min(1.0, (GetTickCount() - g.cam_t0) / 260.0);
-    const double e = t * t * (3 - 2 * t);
-    engine::CenterView(g.cam_from.x + static_cast<int>((g.cam_to.x - g.cam_from.x) * e),
-                       g.cam_from.y + static_cast<int>((g.cam_to.y - g.cam_from.y) * e));
-    if (t >= 1.0) g.cam_t0 = 0;
-  }
 
   // End Turn key (edge), only for party turns and only when the game window has focus.
   const bool down = (GetAsyncKeyState(g.end_turn_vk) & 0x8000) != 0 && OurWindowFocused();
@@ -919,18 +923,8 @@ void OnTick(uint64_t frame) {
     CLog("ACTION", Name(cur) + " " + ActionName(s.action) + (s.has_path ? " (walking)" : ""));
     g.clog_action = s.action;
   }
-  // The camera follows the active creature while it moves (BG3); standing still, the player may scroll.
-  if (g.camera && !g.cam_t0 && moved > 0.01 && moved < Economy::kTeleportFt) {
-    int cx = 0, cy = 0;
-    if (engine::ViewCenter(&cx, &cy)) {
-      // ease toward it: a third of the gap per frame, at once if it is far off screen
-      const int dx = s.x - cx, dy = s.y - cy;
-      const bool distant = dx * dx + dy * dy > 600 * 600;
-      engine::CenterView(distant ? s.x : cx + dx / 3, distant ? s.y : cy + dy / 3);
-      if (!g.follow) CLog("CAMERA", "follows " + Name(cur));
-      g.follow = true;
-    }
-  }
+  // The camera is not here: it follows the DRAWN position on every loop iteration (CameraTick), not the
+  // position this tick recorded.
   g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
   // A quick item used between two frames still takes the action (UseItem = 34).
   const uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
@@ -1028,6 +1022,71 @@ void OnTick(uint64_t frame) {
   UpdateHud(now);
 }
 
+double CamNowMs() {
+  return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+// The camera runs inside the DRAW pass (render.h InstallWorldPreDraw), not on world ticks: with
+// [smooth] interpolation movers are drawn gliding between ticks, so a tick-rate camera jumps by one
+// whole tick step while the creature slides — jaggy running whenever the camera is centred on them.
+// Easing by real time (camera_logic.h) gives the same feel at any frame rate. With interpolation off the
+// draw pass runs at EE's own rate, so this is exactly the old behaviour.
+void CameraStep() {
+  if (!g.camera || !g.running) return;
+  if (!g.cam_smooth && !engine::InterpTickFrame()) return;  // camera_smooth=0: the old tick-rate camera
+  if (engine::ActiveScreen() != engine::Screen::World) return;
+  const int32_t cur = g.dir->Current();
+  if (cur < 0) return;
+
+  // Real time at sub-millisecond resolution: GetTickCount moves in 15.6 ms steps, so at 60 draws/s
+  // most frames would see dt = 0 and the camera would stand still, then lurch.
+  const double now = CamNowMs();
+  const double dt = g.cam_last > 0.0 && now >= g.cam_last ? now - g.cam_last : 0.0;
+  g.cam_last = now;
+
+  if (g.cam_t0) {
+    // A quick pan (about a quarter second, eased) to whoever's turn it is.
+    const uint32_t ms = GetTickCount();
+    const double t = std::min(1.0, static_cast<double>(ms - g.cam_t0) / 260.0);
+    const double e = t * t * (3.0 - 2.0 * t);
+    engine::CenterView(g.cam_from.x + static_cast<int>(static_cast<double>(g.cam_to.x - g.cam_from.x) * e),
+                       g.cam_from.y + static_cast<int>(static_cast<double>(g.cam_to.y - g.cam_from.y) * e));
+    if (t >= 1.0) g.cam_t0 = 0;
+    g.cam_ease.locked = false;
+    return;
+  }
+
+  engine::SpriteInfo s;
+  if (!engine::GetSprite(cur, &s)) return;
+  int sx = s.x, sy = s.y;
+  engine::InterpDrawPos(cur, &sx, &sy);  // where it is shown; integer position when interpolation is off
+  // Standing still, the player scrolls freely: only a creature walking on a path pulls the camera.
+  if (!s.has_path) {
+    g.cam_ease.locked = false;
+    return;
+  }
+
+  int cx = 0, cy = 0;
+  if (!engine::ViewCenter(&cx, &cy)) return;
+  // The view moved under us (the player scrolled, the engine centred): ease from where it is now.
+  if (std::abs(cx - g.cam_ease.X()) > 1 || std::abs(cy - g.cam_ease.Y()) > 1) g.cam_ease.Reset(cx, cy);
+  if (g.cam_ease.Distant(sx, sy, kCamSnapPx)) {
+    g.cam_ease.Reset(sx, sy);  // an area away: show it at once, no easing across the whole area
+    g.cam_ease.locked = true;
+  } else {
+    g.cam_ease.Step(sx, sy, dt, kCamTauMs, kCamLockPx);
+  }
+  engine::CenterView(g.cam_ease.X(), g.cam_ease.Y());
+  if (!g.follow) {
+    CLog("CAMERA", "follows " + Name(cur));
+    g.follow = true;
+  }
+  ++g.cam_steps;
+}
+
+// Fallback when the draw-pass hook could not be installed: follow once per tick, as before.
+void CameraTick(uint64_t /*frame*/) { CameraStep(); }
+
 // --- Lua probes -------------------------------------------------------------------------------
 int __cdecl LuaState(engine::LuaState* L) {
   std::string s = g.running ? "running" : "idle";
@@ -1071,19 +1130,44 @@ int __cdecl LuaMakeEnemyNearest(engine::LuaState* L) {
   return 1;
 }
 
-// PSTF_SpritePos(id[, quiet]) -> x, y, hp, ea (or -1 if no such creature).
+// PSTF_SpritePos(id[, quiet]) -> x, y, hp, ea, name ref, walking (or -1 if no such creature).
+// "walking" = the creature has a path, which is what the follow camera uses; the engine's own position
+// can advance only every other tick, so tests must not decide "moving" from position deltas alone.
 int __cdecl LuaSpritePos(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
   engine::SpriteInfo s;
   const bool ok = engine::GetSprite(id, &s);
   if (engine::LuaNumberArg(L, 2, 0) == 0)
-    Log("lua: PSTF_SpritePos(%X) -> %d,%d hp %d ea %u", static_cast<unsigned>(id), s.x, s.y, s.hp, s.ea);
+    Log("lua: PSTF_SpritePos(%X) -> %d,%d hp %d ea %u path %d", static_cast<unsigned>(id), s.x, s.y, s.hp, s.ea,
+        s.has_path ? 1 : 0);
   engine::LuaPushNumber(L, ok ? s.x : -1);
   engine::LuaPushNumber(L, ok ? s.y : -1);
   engine::LuaPushNumber(L, ok ? s.hp : -1);
   engine::LuaPushNumber(L, ok ? s.ea : -1);
   engine::LuaPushNumber(L, ok ? s.name_ref : -1);  // TLK name (Infinity_FetchString)
-  return 5;
+  engine::LuaPushNumber(L, ok && s.has_path ? 1 : 0);
+  return 6;
+}
+
+// PSTF_ViewCenter() -> x, y: the point the viewport is centred on (-1, -1 when no camera). Test probe
+// for the camera follow: with interpolation it must change on iterations that did not advance the world.
+int __cdecl LuaViewCenter(engine::LuaState* L) {
+  int x = 0, y = 0;
+  const bool ok = engine::ViewCenter(&x, &y);
+  Log("lua: PSTF_ViewCenter -> %d,%d", ok ? x : -1, ok ? y : -1);
+  engine::LuaPushNumber(L, ok ? x : -1);
+  engine::LuaPushNumber(L, ok ? y : -1);
+  return 2;
+}
+
+// PSTF_CameraSteps() -> camera follow steps since install, and 1 while the quick pan to a new turn is
+// running (a pan is not a follow step). With [tbc] camera_smooth=1 and interpolation on the steps count
+// drawn frames, so they grow faster than PSTF_SmoothTicks().
+int __cdecl LuaCameraSteps(engine::LuaState* L) {
+  Log("lua: PSTF_CameraSteps -> %llu (pan %d)", static_cast<unsigned long long>(g.cam_steps), g.cam_t0 ? 1 : 0);
+  engine::LuaPushNumber(L, static_cast<double>(g.cam_steps));
+  engine::LuaPushNumber(L, g.cam_t0 ? 1 : 0);
+  return 2;
 }
 
 // Test probe: PSTF_PreviewAt(x, y) makes the hover preview use this world point instead of the
@@ -1233,13 +1317,14 @@ int __cdecl LuaEvalAs(engine::LuaState* L) {
   engine::LuaPushBool(L, ok);
   return 1;
 }
-// PSTF_SetHp(id, hp): test helper (keeps a target alive across a spell suite).
+// PSTF_SetHp(id, hp): test helper (keeps a target alive across a spell suite) -> 1 when the engine took it.
 int __cdecl LuaSetHp(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
   const int hp = static_cast<int>(engine::LuaNumberArg(L, 2, -1));
   const bool ok = engine::SetHpForTest(id, hp);
   Log("lua: PSTF_SetHp(%X, %d) -> %d", static_cast<unsigned>(id), hp, ok ? 1 : 0);
-  return 0;
+  engine::LuaPushNumber(L, ok ? 1 : 0);
+  return 1;
 }
 // PSTF_HoverAt(x, y): the hover card uses this world point instead of the cursor (-1,-1: cursor).
 int __cdecl LuaHoverAt(engine::LuaState* L) {
@@ -1368,6 +1453,7 @@ bool InstallTbc(const IniMap& ini) {
   g.run_scale_other = static_cast<uint8_t>(IniInt(ini, "tbc.run_scale", 11));
   g.music = IniBool(ini, "tbc.battle_music", true);
   g.camera = IniBool(ini, "tbc.camera_follow", true);
+  g.cam_smooth = IniBool(ini, "tbc.camera_smooth", true);
   g.dice_panel = IniBool(ini, "tbc.dice_panel", false);
   g.save_sounds = IniBool(ini, "tbc.save_sounds", true);
   g.sight = IniBool(ini, "tbc.combat_sight", true);
@@ -1437,6 +1523,10 @@ bool InstallTbc(const IniMap& ini) {
   g_walk = reinterpret_cast<SpriteFn>(walk1);
   g_process_ai = reinterpret_cast<SpriteFn>(pai);
   if (!AddTickHandler(&OnTick)) return false;
+  // Presentation, so it belongs to the draw pass, not to world ticks (CameraStep). If that hook cannot be
+  // installed, the camera still follows, just once per tick as before.
+  g.cam_pre = g.camera ? engine::InstallWorldPreDraw(&CameraStep) : false;
+  if (g.camera && !g.cam_pre) AddTickHandler(&CameraTick);
   if (g.round_effects && !engine::InstallEffectClock(&FrozenCombatant)) g.round_effects = false;
   if (g.round_effects) engine::SetOnsetRule(&OnsetKind);
   // A spell's projectile (a flying knife, a cloud) moves only in its caster's turn.
@@ -1463,6 +1553,8 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_EndTurn", &LuaEndTurn);
   dev::AddLuaFunction("PSTF_MakeEnemyNearest", &LuaMakeEnemyNearest);
   dev::AddLuaFunction("PSTF_SpritePos", &LuaSpritePos);
+  dev::AddLuaFunction("PSTF_ViewCenter", &LuaViewCenter);
+  dev::AddLuaFunction("PSTF_CameraSteps", &LuaCameraSteps);
   dev::AddLuaFunction("PSTF_PreviewAt", &LuaPreviewAt);
   dev::AddLuaFunction("PSTF_PartyId", &LuaPartyId);
   dev::AddLuaFunction("PSTF_Note", &LuaNote);
@@ -1487,9 +1579,10 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_HoverAt", &LuaHoverAt);
   dev::AddLuaFunction("PSTF_RollProbe", &LuaRollProbe);
   Log("tbc: installed (ProcessAI slot, 2 walk calls, tick); radii %d/%d/%d, end turn key %X%s, "
-      "move %.0f ft, hud %s",
+      "move %.0f ft, hud %s, camera %s",
       g.radii.start, g.radii.join, g.radii.leave, g.end_turn_vk, g.auto_party ? ", auto party" : "",
-      g.move_feet, g.hud ? "on" : "off");
+      g.move_feet, g.hud ? "on" : "off",
+      !g.camera ? "off" : (!g.cam_pre ? "tick handler" : (g.cam_smooth ? "eased in draw pass" : "tick rate")));
   return true;
 }
 

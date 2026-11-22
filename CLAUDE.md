@@ -64,7 +64,8 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - Exist now: `check.ps1`, `deploy.ps1` (`-Remove` = back to vanilla), `launch.ps1`. Not yet: `pstf.py` (pipe).
 - **Turn-based fight test**: `tools\launch.ps1 -Lua tests\ingame\tbc_fight.lua -Env @{PSTF_TBC_AUTOPARTY='1'} -Until 'tbc: fight 1 over' -Close`
   (exit 0 = a full fight ran; `tbc:` log lines carry turns, reasons and HP). Screenshots of the running game:
-  add `PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='5000'` to `-Env` (half-size BMPs from the game's own GL frame).
+  add `PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='5000'` to `-Env` (half-size BMPs from the game's own GL frame;
+  create the directory first — the log says `shot <path> cannot write` when it is missing).
 - Symbol manifest is compiled in: `src/engine/symbols.h` (shared by the DLL and `pstf_verify`). Unit tests use
   `tests/unit/mini_test.h` (no doctest dependency).
 - Runtime log: `<game>\pst_forever\logs\pst_forever.log` (hook status, every examine line played).
@@ -111,6 +112,12 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - Lua probes (`[dev] lua=1`): `PSTF_Version/EngineMode/RoundLength/WorldTime/RoundsForSeconds/TbcSim/SelfTest/Screen`, with tbc on also
   `PSTF_TbcState/EndTurn/MakeEnemyNearest/SpritePos`, with `[smooth] interpolation=1` also
   `PSTF_SmoothState/Frames/Ticks/TickMs/Fps` (draw iterations vs world ticks, EE's tick interval and fps),
+  `PSTF_SmoothTrace(id, frames)` + `PSTF_SmoothTraceResult()` (per-frame trace of one creature: shown pos, view;
+  result = frames, walk frames, still frames, wobble px, longest hold ms; `python -I tools/smooth_trace.py [LOG] [--rows]`
+  summarises the log rows), `PSTF_LockCamera(id)` (the HUD scroll lock, -1 off), `PSTF_SmoothLockFrames()`,
+  with `[tbc] camera_follow=1` also `PSTF_ViewCenter()` (view centre, -1 with no world screen) and
+  `PSTF_CameraSteps()` (follow steps + 1 while a quick pan runs; with `camera_smooth=1` the steps count
+  drawn frames, so they grow faster than `PSTF_SmoothTicks`),
   callable from the in-game console (Ctrl+Space, needs `Cheats` or `Debug Mode` in Baldur.lua) or from a
   temporary `<game>\luaAuto.cfg` (runs at boot, before LoadOptions). Every call logs `lua: NAME -> value`.
   Details, engine facts and open questions for turn-based combat: `docs/TBC_RESEARCH.md`.
@@ -124,7 +131,14 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - In-game suites: `tests\ingame\tbc_rules.lua` (round clock: Blur, Adder's Kiss, regen), `tbc_spells.lua` (needs the Dead Nations save, no longer on disk),
   `tbc_bar.lua` (hotbar), `tbc_hud2.lua` (hover/dice screenshots), `smooth.lua` (frame interpolation: the loop
   iterates faster than the world ticks while `tick_ms` still equals EE's own; run
-  `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\smooth.lua -Env @{PSTF_TEST_TICK='1'} -Until 'smooth: ok|TEST FAIL' -Close -Timeout 200`).
+  `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\smooth.lua -Env @{PSTF_TEST_TICK='1'} -Until 'smooth: ok|TEST FAIL' -Close -Timeout 200`),
+  `smooth_lock.lua` (walk under the engine lock camera: no hold >= 0.75 tick, wobble <= 1 px; run
+  `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\smooth_lock.lua -Env @{PSTF_TEST_TICK='1'} -Until 'smooth_lock: ok|TEST FAIL' -Close`;
+  `[smooth] lock_camera=0` must fail it with wobble — the toggle check), engine fact: a walker's step lands every OTHER tick,
+  `smooth_cam.lua` (the follow camera runs in the draw pass: while the creature whose turn it is walks, the
+  camera steps once per drawn frame instead of once per tick; run
+  `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\smooth_cam.lua -Env @{PSTF_TBC_AUTOPARTY='1'; PSTF_TEST_TICK='1'} -Until 'smooth_cam: ok|TEST FAIL' -Close -Timeout 220`;
+  `[tbc] camera_smooth=0` makes it report `camera stepped once per tick` instead — that is the toggle check).
   After a run: `bash tools/tlog.sh [pattern]` — `bash` is broken on this machine (WSL `/bin/bash` missing), so
   grep the log with `Select-String -Path '<game>\pst_forever\logs\pst_forever.log' -Pattern 'smooth|tbc:'`.
 - Spells in tests as in a real game: `AddXPObject(Myself,3000000)` (real level-ups), then
