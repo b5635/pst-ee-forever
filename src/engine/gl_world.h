@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Engine adapter for the lighting module: our own GL work inside the engine's world pass.
+// Evidence for every address: src/engine/symbols.h "lighting". Game thread only.
+//
+// The composite callback runs once per frame, right before the first of CFloatMessage::Render,
+// CInfinity::RenderTransitions, CInfinity::RenderFog or CInfinity::PostRender inside CGameArea::Render:
+// after every tile and object, before fog of war, overhead text and markers. The engine's draw batch
+// is flushed first and every GL state we may touch is saved and restored around the callback, so the
+// engine's own state cache stays true.
+#pragma once
+#include <cstdint>
+#include <string>
+
+namespace pstf::engine {
+
+// GL entry points we use (opengl32 exports + wglGetProcAddress). Loaded on the game thread with the
+// engine's context current. Null members = not available.
+struct Gl {
+  // 1.1
+  void(__stdcall* GetIntegerv)(unsigned, int*);
+  void(__stdcall* GetFloatv)(unsigned, float*);
+  unsigned char(__stdcall* IsEnabled)(unsigned);
+  void(__stdcall* Enable)(unsigned);
+  void(__stdcall* Disable)(unsigned);
+  void(__stdcall* BindTexture)(unsigned, unsigned);
+  void(__stdcall* GenTextures)(int, unsigned*);
+  void(__stdcall* DeleteTextures)(int, const unsigned*);
+  void(__stdcall* TexImage2D)(unsigned, int, int, int, int, int, unsigned, unsigned, const void*);
+  void(__stdcall* TexParameteri)(unsigned, unsigned, int);
+  void(__stdcall* CopyTexSubImage2D)(unsigned, int, int, int, int, int, int, int);
+  void(__stdcall* Viewport)(int, int, int, int);
+  void(__stdcall* BlendFunc)(unsigned, unsigned);
+  void(__stdcall* ClearColor)(float, float, float, float);
+  void(__stdcall* Clear)(unsigned);
+  void(__stdcall* Begin)(unsigned);
+  void(__stdcall* End)();
+  void(__stdcall* Vertex2f)(float, float);
+  void(__stdcall* ReadPixels)(int, int, int, int, unsigned, unsigned, void*);
+  void(__stdcall* PixelStorei)(unsigned, int);
+  void(__stdcall* ColorMask)(unsigned char, unsigned char, unsigned char, unsigned char);
+  const unsigned char*(__stdcall* GetString)(unsigned);
+  unsigned(__stdcall* GetError)();
+  // 2.0+ / 3.0 (wglGetProcAddress)
+  void(__stdcall* ActiveTexture)(unsigned);
+  void(__stdcall* UseProgram)(unsigned);
+  unsigned(__stdcall* CreateShader)(unsigned);
+  void(__stdcall* ShaderSource)(unsigned, int, const char* const*, const int*);
+  void(__stdcall* CompileShader)(unsigned);
+  void(__stdcall* GetShaderiv)(unsigned, unsigned, int*);
+  void(__stdcall* GetShaderInfoLog)(unsigned, int, int*, char*);
+  void(__stdcall* DeleteShader)(unsigned);
+  unsigned(__stdcall* CreateProgram)();
+  void(__stdcall* AttachShader)(unsigned, unsigned);
+  void(__stdcall* LinkProgram)(unsigned);
+  void(__stdcall* GetProgramiv)(unsigned, unsigned, int*);
+  void(__stdcall* GetProgramInfoLog)(unsigned, int, int*, char*);
+  int(__stdcall* GetUniformLocation)(unsigned, const char*);
+  void(__stdcall* Uniform1i)(int, int);
+  void(__stdcall* Uniform1f)(int, float);
+  void(__stdcall* Uniform2f)(int, float, float);
+  void(__stdcall* Uniform3f)(int, float, float, float);
+  void(__stdcall* Uniform4f)(int, float, float, float, float);
+  void(__stdcall* GenFramebuffers)(int, unsigned*);
+  void(__stdcall* BindFramebuffer)(unsigned, unsigned);
+  void(__stdcall* FramebufferTexture2D)(unsigned, unsigned, unsigned, unsigned, int);
+  unsigned(__stdcall* CheckFramebufferStatus)(unsigned);
+  void(__stdcall* BlendEquationSeparate)(unsigned, unsigned);
+  void(__stdcall* BlendFuncSeparate)(unsigned, unsigned, unsigned, unsigned);
+};
+// Loads once; "" on success, else what is missing. Needs a current GL context.
+std::string LoadGl(Gl* gl);
+
+// Every piece of GL state the lighting passes change.
+struct GlState {
+  int program, active_tex, tex[5], draw_fbo, read_fbo, viewport[4];
+  int blend_src_rgb, blend_dst_rgb, blend_src_a, blend_dst_a, blend_eq_rgb, blend_eq_a;
+  int unpack_align, pack_align, unpack_row;
+  float clear[4];
+  int color_mask[4];
+  unsigned char blend, scissor, depth, cull, stencil, alpha_test, tex2d, dither;
+};
+void SaveGlState(const Gl& gl, GlState* s);
+void RestoreGlState(const Gl& gl, const GlState& s);
+
+bool GlWorldAvailable();  // manifest bytes behind the reads/calls below match in memory
+void EngineFlushBatch();  // DrawFlush (sub_63A370): draws everything the engine has queued
+void WorldMatrix(float st[4]);  // uST of the scaled world pass (VPDRAW.GLSL), matrix slot 1
+// Program handle of engine shader slot (0 = vpDraw/fpDraw ... 8 = fpSEAM); 0 = shaders off/not made.
+unsigned EngineProgram(int slot);
+// The current CGameArea's WED resref (8 chars max, upper case) and ARE area type flags.
+std::string AreaWed(uint64_t area);
+uint16_t AreaTypeFlags(uint64_t area);
+
+using CompositeFn = void (*)();
+// Installs the four call-site hooks (once). The callback runs under SEH; on a fault it is turned off.
+bool InstallWorldComposite(CompositeFn fn);
+// Arms the callback for the frame being drawn (call from a world pre-draw hook).
+void ArmWorldComposite();
+
+}  // namespace pstf::engine

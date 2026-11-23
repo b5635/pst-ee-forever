@@ -442,6 +442,70 @@ constexpr uint32_t kRvaAreaDestRead = 0x19E5F2, kRvaAreaSpeedRead = 0x19E687;
 constexpr uint64_t kVaSetScrollDest = 0x140309450ull;
 constexpr uint32_t kOffWorldScrollLock = 0xA58, kOffAreaScrollSpeed = 0x894;
 
+// --- lighting (docs/VISUALS_PLAN.md §4, phase 0) -------------------------------
+// The world pass draws, in CGameArea::Render (lin 1BB560, win 14019E500): tiles (CInfinity::Render
+// 14019E725), edge fade, the object lists, then (order depends on ENGINE_MODE and the highlight flag):
+// CFloatMessage::Render 14019EAC7 (overhead text), CInfinity::RenderTransitions 14019EB23,
+// CInfinity::RenderFog 14019EB4F, CInfinity::PostRender 14019EB95. Whichever of the four runs first
+// ends the "lit" part of the frame: the lighting composite runs right before it (once per frame), so
+// fog of war, overhead text and markers are never lit.
+inline constexpr uint8_t kFloatMsgCallBytes[] = {0xE8, 0xD4, 0x33, 0xFC, 0xFF};     // -> 140161EA0
+inline constexpr uint8_t kTransitionsCallBytes[] = {0xE8, 0xF8, 0x8F, 0x16, 0x00};  // -> 140307B20
+inline constexpr uint8_t kFogCallBytes[] = {0xE8, 0x4C, 0x87, 0x16, 0x00};          // -> 1403072A0
+inline constexpr uint8_t kPostRenderCallBytes[] = {0xE8, 0xE6, 0x72, 0x16, 0x00};   // -> 140305E80
+constexpr uint32_t kRvaFloatMsgCall = 0x19EAC7, kRvaTransitionsCall = 0x19EB23, kRvaFogCall = 0x19EB4F;
+constexpr uint32_t kRvaPostRenderCall = 0x19EB95;
+constexpr uint64_t kVaFloatMsgRender = 0x140161EA0ull, kVaRenderTransitions = 0x140307B20ull;
+constexpr uint64_t kVaRenderFog = 0x1403072A0ull, kVaPostRender = 0x140305E80ull;
+// GL layer (lin 639xxx-63Cxxx Draw*_GL). Draws are batched; sub_63A370 (win 1404B51E0, no args) flushes
+// the batch (callers DrawBeginScaled_GL 1404B4405, DrawEndScaled_GL 1404B4E64, DrawFlip_GL, ReadPixels).
+// World vertex transform: VPDRAW.GLSL `gl_Position.xy = aPos * uST.xy + uST.zw`; uST of the scaled pass
+// is matrix slot 1 at 14601AD88 (slot array 14601AD78 + 16*i, sub_1404B6DA0; DrawBeginScaled_GL stores
+// it at 1404B4394 `movups [14601AD88], xmm2` in the back-buffer branch, slot 1 via sub_1404B6DA0 in
+// the FBO branch). Linux: qword_371DB98[16386].
+inline constexpr uint8_t kDrawFlushBytes[] = {0x4C, 0x8B, 0xDC, 0x55, 0x41, 0x56, 0x41, 0x57};
+inline constexpr uint8_t kBeginScaledFlushCallBytes[] = {0xE8, 0xD6, 0x0D, 0x00, 0x00};  // -> 1404B51E0
+inline constexpr uint8_t kEndScaledFlushCallBytes[] = {0xE8, 0x77, 0x03, 0x00, 0x00};    // -> 1404B51E0
+inline constexpr uint8_t kWorldStStoreBytes[] = {0x0F, 0x11, 0x15, 0xED, 0x69, 0xB6, 0x05};  // -> 14601AD88
+constexpr uint32_t kRvaDrawFlush = 0x4B51E0, kRvaBeginScaledFlushCall = 0x4B4405;
+constexpr uint32_t kRvaEndScaledFlushCall = 0x4B4E64, kRvaWorldStStore = 0x4B4394;
+constexpr uint64_t kVaWorldSt = 0x14601AD88ull;
+// Prologues (phase 2 replaces program handles after DrawInit_GL; listed now so a game update is caught):
+// DrawInit_GL lin 63CD40 / win 1404B6080, DrawCreateProgram_GL(slot, vs, fs) lin 63C990 / win 1404B4A60,
+// DrawBeginScaled_GL lin 63B330 / win 1404B4340, DrawEndScaled_GL lin 63C340 / win 1404B4E20,
+// the world sprite routine sub_6873C0 / win 1404AE640 (DrawColor tint, flag 0x40000000 = glow blend).
+inline constexpr uint8_t kDrawInitBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x83,
+                                             0xEC, 0x60, 0x48, 0x8B, 0x05, 0x47};
+inline constexpr uint8_t kCreateProgramBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x20, 0x55, 0x56, 0x57, 0x41, 0x56,
+                                                  0x41, 0x57, 0x48, 0x83, 0xEC, 0x50, 0x48, 0x8B, 0x05, 0x61};
+inline constexpr uint8_t kBeginScaledBytes[] = {0x44, 0x89, 0x4C, 0x24, 0x20, 0x44, 0x89, 0x44, 0x24, 0x18, 0x56};
+inline constexpr uint8_t kEndScaledBytes[] = {0x48, 0x83, 0xEC, 0x48, 0x80, 0x3D, 0x35, 0x60};
+inline constexpr uint8_t kSpriteDrawBytes[] = {0x4C, 0x8B, 0xDC, 0x55, 0x53, 0x41, 0x55, 0x41};
+constexpr uint32_t kRvaDrawInit = 0x4B6080, kRvaCreateProgram = 0x4B4A60, kRvaBeginScaled = 0x4B4340;
+constexpr uint32_t kRvaEndScaled = 0x4B4E20, kRvaSpriteDraw = 0x4AE640;
+// Program table: DrawCreateProgram_GL `imul rdi, rax, 34h; lea rax, [1437FAE20]` (1404B4A85/1404B4A89),
+// lin unk_F1DC40 + 52*slot: {GLuint program, 12 uniform locations}. Slots 0 vpDraw/fpDraw, 1 fpTone,
+// 2 fpCatRom, 3/4 YUV, 5 fpSprite, 6 fpFONT, 7 fpSELECT, 8 fpSEAM.
+inline constexpr uint8_t kProgramTableLeaBytes[] = {0x48, 0x8D, 0x05, 0x90, 0x63, 0x34, 0x03};
+constexpr uint32_t kRvaProgramTableLea = 0x4B4A89;
+constexpr uint64_t kVaProgramTable = 0x1437FAE20ull;
+constexpr uint32_t kProgramEntrySize = 52;
+// CVidCell (lin CVidCell::CVidCell(CResRef) 68F610 / win 1404978E0): CRes* at +0x108, CResRef at +0x110
+// (lea rdi,[rbx+110h] 14049790F); FrameSet (lin 68B710 / win 140499B90) stores the frame word at +0x118,
+// SequenceSet (lin 68B920 / win 14049B340) the sequence word at +0x11A.
+inline constexpr uint8_t kCellFrameStoreBytes[] = {0x66, 0x89, 0x91, 0x18, 0x01, 0x00, 0x00};
+inline constexpr uint8_t kCellSeqStoreBytes[] = {0x66, 0x89, 0x91, 0x1A, 0x01, 0x00, 0x00};
+constexpr uint32_t kRvaCellFrameStore = 0x499B90, kRvaCellSeqStore = 0x49B340;
+constexpr uint32_t kOffCellRes = 0x108, kOffCellResRef = 0x110, kOffCellFrame = 0x118, kOffCellSeq = 0x11A;
+// CGameArea: CGameArea::Unmarshal (lin 1BEB10 L179: `*(m128*)this = header + 8`; win 1401A1AE1
+// `movups xmm0,[rsi+8]; movups [r15],xmm0`) copies the ARE header from offset 8, so the WED resref
+// (ARE +0x08) is at area+0 and the area type flags (ARE +0x48) at area+0x40 (Unmarshal tests bit 0x40,
+// extended night, at 1401A1E48). The loaded CResWED* is at area+0x220 (lin +544, win 1401A1E12).
+inline constexpr uint8_t kAreaHeaderCopyBytes[] = {0x0F, 0x10, 0x46, 0x08, 0x41, 0x0F, 0x11, 0x07};
+inline constexpr uint8_t kAreaTypeReadBytes[] = {0x45, 0x0F, 0xB7, 0x47, 0x40};  // movzx r8d, word [r15+40h]
+constexpr uint32_t kRvaAreaHeaderCopy = 0x1A1AE1, kRvaAreaTypeRead = 0x1A1E48;
+constexpr uint32_t kOffAreaWed = 0x0, kOffAreaType = 0x40;
+
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 // --- round clock for effects (turn-based: effects advance one round at their owner's turn) -------
 // CGameSprite::ProcessEffectList (lin 4E21F0, win 1404231E0) runs the persistent effects (poison,
@@ -739,6 +803,26 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("WorldAsync.lockSpeed", kRvaLockSpeedStore, kLockSpeedStoreBytes, "lin 4308B0 / win 140354FB1"),
     PSTF_SYM("CGameArea::Render.scrollDest", kRvaAreaDestRead, kAreaDestReadBytes, "lin 1BB560 / win 14019E5F2"),
     PSTF_SYM("CGameArea::Render.scrollSpeed", kRvaAreaSpeedRead, kAreaSpeedReadBytes, "lin 1BB560 / win 14019E687"),
+    PSTF_SYM("CGameArea::Render.floatMsg", kRvaFloatMsgCall, kFloatMsgCallBytes, "lin 1BB560 L445 / win 14019EAC7"),
+    PSTF_SYM("CGameArea::Render.transitions", kRvaTransitionsCall, kTransitionsCallBytes,
+             "lin 1BB560 L427 / win 14019EB23"),
+    PSTF_SYM("CGameArea::Render.fog", kRvaFogCall, kFogCallBytes, "lin 1BB560 L456 / win 14019EB4F"),
+    PSTF_SYM("CGameArea::Render.postRender", kRvaPostRenderCall, kPostRenderCallBytes,
+             "lin 1BB560 L473 / win 14019EB95"),
+    PSTF_SYM("DrawFlush (sub_63A370)", kRvaDrawFlush, kDrawFlushBytes, "lin 63A370 / win 1404B51E0"),
+    PSTF_SYM("DrawBeginScaled_GL.flush", kRvaBeginScaledFlushCall, kBeginScaledFlushCallBytes, "win 1404B4405"),
+    PSTF_SYM("DrawEndScaled_GL.flush", kRvaEndScaledFlushCall, kEndScaledFlushCallBytes, "win 1404B4E64"),
+    PSTF_SYM("DrawBeginScaled_GL.uST", kRvaWorldStStore, kWorldStStoreBytes, "lin 63B330 / win 1404B4394"),
+    PSTF_SYM("DrawInit_GL", kRvaDrawInit, kDrawInitBytes, "lin 63CD40 / win 1404B6080"),
+    PSTF_SYM("DrawCreateProgram_GL", kRvaCreateProgram, kCreateProgramBytes, "lin 63C990 / win 1404B4A60"),
+    PSTF_SYM("DrawBeginScaled_GL", kRvaBeginScaled, kBeginScaledBytes, "lin 63B330 / win 1404B4340"),
+    PSTF_SYM("DrawEndScaled_GL", kRvaEndScaled, kEndScaledBytes, "lin 63C340 / win 1404B4E20"),
+    PSTF_SYM("sub_6873C0 (world sprite draw)", kRvaSpriteDraw, kSpriteDrawBytes, "lin 6873C0 / win 1404AE640"),
+    PSTF_SYM("DrawCreateProgram_GL.table", kRvaProgramTableLea, kProgramTableLeaBytes, "lin 63C990 / win 1404B4A89"),
+    PSTF_SYM("CVidCell::FrameSet", kRvaCellFrameStore, kCellFrameStoreBytes, "lin 68B710 / win 140499B90"),
+    PSTF_SYM("CVidCell::SequenceSet", kRvaCellSeqStore, kCellSeqStoreBytes, "lin 68B920 / win 14049B340"),
+    PSTF_SYM("CGameArea::Unmarshal.header", kRvaAreaHeaderCopy, kAreaHeaderCopyBytes, "lin 1BEB10 / win 1401A1AE1"),
+    PSTF_SYM("CGameArea::Unmarshal.areaType", kRvaAreaTypeRead, kAreaTypeReadBytes, "win 1401A1E48"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.

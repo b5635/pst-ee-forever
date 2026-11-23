@@ -149,6 +149,16 @@ int wmain(int argc, wchar_t** argv) {
   call_to(sym::kRvaPortraitSelect, sym::kImageBase + sym::kRvaUnselectAll, "portrait click -> UnselectAll");
   call_to(sym::kRvaPortraitSelect + 18, sym::kImageBase + sym::kRvaSelectChar, "portrait click -> SelectCharacter");
 
+  // Lighting (phase 0): composite sites, batch flush, world matrix, program table.
+  call_to(sym::kRvaFloatMsgCall, sym::kVaFloatMsgRender, "CGameArea::Render -> CFloatMessage::Render");
+  call_to(sym::kRvaTransitionsCall, sym::kVaRenderTransitions, "CGameArea::Render -> RenderTransitions");
+  call_to(sym::kRvaFogCall, sym::kVaRenderFog, "CGameArea::Render -> RenderFog");
+  call_to(sym::kRvaPostRenderCall, sym::kVaPostRender, "CGameArea::Render -> PostRender");
+  call_to(sym::kRvaBeginScaledFlushCall, sym::kImageBase + sym::kRvaDrawFlush, "DrawBeginScaled_GL -> flush");
+  call_to(sym::kRvaEndScaledFlushCall, sym::kImageBase + sym::kRvaDrawFlush, "DrawEndScaled_GL -> flush");
+  rip(sym::kRvaWorldStStore, 7, 3, sym::kVaWorldSt, "uST slot 1");
+  rip(sym::kRvaProgramTableLea, 7, 3, sym::kVaProgramTable, "program table");
+
   call_to(sym::kRvaAreaRenderCall, sym::kVaAreaRender, "RenderZoomed -> CGameArea::Render");
   call_to(sym::kRvaRenderActionsLine, sym::kImageBase + sym::kRvaDrawLine2d, "RenderActions -> DrawLine2d");
   call_to(sym::kRvaGetCostCall, sym::kImageBase + sym::kRvaGetCost, "SetTarget -> GetCost");

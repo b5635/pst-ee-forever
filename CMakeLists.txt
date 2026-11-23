@@ -20,6 +20,7 @@ add_library(pstf_logic STATIC
   src/modules/tbc/director.cpp
   src/modules/tbc/tbc_sim.cpp
   src/modules/tbc/hud.cpp
+  src/modules/lighting/lighting_logic.cpp
 )
 target_include_directories(pstf_logic PUBLIC src)
 
@@ -56,6 +57,8 @@ add_library(pst_forever SHARED
   src/engine/frame.cpp
   src/modules/smooth/smooth_module.cpp
   src/modules/tbc/tbc_module.cpp
+  src/engine/gl_world.cpp
+  src/modules/lighting/lighting_module.cpp
 )
 target_link_libraries(pst_forever PRIVATE pstf_logic bcrypt winmm)
 # Map file: tools/crash.py names pst_forever.dll addresses from it.
@@ -64,7 +67,7 @@ target_link_options(pst_forever PRIVATE /MAP /DEBUG /OPT:REF /OPT:ICF)
 target_compile_options(pst_forever PRIVATE /Zi)
 
 # L0 unit tests
-add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp)
+add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp tests/unit/test_lighting.cpp)
 target_link_libraries(pstf_tests PRIVATE pstf_logic)
 target_include_directories(pstf_tests PRIVATE tests/unit)
 

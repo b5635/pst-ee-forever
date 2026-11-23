@@ -35,6 +35,8 @@ void CallFn(uint64_t) { g_fn(); }
 void CallPre(uint64_t i) { g_pre[i](); }
 
 void __fastcall AreaRender(void* area, void* vid) {
+  g_vid = vid;
+  g_area = reinterpret_cast<uint64_t>(area);
   // Presentation first: a camera step here is on the frame being drawn, not one frame late.
   for (int i = 0; i < g_pre_n; ++i) {
     if (g_pre_faulted[i]) continue;
@@ -45,13 +47,12 @@ void __fastcall AreaRender(void* area, void* vid) {
     }
   }
   g_render(area, vid);
-  if (!g_fn || g_faulted) return;
-  g_vid = vid;
-  g_area = reinterpret_cast<uint64_t>(area);
-  uint32_t code = 0;
-  if (!GuardedCall(&CallFn, 0, &code)) {
-    g_faulted = true;
-    Log("render: world overlay faulted (%08X); overlay off for this session", code);
+  if (g_fn && !g_faulted) {
+    uint32_t code = 0;
+    if (!GuardedCall(&CallFn, 0, &code)) {
+      g_faulted = true;
+      Log("render: world overlay faulted (%08X); overlay off for this session", code);
+    }
   }
   g_vid = nullptr;
   g_area = 0;
@@ -90,6 +91,16 @@ bool InstallWorldPreDraw(WorldDrawFn fn) {
   if (!fn || g_pre_n >= kMaxPre || !InstallSite()) return false;
   g_pre[g_pre_n++] = fn;
   return true;
+}
+
+uint64_t WorldPassArea() { return g_area; }
+
+void WorldPassOffset(float* ox, float* oy) {
+  *ox = *oy = 0;
+  if (!g_area) return;
+  const int* rect = reinterpret_cast<const int*>(g_area + sym::kOffAreaRect);
+  *ox = static_cast<float>(R<int32_t>(g_area + sym::kOffAreaRenderView) - rect[0]);
+  *oy = static_cast<float>(R<int32_t>(g_area + sym::kOffAreaRenderView + 4) - rect[1]);
 }
 
 void DrawWorldLine(int x1, int y1, int x2, int y2, uint32_t color, float half_width) {

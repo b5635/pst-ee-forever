@@ -7,7 +7,7 @@ Guidance for Claude Code in this repository.
 `pst_forever`: a native hook DLL (plus a `version.dll` proxy loader) that extends **Planescape: Torment:
 Enhanced Edition** in place. Modules: turn-based combat, upscaled areas/sprites, dynamic lighting + depth,
 examine voice-over, 8-member party, dev/test tooling. Architecture: `docs/ARCHITECTURE.md`.
-Turn-based plan: `TURN_BASED_COMBAT_EXTENSION_PLAN.md`.
+Turn-based plan: `TURN_BASED_COMBAT_EXTENSION_PLAN.md`. Lighting/VFX plan: `docs/VISUALS_PLAN.md`.
 
 Rule for every feature: **loose on presentation, exact on anything a script, dialogue, item or spell can
 observe.** Use the engine's own rules; never write a parallel rules engine.
@@ -148,5 +148,12 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `tbc_hive.lua`: Swarm Curse pacing, Adder's Kiss, Whispering Flask/Embalming take the action, save sound.
 - Game resources: `python -I tools/ieres.py spl|itm NAME` (effects per header), `named REGEX` (SPL/ITM by TLK
   name), `find REGEX [EXT]`, `raw NAME.EXT [OUT]` (override, then chitin.key/BIFs).
+- Lighting (`[lighting] enabled=1`, `docs/VISUALS_PLAN.md`): `tools\launch.ps1 -Save 000000076|126|164 -Lua tests\ingame\lighting.lua
+  -Env @{PSTF_TEST_TICK='1'} -Until 'lighting: ok|TEST FAIL' -Close` (round trip 0 px, lit changes pixels, GPU = CPU model,
+  shots `pst_forever\logs\light_<AREA>_{off,lit,light,falloff}.bmp`). Probes: `PSTF_LightDebug(0 lit|1 light|2 roundtrip|3 falloff|4 off)`,
+  `PSTF_LightState()`, `PSTF_LightCheck()`+`PSTF_LightCheckResult()` (pixels our pass changed), `PSTF_LightCompare()`+
+  `PSTF_LightCompareResult()` (falloff buffer vs `DebugFalloffAt`), `PSTF_LightShot(path)`; env `PSTF_LIGHT_DEBUG=N`.
+  Log: `lighting: <WED>: N baked lights ...` per area. Data: `<game>\pst_foreverssets\lighting\<WED>\` (copied from GemRB).
+  Script area travel from Lua does not work (tried LeaveAreaLUA/Panic, ActionOverride, MoveGlobalsTo): use a save.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

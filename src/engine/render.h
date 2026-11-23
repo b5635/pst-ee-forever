@@ -14,6 +14,11 @@ bool InstallWorldDraw(WorldDrawFn fn);
 // camera) lands on the frame being drawn. Game thread only, guarded like the overlay.
 bool InstallWorldPreDraw(WorldDrawFn fn);
 
+// The CGameArea being drawn: valid from the pre-draw hooks through the post-draw callback (0 outside).
+uint64_t WorldPassArea();
+// Draw space -> area: area = draw + off (off = view - rect.left; CGameSprite::RenderActions 1403DF4F3).
+void WorldPassOffset(float* ox, float* oy);
+
 // Only valid inside the WorldDrawFn callback. World coordinates (pixels). color = 0xBBGGRR.
 // half_width in pixels; the engine draws a strip with bevelled ends (alpha at least 0xAA).
 void DrawWorldLine(int x1, int y1, int x2, int y2, uint32_t color, float half_width);

@@ -7,6 +7,7 @@
 #include "core/log.h"
 #include "core/version_guard.h"
 #include "modules/dev/autoload.h"
+#include "modules/lighting/lighting_module.h"
 #include "modules/smooth/smooth_module.h"
 #include "modules/tbc/tbc_module.h"
 #include "modules/dev/lua_bridge.h"
@@ -36,6 +37,7 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   pstf::dev::InstallAutoload(ini);
   pstf::smooth::InstallSmooth(ini);
   pstf::tbc::InstallTbc(ini);
+  pstf::lighting::InstallLighting(ini);
   return 0;
 }
 

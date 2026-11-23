@@ -10,8 +10,11 @@
 import os, re, struct, sys
 
 GAME = r"C:\GOG Games\Planescape Torment - Enhanced Edition"
-TYPES = {0x3ed: "ITM", 0x3ee: "SPL", 0x3ef: "BCS", 0x3f1: "CRE", 0x3f8: "EFF", 0x3fb: "VVC", 0x3fd: "PRO",
-         0x3e9: "WAV", 0x3f4: "2DA", 0x3f3: "DLG", 0x3f9: "VEF", 0x3e8: "BAM", 0x3ec: "MOS", 0x3f0: "IDS", 0x3f2: "ARE", 0x3fe: "WMP"}
+# KEY resource type codes (IESDP file_formats/general.htm).
+TYPES = {0x001: "BMP", 0x004: "WAV", 0x3e8: "BAM", 0x3e9: "WED", 0x3ea: "CHU", 0x3eb: "TIS", 0x3ec: "MOS",
+         0x3ed: "ITM", 0x3ee: "SPL", 0x3ef: "BCS", 0x3f0: "IDS", 0x3f1: "CRE", 0x3f2: "ARE", 0x3f3: "DLG",
+         0x3f4: "2DA", 0x3f5: "GAM", 0x3f6: "STO", 0x3f7: "WMP", 0x3f8: "EFF", 0x3fb: "VVC", 0x3fc: "VEF",
+         0x3fd: "PRO", 0x404: "PVRZ", 0x405: "GLSL", 0x408: "MENU", 0x409: "LUA"}
 TIMING = {0: "dur", 1: "perm", 2: "equip", 3: "delay", 4: "delay->perm", 5: "delay->equip", 6: "delay2",
           7: "delay2->perm", 8: "delay2->equip", 9: "permAfterDeath", 10: "ticks"}
 
