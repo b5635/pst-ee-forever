@@ -460,6 +460,52 @@ float SoftKnee(float l, float t, float k) {
   return std::max(soft, l - t) / std::max(l, 0.0001f);
 }
 
+float EmissiveWeight(float r, float g, float b) {
+  const float m = std::max(r, std::max(g, b)), n = std::min(r, std::min(g, b));
+  const float sat = m > 1e-4f ? (m - n) / m : 0.0f;
+  const float t = Clamp01((m - 0.08f) / (0.6f - 0.08f));
+  return t * t * (3.0f - 2.0f * t) * (0.55f + 0.45f * sat);
+}
+
+Rgb Saturate(const Rgb& c, float k) {
+  const float l = Luma(c);
+  Rgb o{l + (c.r - l) * k, l + (c.g - l) * k, l + (c.b - l) * k};
+  o.r = std::max(0.0f, o.r);
+  o.g = std::max(0.0f, o.g);
+  o.b = std::max(0.0f, o.b);
+  return o;
+}
+
+std::vector<GlowOverride> ParseGlowOverrides(const std::string& text) {
+  std::vector<GlowOverride> out;
+  std::istringstream stream(text);
+  std::string line;
+  while (std::getline(stream, line)) {
+    if (line.empty() || line[0] == '#') continue;
+    std::istringstream in(line);
+    std::string pat;
+    int glow = 1, soften = 1;
+    if (!(in >> pat >> glow >> soften) || pat.empty() || pat.size() > 8) continue;
+    GlowOverride o;
+    for (size_t i = 0; i < pat.size(); ++i) {
+      char c = pat[i];
+      if (c >= 'a' && c <= 'z') c = char(c - 32);
+      o.pattern[i] = c;
+    }
+    o.glow = glow != 0;
+    o.soften = soften != 0;
+    out.push_back(o);
+  }
+  return out;
+}
+
+const GlowOverride* FindGlowOverride(const std::vector<GlowOverride>& t, const char* res) {
+  if (!res || !res[0]) return nullptr;
+  for (const GlowOverride& o : t)
+    if (MatchPattern(o.pattern, res)) return &o;
+  return nullptr;
+}
+
 float AtmosphereT(const Atmosphere& a, float h) {
   const float t = Clamp01((h - a.h0) / (a.h1 - a.h0));
   return t * t * (3.0f - 2.0f * t);

@@ -153,14 +153,14 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   shots `pst_forever\logs\light_<AREA>_{off,lit,light,falloff}.bmp`). Probes: `PSTF_LightDebug(0 lit|1 light|2 roundtrip|3 falloff|4 off)`,
   `PSTF_LightState()`, `PSTF_LightCheck()`+`PSTF_LightCheckResult()` (pixels our pass changed), `PSTF_LightCompare()`+
   `PSTF_LightCompareResult()` (falloff buffer vs `DebugFalloffAt`), `PSTF_LightShot(path)`; env `PSTF_LIGHT_DEBUG=N`.
-  Log: `lighting: <WED>: N baked lights ...` per area. Data: `<game>\pst_foreverssets\lighting\<WED>\` (copied from GemRB).
+  Log: `lighting: <WED>: N baked lights ...` per area. Data: `<game>\pst_forever\assets\lighting\<WED>\` (copied from GemRB).
   Script area travel from Lua does not work (tried LeaveAreaLUA/Panic, ActionOverride, MoveGlobalsTo): use a save.
   Phase 4/5 (glow draws, effect lights, bloom, atmosphere): `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\lighting_fx.lua
   -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'} -Until 'lighting_fx: ok|TEST FAIL' -Close` (Dak'kon casts SPWI107).
   Probes: `PSTF_LightFx()` (glows, table hits, fx lights, frames with one, strongest light x/y; logs RenderTexture call
   counts and the OR of world-pass blend flags), `PSTF_LightBloom()`, `PSTF_LightAtmo()`, `PSTF_LightSet(name, value)`
   (A/B toggles), debug mode 5 = glow mask (red) + bloom (green). Glow table: `python -I tools/vfxscan.py run`
-  (-> `<game>\pst_foreverssetsfxfxauto.tsv`, needs `tools/sprite_depth/sprite_depth.py` for the BAM decoder);
+  (-> `<game>\pst_forever\assets\vfx\vfxauto.tsv`, needs `tools/sprite_depth/sprite_depth.py` for the BAM decoder);
   table misses are logged as `lighting: glow draw not in the vfx table`.
   Emitters: additive draws plus `assets/vfx/vfxemit.txt` (vfxscan: BAMs named in Torment.exe or SPL/ITM/EFF/PRO/VVC/BCS).
   Draws with their own cell or additive blend are re-drawn into an emissive buffer (per-pixel glow mask, bloom
@@ -170,5 +170,9 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   lights from opcodes 8/9/52/61/353 (`engine::ColorEffects`). Test: `tests\ingame\lighting_lights.lua` (same env as
   lighting_fx). The engine flashes one white frame when Magic Missile launches (vanilla, cast+22 ticks).
   Script casts: `SpellNoDec`/`ForceSpell` at a party member can fizzle (feedback 5); SPWI107 at Morte works.
+  FX surface: every effect is drawn alone (`CInfinity::FXRender` one cell, then one `FXBltToBack`; blits = cells), so a
+  blit whose cell is an emitter is the effect's exact pixels (captured per pixel, softened with the screen blend,
+  `[lighting] fx_soften`). Probe `PSTF_LightFxCells()` -> blits, pure, softened, cells, "RES cyc/frame anchor x,y rect
+  wxh pure;..." (area px; the cell's anchor = the owner's feet). Hand glow overrides: `data/vfxglow.tsv`.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

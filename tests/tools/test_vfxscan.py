@@ -70,3 +70,14 @@ def test_generated_emit_list_has_the_spell_visuals():
   assert not any(n.startswith("WM") for n in names)
   chars = set(vfxscan.sd.read_list())
   assert not (names & chars)  # never a creature animation
+
+
+def test_colour_follows_the_coloured_halo_not_the_white_core():
+  p = np.zeros((256, 3), np.uint8)
+  p[1] = (255, 255, 255)  # white-hot core
+  p[2] = (200, 60, 255)   # violet halo
+  idx = np.zeros((10, 10), np.uint8)
+  idx[2:8, 2:8] = 2       # 36 halo pixels
+  idx[3:7, 3:7] = 1       # 16 core pixels inside
+  r, g, b, *_ = vfxscan.frame_row(frame(idx), p)
+  assert b == 1.0 and g < 0.55 and r < 0.9  # violet, not the pale (0.9, 0.7, 1.0) of a luminance mean

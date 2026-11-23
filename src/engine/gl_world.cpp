@@ -102,17 +102,49 @@ using Cell10Fn = uint64_t(__fastcall*)(uint64_t, uint64_t, uint64_t, uint64_t, u
 RenderTextureFn g_render_texture = nullptr;
 Cell10Fn g_render3d = nullptr, g_fx_render3d = nullptr;
 
-void Gather(int x, int y, const int* frame, uint32_t flags) {
-  if (!g_armed || !WorldPassArea() || !frame) return;
+// Cells drawn into the FX surface since the last cell-less RenderTexture (the blit of that surface).
+struct FxCell {
+  char res[9];
+  uint16_t cyc, frm;
+  int x, y;          // draw point in the surface (FXRender3d x, y)
+  int w, h, cx, cy;  // frame header (0 when unreadable)
+  uint32_t flags;
+};
+constexpr int kMaxFxCells = 32;
+FxCell g_fx_cells[kMaxFxCells];
+int g_fx_n = 0;
+uint64_t g_fx_blits = 0, g_fx_pure = 0, g_fx_soft = 0, g_fx_cells_seen = 0;
+
+void ReadFrameHeader(uint64_t cell, FxCell* f) {
+  const uint64_t hdr = R<uint64_t>(cell + sym::kOffCellFrameHdr);
+  if (!hdr || !PlausiblePtr(hdr)) return;
+  f->w = R<uint16_t>(hdr);
+  f->h = R<uint16_t>(hdr + 2);
+  f->cx = R<int16_t>(hdr + 4);
+  f->cy = R<int16_t>(hdr + 6);
+}
+
+EngineGlowDraw* NewGlow() {
   if (g_glow_n >= kMaxGlow) {
     ++g_glow_dropped;
-    return;
+    return nullptr;
   }
   EngineGlowDraw& d = g_glow[g_glow_n++];
+  d = {};
+  return &d;
+}
+
+void Gather(int x, int y, const int* frame, uint32_t flags) {
+  if (!g_armed || !WorldPassArea() || !frame) return;
+  EngineGlowDraw* dp = NewGlow();
+  if (!dp) return;
+  EngineGlowDraw& d = *dp;
   d.x = x + frame[0];
   d.y = y + frame[1];
   d.w = frame[2] - frame[0];
   d.h = frame[3] - frame[1];
+  d.anchor_x = d.x + d.w / 2;
+  d.anchor_y = d.y + d.h;
   d.flags = flags;
   d.resref[0] = 0;
   d.cycle = d.frame = 0;
@@ -166,34 +198,96 @@ void Trace(char path, uint64_t cell, uint32_t flags, int w, int h) {
       h, (g_armed && WorldPassArea()) ? 1 : 0);
 }
 
+void GatherFxCell(int x, int y, const FxCell& c, uint32_t flags, bool pure) {
+  EngineGlowDraw* d = NewGlow();
+  if (!d) return;
+  d->anchor_x = x + c.x;
+  d->anchor_y = y + c.y;
+  d->x = d->anchor_x - c.cx;
+  d->y = d->anchor_y - c.cy;
+  d->w = c.w;
+  d->h = c.h;
+  d->flags = flags | c.flags;
+  memcpy(d->resref, c.res, 9);
+  d->cycle = c.cyc;
+  d->frame = c.frm;
+  d->from_fx = 1;
+  d->pure = pure ? 1 : 0;
+}
+
 uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t size, const int* clip,
                                         const int* clip2, uint32_t flags) {
   ++g_rt_calls;
-  if (g_armed && WorldPassArea()) {
+  const bool world = g_armed && WorldPassArea();
+  if (world) {
     ++g_rt_world;
     g_rt_flags_or |= flags;
   }
   if (g_trace[0] && frame)
     Trace(g_cell ? 'R' : 'F', g_cell ? g_cell : g_fx_cell, flags, frame[2] - frame[0], frame[3] - frame[1]);
   int emit = 0;
-  if (g_armed && WorldPassArea() && frame && g_emit_fn) {
-    const uint64_t cell = g_cell ? g_cell : g_fx_cell;
-    char res[9];
-    ReadRes(cell, res);
-    const uint16_t cyc = res[0] ? R<uint16_t>(cell + sym::kOffCellSeq) : 0;
-    const uint16_t frm = res[0] ? R<uint16_t>(cell + sym::kOffCellFrame) : 0;
-    emit = g_emit_fn(res, cyc, frm, flags);
+  bool pure = false;
+  const bool fx_blit = !g_cell && g_fx_n > 0;
+  if (world && frame && g_emit_fn) {
+    if (fx_blit) {
+      // Judge each cell of the FX surface: pure effect blits are drawn and captured per pixel.
+      int emit_cells = 0, pixel_cells = 0, soft_cells = 0, e[kMaxFxCells];
+      for (int i = 0; i < g_fx_n; ++i) {
+        const FxCell& c = g_fx_cells[i];
+        e[i] = c.res[0] ? g_emit_fn(c.res, c.cyc, c.frm, flags) : 0;
+        if (e[i] & 3) ++emit_cells;
+        if (e[i] & 1) ++pixel_cells;
+        if (e[i] & 4) ++soft_cells;
+      }
+      pure = pixel_cells == g_fx_n;  // light-only cells (Ignus' hand light) never make a pixel capture
+      ++g_fx_blits;
+      g_fx_cells_seen += uint64_t(g_fx_n);
+      if (pure) ++g_fx_pure;
+      for (int i = 0; i < g_fx_n; ++i)
+        if (e[i] & 3) {
+          FxCell c = g_fx_cells[i];
+          if (c.w <= 0) {  // no header: the blit rect, anchored at its bottom centre
+            c.w = frame[2] - frame[0];
+            c.h = frame[3] - frame[1];
+            c.cx = c.x - frame[0];
+            c.cy = c.y - frame[1];
+          }
+          GatherFxCell(x, y, c, flags, pure);
+        }
+      if (pure) {
+        emit = 1;
+        if (soft_cells == g_fx_n) emit |= 4;
+      } else if (emit_cells) {
+        emit = 2;  // a creature composite: lights per emitting cell, no pixels
+      }
+    } else {
+      const uint64_t cell = g_cell ? g_cell : g_fx_cell;
+      char res[9];
+      ReadRes(cell, res);
+      const uint16_t cyc = res[0] ? R<uint16_t>(cell + sym::kOffCellSeq) : 0;
+      const uint16_t frm = res[0] ? R<uint16_t>(cell + sym::kOffCellFrame) : 0;
+      emit = g_emit_fn(res, cyc, frm, flags);
+      if (emit) Gather(x, y, frame, flags);
+    }
   }
-  if (emit) Gather(x, y, frame, flags);
-  const uint64_t r = g_render_texture(x, y, frame, size, clip, clip2, flags);
+  if (fx_blit) g_fx_n = 0;  // the surface has been blitted; the next FXRender3d starts a new one
+  const bool additive = (flags & 0x208u) && !(flags & 0x20000000u);
+  const bool multiply = (flags & 0x20000000u) != 0;
+  uint32_t draw_flags = flags;
+  // Soften: a normal-alpha effect draw (own cell, or a pure-effect FX blit) uses the screen blend
+  // (engine flag 8: 1-DST, ONE), so its dark parts let the scene through instead of painting over it.
+  if ((emit & 4) && !additive && !multiply && (g_cell || pure)) {
+    draw_flags |= 8u;
+    ++g_fx_soft;
+  }
+  const uint64_t r = g_render_texture(x, y, frame, size, clip, clip2, draw_flags);
   // Emissive capture: the same quad again, normal blend (premultiplied over black), into the module's
   // buffer. The engine's batch is flushed around it so each copy lands in its own target.
-  // Normal-blend blits of the FX surface are composites (a sprite and its attached effects drawn
-  // together, CInfinity::FXRender per object then one FXBltToBack): re-drawing one would capture the
-  // creature too. Those still give lights (gathered above) but no pixels; additive blits and draws with
+  // Normal-blend blits of the FX surface that hold a creature (CInfinity::FXRender per object then one
+  // FXBltToBack) are composites: re-drawing one would capture the creature too. Those give lights per
+  // emitting cell (gathered above) but no pixels; additive blits, pure-effect blits and draws with
   // their own cell (Render3d) are effect pixels only.
-  const bool additive = (flags & 0x208u) && !(flags & 0x20000000u);
-  if ((emit & 1) && g_cap_begin && (additive || g_cell)) {
+  if ((emit & 1) && g_cap_begin && (additive || g_cell || pure)) {
     EngineFlushBatch();
     if (g_cap_begin()) {
       g_render_texture(x, y, frame, size, clip, clip2, flags & ~(0x208u | 0x20000000u));
@@ -221,7 +315,22 @@ uint64_t __fastcall FxRender3dDetour(uint64_t c, uint64_t a2, uint64_t a3, uint6
   const uint64_t keep = g_cell;
   g_cell = c;
   if (g_trace[0]) Trace('X', c, uint32_t(a6), 0, 0);  // FXRender3d(x, y, rect, clip, flags, alpha)
+  FxCell* pushed = nullptr;
+  if (g_armed && g_fx_n < kMaxFxCells && PlausiblePtr(c)) {
+    FxCell& f = g_fx_cells[g_fx_n++];
+    pushed = &f;
+    ReadRes(c, f.res);
+    f.cyc = R<uint16_t>(c + sym::kOffCellSeq);
+    f.frm = R<uint16_t>(c + sym::kOffCellFrame);
+    f.x = int(a2);
+    f.y = int(a3);
+    f.flags = uint32_t(a6);
+    f.w = f.h = f.cx = f.cy = 0;
+    ReadFrameHeader(c, &f);
+  }
   const uint64_t r = g_fx_render3d(c, a2, a3, a4, a5, a6, a7, a8, a9, a10);
+  // The frame header may be loaded lazily inside FXRender3d (vtable +64 when +0x128 is null): retry after.
+  if (pushed && pushed->w == 0) ReadFrameHeader(c, pushed);
   g_cell = keep;
   g_fx_cell = c;
   return r;
@@ -234,7 +343,9 @@ bool InstallGlowGather() {
   const sym::Symbol* r3 = Find(sym::kRvaRender3d);
   const sym::Symbol* fx = Find(sym::kRvaFxRender3d);
   const sym::Symbol* bl = Find(sym::kRvaRenderTextureBlend);
-  if (!rt || !r3 || !fx || !bl || !CheckSymbol(*rt) || !CheckSymbol(*r3) || !CheckSymbol(*fx) || !CheckSymbol(*bl))
+  const sym::Symbol* fh = Find(sym::kRvaCellFrameHdrLoad);
+  if (!rt || !r3 || !fx || !bl || !fh || !CheckSymbol(*rt) || !CheckSymbol(*r3) || !CheckSymbol(*fx) ||
+      !CheckSymbol(*bl) || !CheckSymbol(*fh))
     return false;
   // Cell hooks first: RenderTexture only reads what they set.
   g_render3d = reinterpret_cast<Cell10Fn>(InlineHook(*r3, sym::kRender3dCopy, reinterpret_cast<void*>(&Render3dDetour)));
@@ -255,6 +366,13 @@ const EngineGlowDraw* GlowDraws(int* n) {
 }
 
 int GlowDrawsDropped() { return g_glow_dropped; }
+
+void FxSurfaceStats(uint64_t* blits, uint64_t* pure, uint64_t* softened, uint64_t* cells) {
+  *blits = g_fx_blits;
+  *pure = g_fx_pure;
+  *softened = g_fx_soft;
+  *cells = g_fx_cells_seen;
+}
 
 void SetEmissiveCallbacks(EmitFn emit, CaptureBeginFn begin, CaptureEndFn end) {
   g_emit_fn = emit;
@@ -432,6 +550,7 @@ void ArmWorldComposite() {
   g_glow_n = 0;
   g_glow_dropped = 0;
   g_fx_cell = 0;
+  g_fx_n = 0;
 }
 
 }  // namespace pstf::engine

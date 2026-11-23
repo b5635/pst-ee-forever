@@ -138,6 +138,25 @@ bool FxLight(const GlowDraw& d, float gain, BakedLight* out);
 std::vector<BakedLight> MergeFxLights(std::vector<BakedLight> in, float dist, size_t budget);
 // Bloom bright pass soft knee (GemRB PostFS): weight of a pixel of luminance l, threshold t, knee k.
 float SoftKnee(float l, float t, float k);
+// Emissive mask of a captured effect pixel (colour over black, 0..1): brightness through a soft ramp,
+// raised by saturation, so dark edges and grey smoke stay unlit while bright or coloured parts glow.
+// Every effect is blitted alone (one cell per FX surface, measured), so the capture holds exactly the
+// effect's pixels and this per-pixel weight is the effect's emissive map. Mirrored by emisWeight() in
+// the composite shader.
+float EmissiveWeight(float r, float g, float b);
+// Pushes a light colour away from its grey (k = 1 unchanged, 1.6 = the default for effect lights, so a
+// pale pink-white Magic Missile frame lights violet); channels stay >= 0, the luminance is kept.
+Rgb Saturate(const Rgb& c, float k);
+
+// Hand glow overrides (assets/vfx/vfxglow.tsv, shipped from data/vfxglow.tsv): BAMs matching `pattern`
+// ('?' = any char) glow or not, and are softened (screen blend) or not, whatever the scan says.
+// Line: pattern glow soften   (0/1 each; '#' comments)
+struct GlowOverride {
+  char pattern[9] = {};
+  bool glow = true, soften = true;
+};
+std::vector<GlowOverride> ParseGlowOverrides(const std::string& text);
+const GlowOverride* FindGlowOverride(const std::vector<GlowOverride>& table, const char* resref);
 
 // Hand light table (assets/vfx/vfxlight.tsv, shipped from data/vfxlight.tsv): any world draw whose BAM
 // matches `pattern` ('?' = any one char, upper case, <= 8) carries a light: Ignus is always on fire.
@@ -156,6 +175,16 @@ BakedLight HandLightAt(const HandLight& h, const GlowDraw& d, size_t index, doub
 // 0xBBGGRR00; 353 tint screen, param1 = 0x00BBGGRR, the buffs' fade in/out): a light of that colour on
 // the creature. age_ms = time since the effect was first seen.
 // Returns false when the light has faded out.
+// Size of a buff light. Effects held by equipped items (timing 2: the glow pulse on 39 magic weapons,
+// e.g. Annah's punch daggers) are the weapon glowing, not the body: one common weapon size, small and
+// weak, at hand height. Everything else lights around the whole creature.
+struct BuffLightShape {
+  float radius, z, gain;
+};
+inline BuffLightShape BuffLightFor(uint32_t timing, float weapon_radius, float weapon_gain) {
+  if (timing == 2) return {weapon_radius, 30.0f, weapon_gain};
+  return {170.0f, 45.0f, 1.0f};
+}
 bool ColorEffectLight(int opcode, uint32_t param1, uint32_t param2, double age_ms, double t_ms, float gain,
                       Rgb* out);
 

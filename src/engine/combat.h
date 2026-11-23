@@ -48,6 +48,7 @@ std::vector<EffectView> TimedEffects(int32_t id);
 struct ColorEffectView {
   int opcode = 0;
   uint32_t param1 = 0, param2 = 0;  // param1 = colour 0xBBGGRR00
+  uint32_t timing = 0;              // effect timing mode (2 = while equipped: a magic weapon's glow)
   uint64_t key = 0;                 // identity of the effect while it lives (compare only)
 };
 std::vector<ColorEffectView> ColorEffects(int32_t id);

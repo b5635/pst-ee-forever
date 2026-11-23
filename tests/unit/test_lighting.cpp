@@ -454,5 +454,40 @@ TEST_CASE("lighting: colour effect lights (ops 8, 9, 52, 61, 353)") {
   CHECK(ColorEffectLight(353, 0x808080u, 5, 750, 0, 1.0f, &c) && Near(c.r, 128 / 255.0) && Near(c.b, 128 / 255.0));
   CHECK(!ColorEffectLight(353, 0x808080u, 5, 1600, 0, 1.0f, &c));
   CHECK(!ColorEffectLight(8, 0, 0, 0, 0, 1.0f, &c));     // black: no light
+  {  // equipped weapon glow (MPUNCH, timing 2): small and weak; spell durations light the whole body
+    const BuffLightShape w = BuffLightFor(2, 70.0f, 0.3f), b = BuffLightFor(0, 70.0f, 0.3f);
+    CHECK(w.radius == 70.0f && w.gain == 0.3f && w.z == 30.0f);
+    CHECK(b.radius == 170.0f && b.gain == 1.0f && b.z == 45.0f);
+  }
   CHECK(!ColorEffectLight(51, 0x00FF0000u, 0, 0, 0, 1.0f, &c));  // solid tint darkens: no light
+}
+
+TEST_CASE("lighting: emissive weight of an effect pixel (brightness x saturation)") {
+  CHECK(EmissiveWeight(0, 0, 0) == 0.0f);                  // black: no glow
+  CHECK(EmissiveWeight(0.06f, 0.06f, 0.06f) == 0.0f);      // below the ramp (dark edges)
+  CHECK(Near(EmissiveWeight(1, 1, 1), 0.55));              // white core: full ramp, no saturation
+  CHECK(Near(EmissiveWeight(1, 0, 1), 1.0));               // saturated magenta (Magic Missile) glows most
+  CHECK(Near(EmissiveWeight(0.34f, 0.34f, 0.34f), 0.5f * 0.55f, 1e-3));  // mid grey smoke: half ramp
+}
+
+TEST_CASE("lighting: glow overrides (vfxglow.tsv)") {
+  const auto t = ParseGlowOverrides("# c\nS0??SMK 0 0\nspmagmis 1 0\nbad\n");
+  CHECK(t.size() == 2);
+  const GlowOverride* a = FindGlowOverride(t, "S012SMK");
+  CHECK(a && !a->glow && !a->soften);
+  const GlowOverride* b = FindGlowOverride(t, "SPMAGMIS");
+  CHECK(b && b->glow && !b->soften);
+  CHECK(!FindGlowOverride(t, "A003INTR") && !FindGlowOverride(t, ""));
+}
+
+TEST_CASE("lighting: effect light saturation") {
+  const Rgb pale{1.0f, 0.85f, 0.99f};  // SPMAGMIS frame colour
+  const Rgb v = Saturate(pale, 1.6f);
+  CHECK(Near(Luma(v), Luma(pale), 1e-4));            // same brightness
+  // luma 0.9108: r 1.0535, g 0.8135, b 1.0375 (green drops: violet)
+  CHECK(Near(v.r, 1.0535, 1e-3) && Near(v.g, 0.8135, 1e-3) && Near(v.b, 1.0375, 1e-3));
+  const Rgb g = Saturate({0.5f, 0.5f, 0.5f}, 3.0f);  // grey stays grey
+  CHECK(Near(g.r, 0.5) && Near(g.b, 0.5));
+  const Rgb same = Saturate(pale, 1.0f);
+  CHECK(Near(same.g, 0.85));
 }

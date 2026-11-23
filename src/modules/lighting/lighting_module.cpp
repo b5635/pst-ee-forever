@@ -45,14 +45,17 @@ struct Settings {
   float light_gain = 1.0f, ambient = 1.0f, normal_strength = 0.8f, max_light = 1.25f, keep = 0.6f;
   int occlusion_steps = 16, budget = 64;
   // phase 4
-  bool emissive = true, bloom = true, fx_lights = true;
+  bool emissive = true, bloom = true, fx_lights = true, fx_soften = true;
   float emissive_keep = 0.8f, bloom_strength = 0.35f, bloom_threshold = 0.45f, fx_light_gain = 1.0f;
+  float fx_boost = 0.15f, fx_fringe = 1.5f, fx_light_saturation = 1.6f;  // additive boost of glowing pixels, bloom colour fringe (px)
+  int bloom_passes = 2;                       // blur iterations: 1 tight, 2+ a softer, wider halo
   int fx_budget = 24;
   // phase 5
   bool atmosphere = true;
   float atmosphere_strength = 1.0f;
   // hand lights (vfxlight.tsv) and buff colour lights
   bool hand_lights = true, buff_lights = true;
+  float weapon_glow_radius = 70.0f, weapon_glow_gain = 0.3f;
   float hand_light_gain = 1.5f, buff_light_gain = 0.7f;
 };
 Settings g_set;
@@ -71,7 +74,7 @@ struct LightUni {
 } g_lu = {};
 struct CompUni {
   int scene, light, vp_origin, vp_size, mode, keep, max_light, emis, bloom, height, map, texel, has_height,
-      emis_keep, bloom_strength, atmo, haze_colour;
+      emis_keep, bloom_strength, atmo, haze_colour, fx_boost, fringe;
 } g_cu = {};
 struct FillUni {
   int target;
@@ -87,6 +90,7 @@ std::vector<GlowDraw> g_glows;
 // (assets/vfx/vfxemit.txt from tools/vfxscan.py). Packed upper-case names.
 std::vector<uint64_t> g_emit_names;
 std::vector<HandLight> g_hand;   // assets/vfx/vfxlight.tsv
+std::vector<GlowOverride> g_glow_over;  // assets/vfx/vfxglow.tsv
 // Buff colour lights: first time each colour effect was seen (age for the fade), pruned each frame.
 std::vector<std::pair<uint64_t, double>> g_color_seen;
 int g_hand_lights = 0, g_buff_lights = 0;  // probe: this frame
@@ -101,6 +105,7 @@ int g_fx_lights = 0, g_fx_hits = 0, g_fx_glows = 0;
 uint64_t g_fx_frames_with_light = 0;
 std::vector<BakedLight> g_last_fx;  // probe: this frame's effect lights
 ViewMap g_last_vm;                  // probe: last frame's mapping
+float g_last_ox = 0, g_last_oy = 0;  // probe: last composite's draw -> area offset
 int g_last_vw = 0, g_last_vh = 0;
 float g_bloom_max = 0;              // probe: brightest bloom texel of the last frame with glow draws
 bool g_bloom_req = false;
@@ -236,7 +241,15 @@ uniform float u_emisKeep;
 uniform float u_bloomStrength;
 uniform vec4 u_atmo;     // haze, desat, contrast, strength (0 = off)
 uniform vec3 u_hazeColour;
+uniform float u_fxBoost;   // additive boost of glowing pixels
+uniform float u_fringe;    // bloom colour fringe, light-buffer px
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+// lighting_logic EmissiveWeight: brightness ramp raised by saturation.
+float emisWeight(vec3 c) {
+  float m = max(c.r, max(c.g, c.b)), n = min(c.r, min(c.g, c.b));
+  float sat = m > 1e-4 ? (m - n) / m : 0.0;
+  return smoothstep(0.08, 0.6, m) * (0.55 + 0.45 * sat);
+}
 float heightAt(vec2 area) {
   ivec2 sz = textureSize(u_height, 0);
   ivec2 t = clamp(ivec2(floor(area / max(u_texel, 1.0))), ivec2(0), sz - ivec2(1));
@@ -249,9 +262,11 @@ void main() {
   vec2 uv = p / u_vpSize;
   vec3 l = texture(u_light, uv).rgb;
   if (u_mode == 1 || u_mode == 3) { gl_FragColor = vec4(l, c.a); return; }
-  vec3 ec = texelFetch(u_emis, ivec2(floor(gl_FragCoord.xy)), 0).rgb;
-  float e = smoothstep(0.04, 0.35, max(ec.r, max(ec.g, ec.b))) * step(0.0001, u_emisKeep);
-  vec3 b = texture(u_bloom, uv).rgb;
+  vec3 ec = texelFetch(u_emis, ivec2(floor(gl_FragCoord.xy)), 0).rgb * step(0.0001, u_emisKeep);
+  float e = emisWeight(ec);
+  // Colour fringe: red and blue of the halo sampled a little apart along the direction from the centre.
+  vec2 fd = normalize(uv - 0.5 + 1e-5) * u_fringe / vec2(textureSize(u_bloom, 0));
+  vec3 b = vec3(texture(u_bloom, uv + fd).r, texture(u_bloom, uv).g, texture(u_bloom, uv - fd).b);
   if (u_mode == 5) { gl_FragColor = vec4(e, luma(b) * 4.0, luma(c.rgb) * 0.25, c.a); return; }
   vec3 over = max(l - 1.0, vec3(0.0));
   l = min(l, vec3(1.0)) + over / (1.0 + over / max(u_maxLight - 1.0, 0.001));
@@ -259,6 +274,7 @@ void main() {
   float hi = smoothstep(0.72, 1.0, max(c.r, max(c.g, c.b)));
   lit = mix(lit, max(lit, c.rgb), hi * u_keep);
   lit = mix(lit, max(lit, c.rgb), e * u_emisKeep);  // emitting pixels keep their own brightness
+  lit += ec * e * u_fxBoost;                          // and shine a little past it
   if (u_atmo.w > 0.0 && u_hasHeight == 1) {
     vec2 m = (p + 0.5) * u_map.xy + u_map.zw;
     float t = smoothstep(200.0, 1024.0, heightAt(m)) * u_atmo.w;
@@ -401,7 +417,8 @@ bool SetUp() {
           gl.GetUniformLocation(cp, "u_map"),    gl.GetUniformLocation(cp, "u_texel"),
           gl.GetUniformLocation(cp, "u_hasHeight"), gl.GetUniformLocation(cp, "u_emisKeep"),
           gl.GetUniformLocation(cp, "u_bloomStrength"), gl.GetUniformLocation(cp, "u_atmo"),
-          gl.GetUniformLocation(cp, "u_hazeColour")};
+          gl.GetUniformLocation(cp, "u_hazeColour"), gl.GetUniformLocation(cp, "u_fxBoost"),
+          gl.GetUniformLocation(cp, "u_fringe")};
   g_fu = {gl.GetUniformLocation(g_fill_prog, "u_target")};
   const unsigned pp = g_post_prog;
   g_pu = {gl.GetUniformLocation(pp, "u_mode"),    gl.GetUniformLocation(pp, "u_src"),
@@ -532,17 +549,20 @@ void GatherBuffLights(const ViewMap& vm, int vw, int vh, double t, std::vector<B
         sp.y > y1 + margin + 100)
       continue;
     for (const engine::ColorEffectView& e : engine::ColorEffects(sp.id)) {
+      const BuffLightShape shape = BuffLightFor(e.timing, g_set.weapon_glow_radius, g_set.weapon_glow_gain);
+      if (shape.gain <= 0.0f) continue;
       double first = t;
       for (const auto& p : g_color_seen)
         if (p.first == e.key) first = p.second;
       seen.emplace_back(e.key, first);
       Rgb c;
-      if (!ColorEffectLight(e.opcode, e.param1, e.param2, t - first, t, g_set.buff_light_gain, &c)) continue;
+      if (!ColorEffectLight(e.opcode, e.param1, e.param2, t - first, t, g_set.buff_light_gain * shape.gain, &c))
+        continue;
       BakedLight l;
       l.x = float(sp.x);
       l.y = float(sp.y);
-      l.z = 45.0f;
-      l.radius = 170.0f;
+      l.z = shape.z;
+      l.radius = shape.radius;
       l.r = c.r;
       l.g = c.g;
       l.b = c.b;
@@ -587,6 +607,10 @@ std::vector<BakedLight> GatherFx(float ox, float oy, const ViewMap& vm, int vw, 
   g_fx_glows = int(g_glows.size());
   lights = MergeFxLights(std::move(lights), 48.0f, size_t(g_set.fx_budget));
   for (BakedLight& l : lights) {
+    const Rgb sc = Saturate({l.r, l.g, l.b}, g_set.fx_light_saturation);
+    l.r = sc.r;
+    l.g = sc.g;
+    l.b = sc.b;
     l.r *= g_set.fx_light_gain;
     l.g *= g_set.fx_light_gain;
     l.b *= g_set.fx_light_gain;
@@ -622,12 +646,15 @@ void BloomPass(float to_phys, int vx, int vy) {
   gl.Uniform1i(g_pu.mode, 0);
   Quad(0, 0, float(g_light_w), float(g_light_h));
   gl.Uniform1i(g_pu.mode, 1);
-  for (int pass = 0; pass < 2; ++pass) {
-    gl.BindFramebuffer(kFramebuffer, g_bloom_fbo[1 - pass]);
-    gl.BindTexture(kTex2D, g_bloom_tex[pass]);
-    gl.Uniform2f(g_pu.dir, pass == 0 ? 1.0f : 0.0f, pass == 0 ? 0.0f : 1.0f);
-    Quad(0, 0, float(g_light_w), float(g_light_h));
-  }
+  // Each iteration blurs H then V with a wider step, so 2+ iterations give a soft halo around the core.
+  for (int it = 0; it < std::max(1, g_set.bloom_passes); ++it)
+    for (int pass = 0; pass < 2; ++pass) {
+      const float step = 1.0f + 0.5f * float(it);
+      gl.BindFramebuffer(kFramebuffer, g_bloom_fbo[1 - pass]);
+      gl.BindTexture(kTex2D, g_bloom_tex[pass]);
+      gl.Uniform2f(g_pu.dir, pass == 0 ? step : 0.0f, pass == 0 ? 0.0f : step);
+      Quad(0, 0, float(g_light_w), float(g_light_h));
+    }
   if (g_bloom_req) {  // bloom fbo 0 is bound: the final blur
     std::vector<float> px(size_t(g_light_w) * g_light_h * 4);
     gl.PixelStorei(kPackAlign, 4);
@@ -793,6 +820,8 @@ void Composite() {
   }
   const ViewMap vm = MakeViewMap(vw, vh, st, ox, oy);
   g_last_vm = vm;
+  g_last_ox = ox;
+  g_last_oy = oy;
   g_last_vw = vw;
   g_last_vh = vh;
   const bool check = g_check_req;
@@ -856,6 +885,8 @@ void Composite() {
   gl.Uniform4f(g_cu.atmo, atmo.haze, atmo.desat, atmo.contrast, g_set.atmosphere ? g_set.atmosphere_strength : 0.0f);
   const Rgb hz = HazeColour(g_scene, g_ambient);
   gl.Uniform3f(g_cu.haze_colour, hz.r, hz.g, hz.b);
+  gl.Uniform1f(g_cu.fx_boost, g_set.emissive && g_cap_used ? g_set.fx_boost : 0.0f);
+  gl.Uniform1f(g_cu.fringe, g_set.fx_fringe);
   gl.ActiveTexture(kTexture0 + 5);
   gl.BindTexture(kTex2D, g_bloom_tex[0]);
   gl.ActiveTexture(kTexture0 + 4);
@@ -906,14 +937,17 @@ int EmitDecision(const char* res, uint16_t cycle, uint16_t frame, uint32_t flags
   if (g_mode == DebugMode::Off || g_mode == DebugMode::RoundTrip) return 0;  // debug "vanilla" modes
   if (g_set.hand_lights && FindHandLight(g_hand, res)) return 2;           // e.g. Ignus: light, no glow mask
   if (!(g_set.emissive || g_set.bloom || g_set.fx_lights)) return 0;
+  const GlowOverride* over = FindGlowOverride(g_glow_over, res);
+  if (over && !over->glow) return 0;
   const bool glow = IsGlowBlend(flags);
-  const bool listed = !glow && Emits(g_emit_names, res, 0);
+  const bool listed = !glow && (over != nullptr || Emits(g_emit_names, res, 0));
+  const int soft = (listed && g_set.fx_soften && (!over || over->soften)) ? 4 : 0;
   static int logged = 0;
   if ((glow || listed) && logged < 40) {
     ++logged;
     Log("lighting: emit '%s' cycle %u frame %u flags %08X (%s)", res, cycle, frame, flags, glow ? "additive" : "listed");
   }
-  return (glow || listed) ? 1 : 0;
+  return (glow || listed) ? (1 | soft) : 0;
 }
 
 // Binds the emissive buffer (cleared on the first capture of the frame) as the draw target.
@@ -1068,6 +1102,10 @@ int __cdecl LuaSet(engine::LuaState* L) {
   else if (k == "bloom_strength") g_set.bloom_strength = float(v) / 100.0f;
   else if (k == "emissive") g_set.emissive = v != 0;
   else if (k == "fx_lights") g_set.fx_lights = v != 0;
+  else if (k == "fx_soften") g_set.fx_soften = v != 0;
+  else if (k == "fx_boost") g_set.fx_boost = float(v) / 100.0f;
+  else if (k == "fx_fringe") g_set.fx_fringe = float(v);
+  else if (k == "bloom_passes") g_set.bloom_passes = int(v);
   else if (k == "baked_lights") g_set.baked_lights = v != 0;
   else if (k == "occlusion") g_set.occlusion = v != 0;
   else if (k == "light_gain") g_set.light_gain = float(v) / 100.0f;
@@ -1124,6 +1162,33 @@ int __cdecl LuaFx(engine::LuaState* L) {
   return 8;
 }
 
+// PSTF_LightFxCells() -> FX-surface blits, pure-effect blits, softened draws, cells (session totals), and
+// the last frame's FX-surface cell draws as "RES cycle/frame anchor x,y rect w x h pure;..." (area px).
+int __cdecl LuaFxCells(engine::LuaState* L) {
+  uint64_t blits = 0, pure = 0, soft = 0, cells = 0;
+  engine::FxSurfaceStats(&blits, &pure, &soft, &cells);
+  const float ox = g_last_ox, oy = g_last_oy;
+  int n = 0;
+  const engine::EngineGlowDraw* d = engine::GlowDraws(&n);
+  std::string list;
+  char buf[128];
+  for (int i = 0; i < n && list.size() < 900; ++i) {
+    if (!d[i].from_fx) continue;
+    snprintf(buf, sizeof buf, "%s %u/%u anchor %.0f,%.0f rect %dx%d pure %d;", d[i].resref, d[i].cycle, d[i].frame,
+             d[i].anchor_x + ox, d[i].anchor_y + oy, d[i].w, d[i].h, d[i].pure);
+    list += buf;
+  }
+  Log("lua: PSTF_LightFxCells -> blits %llu pure %llu softened %llu cells %llu | %s",
+      static_cast<unsigned long long>(blits), static_cast<unsigned long long>(pure),
+      static_cast<unsigned long long>(soft), static_cast<unsigned long long>(cells), list.c_str());
+  engine::LuaPushNumber(L, double(blits));
+  engine::LuaPushNumber(L, double(pure));
+  engine::LuaPushNumber(L, double(soft));
+  engine::LuaPushNumber(L, double(cells));
+  engine::LuaPushString(L, list.c_str());
+  return 5;
+}
+
 // PSTF_LightShot(path) -> "" or the error: saves the last presented frame (half-size BMP).
 int __cdecl LuaShot(engine::LuaState* L) {
   const std::string path = engine::LuaStringArg(L, 1);
@@ -1161,6 +1226,11 @@ void InstallLighting(const IniMap& ini) {
   g_set.bloom_strength = pct("lighting.bloom_strength", 35, 0, 200);
   g_set.bloom_threshold = pct("lighting.bloom_threshold", 45, 0, 100);
   g_set.fx_lights = IniBool(ini, "lighting.fx_lights", true);
+  g_set.fx_soften = IniBool(ini, "lighting.fx_soften", true);
+  g_set.fx_boost = pct("lighting.fx_boost", 15, 0, 200);
+  g_set.fx_light_saturation = pct("lighting.fx_light_saturation", 160, 0, 300);
+  g_set.fx_fringe = float(std::max(0, std::min(8, IniInt(ini, "lighting.fx_fringe", 2))));
+  g_set.bloom_passes = std::max(1, std::min(3, IniInt(ini, "lighting.bloom_passes", 2)));
   g_set.fx_light_gain = pct("lighting.fx_light_gain", 100, 0, 300);
   g_set.fx_budget = std::max(0, std::min(64, IniInt(ini, "lighting.fx_budget", 24)));
   g_set.atmosphere = IniBool(ini, "lighting.atmosphere", true);
@@ -1168,6 +1238,8 @@ void InstallLighting(const IniMap& ini) {
   g_set.hand_light_gain = pct("lighting.hand_light_gain", 150, 0, 300);
   g_set.buff_lights = IniBool(ini, "lighting.buff_lights", true);
   g_set.buff_light_gain = pct("lighting.buff_light_gain", 70, 0, 300);
+  g_set.weapon_glow_gain = pct("lighting.weapon_glow_gain", 30, 0, 300);
+  g_set.weapon_glow_radius = float(IniInt(ini, "lighting.weapon_glow_radius", 70));
   g_set.atmosphere_strength = pct("lighting.atmosphere_strength", 100, 0, 300);
   int dbg = IniInt(ini, "lighting.debug", 0);
   if (const char* e = std::getenv("PSTF_LIGHT_DEBUG")) dbg = std::atoi(e);
@@ -1194,6 +1266,9 @@ void InstallLighting(const IniMap& ini) {
     const std::string path = std::string(DataDir()) + "\\assets\\vfx\\vfxlight.tsv";
     if (ReadFile(path, &buf)) g_hand = ParseHandLights(std::string(buf.begin(), buf.end()));
     Log("lighting: %zu hand lights (vfxlight.tsv)", g_hand.size());
+    const std::string gpath = std::string(DataDir()) + "\assets\vfx\vfxglow.tsv";
+    if (ReadFile(gpath, &buf)) g_glow_over = ParseGlowOverrides(std::string(buf.begin(), buf.end()));
+    Log("lighting: %zu glow overrides (vfxglow.tsv)", g_glow_over.size());
   }
   engine::SetEmissiveCallbacks(&EmitDecision, &CaptureBegin, &CaptureEnd);
   if (g_set.fx_lights) {
@@ -1212,6 +1287,7 @@ void InstallLighting(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_LightCompare", &LuaCompare);
   dev::AddLuaFunction("PSTF_LightCompareResult", &LuaCompareResult);
   dev::AddLuaFunction("PSTF_LightFx", &LuaFx);
+  dev::AddLuaFunction("PSTF_LightFxCells", &LuaFxCells);
   dev::AddLuaFunction("PSTF_LightBloom", &LuaBloom);
   dev::AddLuaFunction("PSTF_LightAtmo", &LuaAtmo);
   dev::AddLuaFunction("PSTF_LightSet", &LuaSet);

@@ -6,7 +6,8 @@
 
 Every BAM V1 that is not a character animation (tools/sprite_depth/character_bams.txt) and not GUI-only:
 per cycle, per frame (frame index inside the cycle, as CVidCell keeps it at +0x118 / sequence +0x11A):
-  colour   luminance-weighted mean RGB of the opaque pixels, scaled so the brightest channel is 1
+  colour   mean RGB of the opaque pixels weighted by luminance x (0.2 + saturation), scaled so the
+           brightest channel is 1: the coloured halo sets the hue, not the white-hot core
   strength mean luminance over the whole frame rect (GemRB GetSpriteGlow)
   cx, cy   centroid of the pixels brighter than half the frame's brightest, weighted by luminance^2
   bright   number of those pixels
@@ -41,7 +42,10 @@ def frame_row(fr: sd.Frame, pal: np.ndarray) -> tuple[float, float, float, float
   strength = total / float(fr.w * fr.h)
   if total <= 1e-6:
     return (1.0, 1.0, 1.0, 0.0, fr.w / 2.0, fr.h / 2.0, 0)
-  col = (rgb * lum[..., None]).reshape(-1, 3).sum(0) / total
+  mx, mn = rgb.max(axis=2), rgb.min(axis=2)
+  sat = np.where(mx > 1e-4, (mx - mn) / np.maximum(mx, 1e-4), 0.0)
+  wc = lum * (0.2 + sat)
+  col = (rgb * wc[..., None]).reshape(-1, 3).sum(0) / max(float(wc.sum()), 1e-6)
   col = col / max(float(col.max()), 1e-6)
   peak = float(lum.max())
   m = lum >= 0.5 * peak
@@ -102,7 +106,31 @@ def emitters(candidates: list[str]) -> tuple[list[str], dict[str, int]]:
       if n in cand:
         found.add(n)
   out = sorted(n for n in found if not NOT_EFFECT.match(n))
-  return out, {"exe": n_exe, "total": len(found), "kept": len(out)}
+  dark = [n for n in out if is_dark(n)]
+  out = [n for n in out if n not in set(dark)]
+  return out, {"exe": n_exe, "total": len(found), "kept": len(out), "dark": len(dark), "dark_names": dark}
+
+
+DARK_LUMA = 0.18  # GemRB VFX_PLAN 7.2: smoke, shadows, darkness never emit (or soften: they would vanish)
+
+
+def is_dark(name: str) -> bool:
+  """Mean luminance of the opaque pixels over all frames below DARK_LUMA."""
+  try:
+    bam, _ = sd.load_bam(name)
+  except Exception:
+    return False
+  tot, n = 0.0, 0
+  for fr in bam.frames:
+    if fr.w == 0 or fr.h == 0:
+      continue
+    m = fr.idx != 0
+    if not m.any():
+      continue
+    lum = (bam.palette[fr.idx[m]].astype(np.float32) / 255.0) @ LUMA
+    tot += float(lum.sum())
+    n += int(m.sum())
+  return n > 0 and tot / n < DARK_LUMA
 
 
 def run(args) -> int:
@@ -129,9 +157,11 @@ def run(args) -> int:
     with open(EMIT_OUT, "w", encoding="ascii", newline="\n") as f:
       f.write("# SPDX-License-Identifier: GPL-2.0-or-later\n"
               "# Written by tools/vfxscan.py: effect BAMs that emit with any blend (named in Torment.exe or in\n"
-              f"# SPL/ITM/EFF/PRO/VVC/BCS data; no creature animations, no HUD markers). {len(names)} BAMs.\n")
+              f"# SPL/ITM/EFF/PRO/VVC/BCS data; no creature animations, no HUD markers). {len(names)} BAMs.\n"
+              f"# Dark (mean luma < {DARK_LUMA}), left out: {' '.join(st['dark_names'])}\n")
       f.write("\n".join(names) + "\n")
-    print(f"vfxscan: {st['kept']} emitting BAMs ({st['exe']} named in the exe, {st['total']} found) -> {EMIT_OUT}")
+    print(f"vfxscan: {st['kept']} emitting BAMs ({st['exe']} named in the exe, {st['total']} found, "
+          f"{st['dark']} dark left out) -> {EMIT_OUT}")
   return 0
 
 

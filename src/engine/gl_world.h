@@ -101,17 +101,24 @@ void ArmWorldComposite();
 // space (area = draw + WorldPassOffset). The cell fields are set when the draw came through
 // CVidCell::Render3d / FXRender3d (not FXBltToBack).
 struct EngineGlowDraw {
-  int x, y, w, h;
+  int x, y, w, h;  // for an FX-surface cell: that cell's frame rect (anchor - frame centre), else the blit rect
   uint32_t flags;
   char resref[9];  // "" = unknown cell
   uint16_t cycle, frame;
+  int anchor_x, anchor_y;  // the cell's draw point (FX-surface cells; creatures: the feet), else bottom centre
+  uint8_t from_fx;         // 1 = one cell of an FX-surface blit (rect from the cell's frame header)
+  uint8_t pure;            // the blit held only emitting cells (no creature): drawn per pixel, softened
 };
 bool InstallGlowGather();
 // Which world draws emit (module decides from the cell's resref/sequence/frame and the blend flags; the
 // resref is "" when unknown). Emitting draws are gathered and, with the capture callbacks, drawn a second
 // time with the normal blend into the module's emissive buffer: begin binds it (false = skip), end
 // restores the engine's target. Game thread, inside the world pass.
-// Returns 0 = nothing, 1 = emissive (gathered + captured), 2 = light only (gathered, not captured).
+// Returns 0 = nothing, 1 = emissive (gathered + captured), 2 = light only (gathered, not captured);
+// | 4 = soften: a normal-alpha draw of this effect is drawn with the screen blend (black = see-through).
+// FX-surface blits (CInfinity::FXRender cells then one FXBltToBack) are judged per cell: when every cell
+// in the surface emits, the blit is an effect only and is captured per pixel (and softened); otherwise
+// (a creature with attached effects) only the emitting cells are gathered, each with its own frame rect.
 using EmitFn = int (*)(const char* resref, uint16_t cycle, uint16_t frame, uint32_t flags);
 using CaptureBeginFn = bool (*)();
 using CaptureEndFn = void (*)();
@@ -119,6 +126,8 @@ void SetEmissiveCallbacks(EmitFn emit, CaptureBeginFn begin, CaptureEndFn end);
 // Draws gathered since the last ArmWorldComposite (cleared there). Game thread only.
 const EngineGlowDraw* GlowDraws(int* n);
 int GlowDrawsDropped();  // over the per-frame cap (256)
+// Probe: FX-surface blits this session (all / pure effect / softened draws) and cells seen in them.
+void FxSurfaceStats(uint64_t* blits, uint64_t* pure, uint64_t* softened, uint64_t* cells);
 // Probe: RenderTexture calls (all / in the armed world pass), Render3d calls, OR of world-pass flags.
 // Probe: log each distinct draw (Render3d '3', FXRender3d 'X', RenderTexture with cell 'R' / from the FX
 // surface 'F') of cells whose resref starts with `prefix` ("" = off).

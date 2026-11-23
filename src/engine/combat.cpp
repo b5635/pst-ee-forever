@@ -239,6 +239,7 @@ std::vector<ColorEffectView> ColorEffects(int32_t id) {
     v.opcode = op;
     v.param1 = R<uint32_t>(eff + sym::kOffEffParam1);
     v.param2 = R<uint32_t>(eff + sym::kOffEffParam2);
+    v.timing = R<uint32_t>(eff + sym::kOffEffType);
     v.key = eff;
     out.push_back(v);
   });

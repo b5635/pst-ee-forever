@@ -497,6 +497,11 @@ inline constexpr uint8_t kCellFrameStoreBytes[] = {0x66, 0x89, 0x91, 0x18, 0x01,
 inline constexpr uint8_t kCellSeqStoreBytes[] = {0x66, 0x89, 0x91, 0x1A, 0x01, 0x00, 0x00};
 constexpr uint32_t kRvaCellFrameStore = 0x499B90, kRvaCellSeqStore = 0x49B340;
 constexpr uint32_t kOffCellRes = 0x108, kOffCellResRef = 0x110, kOffCellFrame = 0x118, kOffCellSeq = 0x11A;
+// Current frame header pointer at +0x128 (u16 width, u16 height, i16 centre x, i16 centre y): FXRender3d
+// (lin 6889E0 `v10 = this[37]; v12 = a2 - v10[2]`, win 1404AD691 `mov rcx,[r14+128h]`, then
+// `movsx eax, word [rcx+4]` / `[rcx+6]`) draws the frame at (x - centre x, y - centre y) in the FX surface.
+inline constexpr uint8_t kCellFrameHdrLoadBytes[] = {0x49, 0x8B, 0x8E, 0x28, 0x01, 0x00, 0x00};
+constexpr uint32_t kRvaCellFrameHdrLoad = 0x4AD691, kOffCellFrameHdr = 0x128;
 // CGameArea: CGameArea::Unmarshal (lin 1BEB10 L179: `*(m128*)this = header + 8`; win 1401A1AE1
 // `movups xmm0,[rsi+8]; movups [r15],xmm0`) copies the ARE header from offset 8, so the WED resref
 // (ARE +0x08) is at area+0 and the area type flags (ARE +0x48) at area+0x40 (Unmarshal tests bit 0x40,
@@ -848,6 +853,8 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("sub_6873C0 (world sprite draw)", kRvaSpriteDraw, kSpriteDrawBytes, "lin 6873C0 / win 1404AE640"),
     PSTF_SYM("DrawCreateProgram_GL.table", kRvaProgramTableLea, kProgramTableLeaBytes, "lin 63C990 / win 1404B4A89"),
     PSTF_SYM("CVidCell::FrameSet", kRvaCellFrameStore, kCellFrameStoreBytes, "lin 68B710 / win 140499B90"),
+    PSTF_SYM("CVidCell::FXRender3d frame header load", kRvaCellFrameHdrLoad, kCellFrameHdrLoadBytes,
+             "lin 6889E0 / win 1404AD691"),
     PSTF_SYM("CVidCell::SequenceSet", kRvaCellSeqStore, kCellSeqStoreBytes, "lin 68B920 / win 14049B340"),
     PSTF_SYM("CGameArea::Unmarshal.header", kRvaAreaHeaderCopy, kAreaHeaderCopyBytes, "lin 1BEB10 / win 1401A1AE1"),
     PSTF_SYM("CGameArea::Unmarshal.areaType", kRvaAreaTypeRead, kAreaTypeReadBytes, "win 1401A1E48"),

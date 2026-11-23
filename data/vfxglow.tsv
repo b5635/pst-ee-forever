@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Hand glow overrides for the lighting module (deployed to pst_forever\assets\vfx\vfxglow.tsv).
+# A BAM matching the pattern ('?' = any one char) glows (emissive map, bloom, effect light) or not,
+# and is softened (normal-alpha draw turned into the screen blend) or not, whatever vfxscan found.
+# Dark BAMs (smoke, shadows) are already left out of vfxemit.txt by tools/vfxscan.py.
+# pattern   glow  soften
