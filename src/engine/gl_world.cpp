@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "engine/gl_world.h"
+#include "engine/render.h"
 
 #include <windows.h>
 
 #include <cctype>
+#include <cstring>
 
 #include "core/crashlog.h"
 #include "core/log.h"
@@ -83,7 +85,197 @@ const sym::Symbol* Find(uint32_t rva) {
     if (s.rva == rva) return &s;
   return nullptr;
 }
+
+// --- glow gather -------------------------------------------------------------------------------------
+constexpr int kMaxGlow = 256;
+EngineGlowDraw g_glow[kMaxGlow];
+int g_glow_n = 0, g_glow_dropped = 0;
+uint64_t g_cell = 0;  // CVidCell of the Render3d / FXRender3d being run (0 outside)
+// Effects draw in two steps: CInfinity::FXRender(cell) -> CVidCell::FXRender3d into the FX surface, then
+// CInfinity::FXBltFrom -> CVidMode::FXBltToBack -> RenderTexture without a cell (lin 3A86D0, 681150).
+// The last FX cell is the one that surface holds.
+uint64_t g_fx_cell = 0;
+
+using RenderTextureFn = uint64_t(__fastcall*)(int, int, const int*, uint64_t, const int*, const int*, uint32_t);
+using Cell10Fn = uint64_t(__fastcall*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+                                       uint64_t, uint64_t, uint64_t);
+RenderTextureFn g_render_texture = nullptr;
+Cell10Fn g_render3d = nullptr, g_fx_render3d = nullptr;
+
+void Gather(int x, int y, const int* frame, uint32_t flags) {
+  if (!g_armed || !WorldPassArea() || !frame) return;
+  if (g_glow_n >= kMaxGlow) {
+    ++g_glow_dropped;
+    return;
+  }
+  EngineGlowDraw& d = g_glow[g_glow_n++];
+  d.x = x + frame[0];
+  d.y = y + frame[1];
+  d.w = frame[2] - frame[0];
+  d.h = frame[3] - frame[1];
+  d.flags = flags;
+  d.resref[0] = 0;
+  d.cycle = d.frame = 0;
+  const uint64_t cell = g_cell ? g_cell : g_fx_cell;
+  if (cell && PlausiblePtr(cell)) {
+    for (int i = 0; i < 8; ++i) d.resref[i] = R<char>(cell + sym::kOffCellResRef + i);
+    d.resref[8] = 0;
+    d.cycle = R<uint16_t>(cell + sym::kOffCellSeq);
+    d.frame = R<uint16_t>(cell + sym::kOffCellFrame);
+  }
+}
+
+EmitFn g_emit_fn = nullptr;
+CaptureBeginFn g_cap_begin = nullptr;
+CaptureEndFn g_cap_end = nullptr;
+
+// Probe counters (GlowStats): every RenderTexture call, those inside the armed world pass, OR of their flags.
+uint64_t g_rt_calls = 0, g_rt_world = 0, g_r3d_calls = 0;
+uint32_t g_rt_flags_or = 0;
+
+// Draw trace (probe TraceDraws): logs each distinct (path, resref, flags) of cells whose resref starts with
+// the prefix, up to 96 lines.
+char g_trace[9] = {};
+int g_trace_lines = 0;
+struct TraceKey {
+  char path, res[9];
+  uint32_t flags;
+};
+TraceKey g_trace_seen[96];
+
+void ReadRes(uint64_t cell, char out[9]) {
+  out[0] = 0;
+  if (!cell || !PlausiblePtr(cell)) return;
+  for (int i = 0; i < 8; ++i) out[i] = R<char>(cell + sym::kOffCellResRef + i);
+  out[8] = 0;
+}
+
+void Trace(char path, uint64_t cell, uint32_t flags, int w, int h) {
+  if (!g_trace[0] || g_trace_lines >= 96) return;
+  char res[9];
+  ReadRes(cell, res);
+  if (strcmp(g_trace, "*") != 0 && _strnicmp(res, g_trace, strlen(g_trace)) != 0) return;
+  for (int i = 0; i < g_trace_lines; ++i)
+    if (g_trace_seen[i].path == path && g_trace_seen[i].flags == flags && !strcmp(g_trace_seen[i].res, res)) return;
+  TraceKey& k = g_trace_seen[g_trace_lines++];
+  k.path = path;
+  k.flags = flags;
+  memcpy(k.res, res, 9);
+  Log("lighting: trace %c %-8s seq %u frame %u flags %08X %dx%d world %d", path, res,
+      cell ? R<uint16_t>(cell + sym::kOffCellSeq) : 0, cell ? R<uint16_t>(cell + sym::kOffCellFrame) : 0, flags, w,
+      h, (g_armed && WorldPassArea()) ? 1 : 0);
+}
+
+uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t size, const int* clip,
+                                        const int* clip2, uint32_t flags) {
+  ++g_rt_calls;
+  if (g_armed && WorldPassArea()) {
+    ++g_rt_world;
+    g_rt_flags_or |= flags;
+  }
+  if (g_trace[0] && frame)
+    Trace(g_cell ? 'R' : 'F', g_cell ? g_cell : g_fx_cell, flags, frame[2] - frame[0], frame[3] - frame[1]);
+  int emit = 0;
+  if (g_armed && WorldPassArea() && frame && g_emit_fn) {
+    const uint64_t cell = g_cell ? g_cell : g_fx_cell;
+    char res[9];
+    ReadRes(cell, res);
+    const uint16_t cyc = res[0] ? R<uint16_t>(cell + sym::kOffCellSeq) : 0;
+    const uint16_t frm = res[0] ? R<uint16_t>(cell + sym::kOffCellFrame) : 0;
+    emit = g_emit_fn(res, cyc, frm, flags);
+  }
+  if (emit) Gather(x, y, frame, flags);
+  const uint64_t r = g_render_texture(x, y, frame, size, clip, clip2, flags);
+  // Emissive capture: the same quad again, normal blend (premultiplied over black), into the module's
+  // buffer. The engine's batch is flushed around it so each copy lands in its own target.
+  // Normal-blend blits of the FX surface are composites (a sprite and its attached effects drawn
+  // together, CInfinity::FXRender per object then one FXBltToBack): re-drawing one would capture the
+  // creature too. Those still give lights (gathered above) but no pixels; additive blits and draws with
+  // their own cell (Render3d) are effect pixels only.
+  const bool additive = (flags & 0x208u) && !(flags & 0x20000000u);
+  if ((emit & 1) && g_cap_begin && (additive || g_cell)) {
+    EngineFlushBatch();
+    if (g_cap_begin()) {
+      g_render_texture(x, y, frame, size, clip, clip2, flags & ~(0x208u | 0x20000000u));
+      EngineFlushBatch();
+      g_cap_end();
+    }
+  }
+  return r;
+}
+
+// Render3d has 9 arguments, FXRender3d 7: forwarding 10 register/stack slots covers both (the extra
+// slots are read from the caller's frame and ignored by the callee).
+uint64_t __fastcall Render3dDetour(uint64_t c, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6,
+                                   uint64_t a7, uint64_t a8, uint64_t a9, uint64_t a10) {
+  const uint64_t keep = g_cell;
+  g_cell = c;
+  ++g_r3d_calls;
+  if (g_trace[0]) Trace('3', c, uint32_t(a8), 0, 0);  // Render3d(x, y, rect, clip, poly, n, flags, alpha)
+  const uint64_t r = g_render3d(c, a2, a3, a4, a5, a6, a7, a8, a9, a10);
+  g_cell = keep;
+  return r;
+}
+uint64_t __fastcall FxRender3dDetour(uint64_t c, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6,
+                                     uint64_t a7, uint64_t a8, uint64_t a9, uint64_t a10) {
+  const uint64_t keep = g_cell;
+  g_cell = c;
+  if (g_trace[0]) Trace('X', c, uint32_t(a6), 0, 0);  // FXRender3d(x, y, rect, clip, flags, alpha)
+  const uint64_t r = g_fx_render3d(c, a2, a3, a4, a5, a6, a7, a8, a9, a10);
+  g_cell = keep;
+  g_fx_cell = c;
+  return r;
+}
 }  // namespace
+
+bool InstallGlowGather() {
+  if (g_render_texture) return true;
+  const sym::Symbol* rt = Find(sym::kRvaRenderTexture);
+  const sym::Symbol* r3 = Find(sym::kRvaRender3d);
+  const sym::Symbol* fx = Find(sym::kRvaFxRender3d);
+  const sym::Symbol* bl = Find(sym::kRvaRenderTextureBlend);
+  if (!rt || !r3 || !fx || !bl || !CheckSymbol(*rt) || !CheckSymbol(*r3) || !CheckSymbol(*fx) || !CheckSymbol(*bl))
+    return false;
+  // Cell hooks first: RenderTexture only reads what they set.
+  g_render3d = reinterpret_cast<Cell10Fn>(InlineHook(*r3, sym::kRender3dCopy, reinterpret_cast<void*>(&Render3dDetour)));
+  g_fx_render3d =
+      reinterpret_cast<Cell10Fn>(InlineHook(*fx, sym::kFxRender3dCopy, reinterpret_cast<void*>(&FxRender3dDetour)));
+  if (!g_render3d || !g_fx_render3d) {
+    Log("lighting: cell hooks failed (Render3d %d, FXRender3d %d)", g_render3d ? 1 : 0, g_fx_render3d ? 1 : 0);
+    return false;
+  }
+  g_render_texture = reinterpret_cast<RenderTextureFn>(
+      InlineHook(*rt, sym::kRenderTextureCopy, reinterpret_cast<void*>(&RenderTextureDetour)));
+  return g_render_texture != nullptr;
+}
+
+const EngineGlowDraw* GlowDraws(int* n) {
+  *n = g_glow_n;
+  return g_glow;
+}
+
+int GlowDrawsDropped() { return g_glow_dropped; }
+
+void SetEmissiveCallbacks(EmitFn emit, CaptureBeginFn begin, CaptureEndFn end) {
+  g_emit_fn = emit;
+  g_cap_begin = begin;
+  g_cap_end = end;
+}
+
+void TraceDraws(const char* prefix) {
+  size_t n = 0;
+  for (; prefix && prefix[n] && n < 8; ++n) g_trace[n] = prefix[n];
+  g_trace[n] = 0;
+  g_trace_lines = 0;
+  Log("lighting: tracing draws of '%s'", g_trace);
+}
+
+void GlowStats(uint64_t* rt_calls, uint64_t* rt_world, uint64_t* render3d, uint32_t* flags_or) {
+  *rt_calls = g_rt_calls;
+  *rt_world = g_rt_world;
+  *render3d = g_r3d_calls;
+  *flags_or = g_rt_flags_or;
+}
 
 std::string LoadGl(Gl* g) {
   HMODULE gl = GetModuleHandleW(L"opengl32.dll");
@@ -114,7 +306,7 @@ std::string LoadGl(Gl* g) {
 void SaveGlState(const Gl& gl, GlState* s) {
   gl.GetIntegerv(kCurrentProgram, &s->program);
   gl.GetIntegerv(kActiveTexture, &s->active_tex);
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < 6; ++i) {
     gl.ActiveTexture(kTexture0 + i);
     gl.GetIntegerv(kTexBinding2D, &s->tex[i]);
   }
@@ -146,7 +338,7 @@ void SaveGlState(const Gl& gl, GlState* s) {
 void RestoreGlState(const Gl& gl, const GlState& s) {
   auto set = [&](unsigned cap, unsigned char on) { on ? gl.Enable(cap) : gl.Disable(cap); };
   gl.UseProgram(static_cast<unsigned>(s.program));
-  for (int i = 4; i >= 0; --i) {
+  for (int i = 5; i >= 0; --i) {
     gl.ActiveTexture(kTexture0 + i);
     gl.BindTexture(kTex2D, static_cast<unsigned>(s.tex[i]));
   }
@@ -235,6 +427,11 @@ bool InstallWorldComposite(CompositeFn fn) {
   return true;
 }
 
-void ArmWorldComposite() { g_armed = true; }
+void ArmWorldComposite() {
+  g_armed = true;
+  g_glow_n = 0;
+  g_glow_dropped = 0;
+  g_fx_cell = 0;
+}
 
 }  // namespace pstf::engine

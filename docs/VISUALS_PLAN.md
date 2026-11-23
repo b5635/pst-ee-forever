@@ -1,6 +1,6 @@
 # Lighting, depth and visual effects for PST:EE: investigation and plan
 
-Status: phases 0 and 1 done 2026-11-22 (`src/modules/lighting/`, `src/engine/gl_world.*`, ini `[lighting]`).
+Status: phases 0, 1, 4 and 5 done 2026-11-22 (`src/modules/lighting/`, `src/engine/gl_world.*`, ini `[lighting]`).
 Sprite depth maps for character BAMs are being generated offline (separate task, `tools/sprite_depth/`).
 Module name: `lighting` (ARCHITECTURE.md §3.3).
 Rule from CLAUDE.md applies everywhere: loose on presentation, exact on anything a script can observe.
@@ -13,7 +13,7 @@ Every effect here is presentation only, behind an ini toggle, and all toggles of
 | Can the GemRB height maps be used directly? | **Yes, as they are.** Same 123 WEDs, same area sizes, same art (EE PVRZ vs classic TIS differ only by DXT noise: mean 3.7 to 5.5/255 per area, worst single 64x64 tile 11.5/255, over all 123 areas). `height.bin`/`normal.bin`/`ao.bin`/`lights.txt` are in area pixels, so they line up with EE world coordinates. No regeneration needed. |
 | Missing areas? | **None.** EE has no area that the GemRB set lacks, and vice versa (123/123, every one with `<WED>LM.bmp`). Small data gaps are listed in §3.3. |
 | Sprite normal maps offline? | Yes, offline and cached. All 2,445 creature and spell BAMs are **byte-identical** between classic and EE (only GUI/inventory BAMs changed), so frames computed from classic or GemRB data key 1:1 to EE draws. Nobody has made sprite normals yet (GemRB uses a luminance bump). |
-| Did the engine already separate emissive things? | **Partly, and usefully.** Every world sprite draw goes through one routine with a "glow" blend flag (additive), used by glowing area animations, blended VVCs and projectiles. That flag is the emissive signal for effects. Painted emitters in the backgrounds are not separated, but the GemRB lights pipeline already located 1,531 of them. Not tabled. |
+| Did the engine already separate emissive things? | **Partly, and usefully.** Every BAM v1 world sprite draw ends in `CVidCell::RenderTexture`, whose flags pick the blend: `flags & 0x208` nonzero = additive (glowing area animations, blended VVCs, projectiles). That is the emissive signal for effects. (Corrected in phase 4: `sub_6873C0`'s 0x40000000 is a *multiply* on BAM v2, not the glow.) Painted emitters in the backgrounds are not separated, but the GemRB lights pipeline already located 1,531 of them. Not tabled. |
 | What do the LM maps encode? | One thing: a hand-painted **creature tint** (RGB per 16x12 cell), sampled bilinearly at an object's feet. No light positions, no direction, no height. EE also uses its luma for **stealth** (`CGameSprite::InDark` from `Hide` and `CheckModal`), so it is gameplay data: never alter it or `GetTintColor`. |
 | Shadows: which technique? | Hybrid: screen-space occlusion in the light pass (height map + sprite buffer as occluders) for dynamic lights, plus a projected silhouette for the area key light. Engine contact shadows (BAM shadow pixels) stay. §5.3. |
 
@@ -211,6 +211,29 @@ Done (phase 0/1 results, 2026-11-22):
   ActionOverride, MoveGlobalsTo) does not move the party, so AR0202/AR0105 need a save there.
 - AO is loaded and uploaded but applies to sprites only (§5.1): it is wired in phase 2 with the sprite buffer.
   Until phase 2, sprites are lit like the background under them.
+
+Done (phase 4/5 results, 2026-11-22):
+- Glow signal: `CVidCell::RenderTexture` (1404AEA60, every BAM v1 world draw) blend from `flags & 0x208`: 0 normal,
+  8 (1-DST,ONE), 0x200 (DST,ONE), 0x208 (SRC,ONE); bit 29 = multiply. Engine blend enum -> GL from lin unk_C08260.
+  BAM v2 `sub_6873C0` has no additive mode (its 0x40000000 is DST_COLOR, 1-SRC_ALPHA).
+- Cell identity: `Render3d`/`FXRender3d` prologue hooks; effects draw `CInfinity::FXRender(cell)` -> `FXRender3d`
+  into the FX surface, then `FXBltToBack` -> `RenderTexture` without a cell, so the last FX cell is used.
+- `tools/vfxscan.py`: 1,307 BAMs, 21,996 frames -> `assets/vfx/vfxauto.tsv` (1.1 MB, 22 s). Lookup by
+  (resref, sequence +0x11A, frame +0x118): every glow draw of the Magic Missile cast was found.
+- In game (Hive, Dak'kon casts SPWI107): 6 glow draws, 6 table hits, up to 3 effect lights, nearest 57-80 px from
+  the caster; bloom max 0.55; overhead text stays unlit and above. No light comes from glow draws not in the table.
+- Most PST spell visuals are normal-alpha, not additive (casting effects A001..A010 named in
+  CGameSprite::ApplyCastingEffect, projectiles like S031AXST in CProjectile::DecodeProjectile): emitters are
+  additive draws + vfxemit.txt (819 BAMs). Per-pixel emissive capture (re-draw through RenderTexture into our
+  buffer) for own-cell and additive draws; FX-surface normal blits are composites (creature + attached effect),
+  lights only. The first rect mask made the "white box" (un-darkened, bloomed frame rects): replaced.
+- Hand lights (vfxlight.tsv, Ignus) and buff colour lights (ops 8/9/52/61, 353 TintScreen = the buffs' fade).
+- Open: offline per-frame emissive maps so FX-surface effects get a pixel mask too (needs the effect frame's
+  offset inside the FX composite), and the effect look (soft glow / additive boost) on top of the mask.
+- Atmosphere v1: haze/desat/contrast by height (200..1024). The void between floors is stored as a saturated 1024
+  backdrop, so the effect is gated to visible surfaces (luma 0.02..0.15 fade-in): voids stay exactly black.
+  Share of hazed view: AR1400 8.4 % (mean t 0.30), AR0700 13.6 % (t 0.014), AR0400 0.3 %. Subtle by design; the
+  signed depth re-export (§5.4) is still undecided.
 
 
 0. **Probes and plumbing.** Confirm on both sides and add to the manifest: `sub_6873C0`, `DrawInit_GL`, `DrawCreateProgram_GL`,

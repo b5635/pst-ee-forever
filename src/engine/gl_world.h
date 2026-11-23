@@ -72,7 +72,7 @@ std::string LoadGl(Gl* gl);
 
 // Every piece of GL state the lighting passes change.
 struct GlState {
-  int program, active_tex, tex[5], draw_fbo, read_fbo, viewport[4];
+  int program, active_tex, tex[6], draw_fbo, read_fbo, viewport[4];
   int blend_src_rgb, blend_dst_rgb, blend_src_a, blend_dst_a, blend_eq_rgb, blend_eq_a;
   int unpack_align, pack_align, unpack_row;
   float clear[4];
@@ -96,5 +96,33 @@ using CompositeFn = void (*)();
 bool InstallWorldComposite(CompositeFn fn);
 // Arms the callback for the frame being drawn (call from a world pre-draw hook).
 void ArmWorldComposite();
+
+// Glow draws (phase 4): every additive BAM v1 draw of the world pass before the composite, in draw
+// space (area = draw + WorldPassOffset). The cell fields are set when the draw came through
+// CVidCell::Render3d / FXRender3d (not FXBltToBack).
+struct EngineGlowDraw {
+  int x, y, w, h;
+  uint32_t flags;
+  char resref[9];  // "" = unknown cell
+  uint16_t cycle, frame;
+};
+bool InstallGlowGather();
+// Which world draws emit (module decides from the cell's resref/sequence/frame and the blend flags; the
+// resref is "" when unknown). Emitting draws are gathered and, with the capture callbacks, drawn a second
+// time with the normal blend into the module's emissive buffer: begin binds it (false = skip), end
+// restores the engine's target. Game thread, inside the world pass.
+// Returns 0 = nothing, 1 = emissive (gathered + captured), 2 = light only (gathered, not captured).
+using EmitFn = int (*)(const char* resref, uint16_t cycle, uint16_t frame, uint32_t flags);
+using CaptureBeginFn = bool (*)();
+using CaptureEndFn = void (*)();
+void SetEmissiveCallbacks(EmitFn emit, CaptureBeginFn begin, CaptureEndFn end);
+// Draws gathered since the last ArmWorldComposite (cleared there). Game thread only.
+const EngineGlowDraw* GlowDraws(int* n);
+int GlowDrawsDropped();  // over the per-frame cap (256)
+// Probe: RenderTexture calls (all / in the armed world pass), Render3d calls, OR of world-pass flags.
+// Probe: log each distinct draw (Render3d '3', FXRender3d 'X', RenderTexture with cell 'R' / from the FX
+// surface 'F') of cells whose resref starts with `prefix` ("" = off).
+void TraceDraws(const char* prefix);
+void GlowStats(uint64_t* rt_calls, uint64_t* rt_world, uint64_t* render3d, uint32_t* flags_or);
 
 }  // namespace pstf::engine

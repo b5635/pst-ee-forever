@@ -7,7 +7,8 @@
 -- 1. Round trip: copy the world and draw it back with lighting off -> 0 pixels differ (phase 0).
 -- 2. Lit: the same check must change pixels (ambient + lights applied).
 -- 3. Falloff debug: the GPU light buffer equals the CPU mirror (<= 2% of sampled pixels off by > 0.02).
--- 4. A/B shots: pst_forever\logs\light_<AREA>_off.bmp / _lit.bmp / _light.bmp / _falloff.bmp.
+-- 4. Atmosphere: the share of hazed pixels is logged; A/B shots at 0 % and 300 %.
+-- 5. A/B shots: pst_forever\logs\light_<AREA>_off.bmp / _lit.bmp / _light.bmp / _falloff.bmp.
 local areas = {{nil}}  -- {'AR0202', x, y} entries would travel first (kept for when travel works)
 local ai, n, step, wait, area = 1, 0, 1, 0, '?'
 
@@ -61,6 +62,23 @@ local function compare()
   return true
 end
 
+-- Phase 5: the atmosphere touches the high surfaces in view (CPU share from the height map), and
+-- switching it off changes the lit frame (A/B shots light_<AREA>_atmo{0,3}.bmp at 0 % and 300 %).
+local function atmo()
+  if wait == 0 then
+    local share, mean = PSTF_LightAtmo()
+    PSTF_Note(string.format('lighting: %s atmosphere: %.3f of the view, mean t %.3f', area, share, mean))
+    PSTF_LightDebug(0)
+    PSTF_LightSet('atmosphere_strength', 0)
+  end
+  wait = wait + 1
+  if wait == 8 then PSTF_LightShot('pst_forever/logs/light_' .. area .. '_atmo0.bmp') PSTF_LightSet('atmosphere_strength', 300) end
+  if wait == 16 then PSTF_LightShot('pst_forever/logs/light_' .. area .. '_atmo3.bmp') PSTF_LightSet('atmosphere_strength', 100) end
+  if wait < 17 then return false end
+  wait = 0
+  return true
+end
+
 local steps = {
   function() return check(2, true) end,
   function() return check(0, false) end,
@@ -69,6 +87,7 @@ local steps = {
   function() return shot(1, 'light') end,
   function() return shot(3, 'falloff') end,
   compare,
+  atmo,
 }
 
 function pstfTestTick()

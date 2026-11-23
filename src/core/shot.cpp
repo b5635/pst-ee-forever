@@ -8,6 +8,7 @@
 #include <vector>
 
 namespace pstf {
+int g_last_read_fbo = 0;
 namespace {
 constexpr unsigned kGlViewport = 0x0BA2, kGlFront = 0x0404, kGlReadBuffer = 0x0C02;
 constexpr unsigned kGlRgb = 0x1907, kGlUnsignedByte = 0x1401, kGlPackAlignment = 0x0D05;
@@ -32,6 +33,16 @@ std::string SaveScreenshot(const std::string& path) {
   geti(kGlViewport, vp);
   const int w = vp[2], h = vp[3];
   if (w <= 0 || h <= 0 || w > 16384 || h > 16384) return "bad viewport";
+  // The front buffer belongs to the default framebuffer: read from it even if an FBO is bound for reading
+  // (restored after). The binding found is reported (a non-zero one means some pass leaked it).
+  using BindFbFn = void(WINAPI*)(unsigned, unsigned);
+  using WglGet = PROC(WINAPI*)(LPCSTR);
+  auto wgl = reinterpret_cast<WglGet>(GetProcAddress(gl, "wglGetProcAddress"));
+  auto bindfb = wgl ? reinterpret_cast<BindFbFn>(wgl("glBindFramebuffer")) : nullptr;
+  int read_fbo = 0;
+  geti(0x8CAA /*GL_READ_FRAMEBUFFER_BINDING*/, &read_fbo);
+  g_last_read_fbo = read_fbo;
+  if (bindfb && read_fbo) bindfb(0x8CA8 /*GL_READ_FRAMEBUFFER*/, 0);
   int old_read = 0;
   geti(kGlReadBuffer, &old_read);
   std::vector<uint8_t> px(static_cast<size_t>(w) * h * 3);
@@ -39,6 +50,7 @@ std::string SaveScreenshot(const std::string& path) {
   rbuf(kGlFront);
   read(vp[0], vp[1], w, h, kGlRgb, kGlUnsignedByte, px.data());
   rbuf(static_cast<unsigned>(old_read));
+  if (bindfb && read_fbo) bindfb(0x8CA8, static_cast<unsigned>(read_fbo));
 
   // Half size (2x2 box), bottom-up rows as BMP wants (GL rows are bottom-up too).
   const int ow = w / 2, oh = h / 2, stride = (ow * 3 + 3) & ~3;

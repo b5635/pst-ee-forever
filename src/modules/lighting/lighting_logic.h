@@ -98,6 +98,77 @@ struct FalloffPixel {
 };
 bool DebugFalloffAt(const ViewMap& m, float to_phys, int bx, int by, const BakedLight& l, const SceneMap* height,
                     int steps, FalloffPixel* out);
+// --- Phase 4: emissive draws, effect lights, bloom -------------------------------------------------
+// CVidCell::RenderTexture (lin 687BA0 / win 1404AEA60) picks the blend from its flags: flags & 0x208 =
+// 0 normal (SRC_ALPHA, 1-SRC_ALPHA), 0x8 screen (1-DST, ONE), 0x200 (DST, ONE), 0x208 (SRC, ONE): the three
+// additive ones are the "glow" draws; bit 0x20000000 overrides with multiply (DST, 1-SRC_ALPHA).
+bool IsGlowBlend(uint32_t flags);
+
+// Emitters beyond the additive blend: effect BAMs named by the exe or effect data (vfxemit.txt), as
+// sorted packed names. A draw emits when its blend is additive or its cell's BAM is listed.
+uint64_t PackResRef(const char* resref);  // up to 8 chars, upper case, packed little-endian
+bool Emits(const std::vector<uint64_t>& sorted_names, const char* resref, uint32_t flags);
+// vfxemit.txt: one name per line, '#' comments, CR/LF; returns the sorted packed names.
+std::vector<uint64_t> ParseEmitList(const std::string& text);
+
+// One frame of a BAM from tools/vfxscan.py (assets/vfx/vfxauto.tsv): luminance-weighted colour (max
+// channel 1), strength = mean luminance over the frame rect, bright centroid in frame pixels, bright px.
+struct VfxFrame {
+  float r = 1, g = 1, b = 1, strength = 0, cx = 0, cy = 0;
+  int bright = 0;
+};
+uint64_t VfxKey(const char* resref, int cycle, int frame);
+struct VfxTable {
+  std::vector<std::pair<uint64_t, VfxFrame>> rows;  // sorted by VfxKey
+  const VfxFrame* Find(const char* resref, int cycle, int frame) const;
+};
+// "BAM cycle frame r g b strength cx cy bright" (whitespace separated), '#' comments; bad lines skipped.
+bool ParseVfxTable(const std::string& text, VfxTable* out);
+
+// A glow draw of this frame, in area pixels (frame rect top-left x, y, size w, h).
+struct GlowDraw {
+  float x = 0, y = 0, w = 0, h = 0;
+  const VfxFrame* vfx = nullptr;  // null: not in the table (no light, still emissive)
+};
+// Light of a glow draw (GemRB AddGlowLight): on the frame's bright centroid, ground at the frame bottom,
+// radius from the frame size (60..380), colour * clamp(strength * gain, 0.12, 0.9). False = no light.
+bool FxLight(const GlowDraw& d, float gain, BakedLight* out);
+// Merges lights whose drawn points are closer than `dist` (colours add, capped at 1.5; larger radius)
+// and keeps the `budget` strongest.
+std::vector<BakedLight> MergeFxLights(std::vector<BakedLight> in, float dist, size_t budget);
+// Bloom bright pass soft knee (GemRB PostFS): weight of a pixel of luminance l, threshold t, knee k.
+float SoftKnee(float l, float t, float k);
+
+// Hand light table (assets/vfx/vfxlight.tsv, shipped from data/vfxlight.tsv): any world draw whose BAM
+// matches `pattern` ('?' = any one char, upper case, <= 8) carries a light: Ignus is always on fire.
+// Line: pattern r g b radius z kind [strength]   (kind fire|magic|steady|pool; '#' comments)
+struct HandLight {
+  char pattern[9] = {};
+  BakedLight light;  // x/y unused; z = height above the frame bottom, radius, colour, kind, strength
+};
+std::vector<HandLight> ParseHandLights(const std::string& text);
+bool MatchPattern(const char* pattern, const char* resref);
+const HandLight* FindHandLight(const std::vector<HandLight>& table, const char* resref);
+// The light for a matched draw (frame rect in area px): centred, ground at the frame bottom.
+BakedLight HandLightAt(const HandLight& h, const GlowDraw& d, size_t index, double t_ms, float gain);
+
+// Colour glow effects on creatures (opcodes 8 solid, 9 pulse, 52 bright tint, 61 fade; param1 =
+// 0xBBGGRR00; 353 tint screen, param1 = 0x00BBGGRR, the buffs' fade in/out): a light of that colour on
+// the creature. age_ms = time since the effect was first seen.
+// Returns false when the light has faded out.
+bool ColorEffectLight(int opcode, uint32_t param1, uint32_t param2, double age_ms, double t_ms, float gain,
+                      Rgb* out);
+
+// --- Phase 5: atmosphere v1 ------------------------------------------------------------------------
+// Vertical depth cue: surfaces high above the floor drift toward the haze colour (VISUALS_PLAN §5.4).
+struct Atmosphere {
+  float haze = 0.06f, desat = 0.08f, contrast = 0.05f, h0 = 200.0f, h1 = 1024.0f;
+};
+float AtmosphereT(const Atmosphere& a, float h);  // smoothstep(h0, h1, h)
+Rgb ApplyAtmosphere(const Atmosphere& a, const Rgb& c, float h, const Rgb& haze_colour, float strength);
+// Haze colour: the key-light ambient hue at the ambient's luma; without a key line the ambient itself.
+Rgb HazeColour(const AreaScene& s, const Rgb& ambient);
+
 // Debug modes (PSTF_LightDebug): what the composite does.
 enum class DebugMode : int {
   Lit = 0,        // normal
@@ -105,6 +176,7 @@ enum class DebugMode : int {
   RoundTrip = 2,  // copy the scene and draw it back unchanged (pixel-identical: phase-0 test)
   Falloff = 3,    // GemRB debug: red = vertical surface, green = falloff, blue = normal x
   Off = 4,        // no pass at all (the hooks just call through)
+  Emissive = 5,   // the emissive mask (red) and the bloom (green) of the glow draws
 };
 const char* DebugName(DebugMode m);
 

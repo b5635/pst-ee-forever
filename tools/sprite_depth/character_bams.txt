@@ -1,0 +1,1167 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Character sprite BAMs of PST:EE 3.2.2 (creature animations only), written by
+# `python -I tools/sprite_depth/sprite_depth.py list`.
+# How: EE maps a creature's ANIMATE.IDS value 0xF000+n to section [n] of RESDATA.INI
+# (resource type 0x802 in chitin.key). Every sequence key there (attack*, walk, run, stand*,
+# stance*, diebackward, getup, gethit, spell*, talk*, misc*) names a 7-char base; the file is
+# base + 'B' (the GemRB avatars.2da prefixes are the same CxxxB/DxxxB names). Where the C/D letter
+# in RESDATA is wrong (Baurier: CAT1BAU -> DAT1BAUB) the other letter is used. Plus the static
+# creatures without a section: Iron Golem (IGHEAD, IGARM, IGARMB) and Pillar of Skulls (POSMAIN).
+# Left out: spell effects, projectiles, area animations, GUI, the Foundry gears, shadow/effect
+# overlays (POSSHAD, POSTANT, IGSPARK) and 77 classic-only C*B leftovers no RESDATA entry loads
+# (e.g. CWLKNOFB; EE draws the D* versions).
+# 1154 BAMs. Columns: BAM <tab> source
+CAT1ABSB	RESDATA Abishai attack1
+CAT1ACAB	RESDATA Ghoul Queen Acaste attack1
+CAT1ADVB	RESDATA Advocate attack1
+CAT1ARMB	RESDATA Skeleton, Giant Armored attack1
+CAT1CAMB	RESDATA Campatuskanella attack1
+CAT1CGDB	RESDATA Curst Guard attack1
+CAT1COLB	RESDATA Collector attack1
+CAT1CORB	RESDATA Cornugon attack1
+CAT1CRNB	RESDATA Cranium Rat attack1
+CAT1DABB	RESDATA Dabus attack1
+CAT1EBBB	RESDATA Ebb Creakknees attack1
+CAT1FELB	RESDATA Fell attack1
+CAT1FFGB	RESDATA Fall From Grace attack1
+CAT1FHJB	RESDATA Fhjull attack1
+CAT1GABB	RESDATA Abishai, Green attack1
+CAT1GARB	RESDATA Garolyth attack1
+CAT1GDGB	RESDATA Godsman Guard attack1
+CAT1GLAB	RESDATA Glabrezu attack1
+CAT1GRIB	RESDATA Grillig attack1
+CAT1GRKB	RESDATA Gronk attack1
+CAT1GSTB	RESDATA Ghoul Male Stone Golem attack1
+CAT1HARB	RESDATA Harmonium attack1
+CAT1HRSB	RESDATA Horse Guy attack1
+CAT1IGYB	RESDATA Ignus attack1
+CAT1JBRB	RESDATA James Bird attack1
+CAT1JFTB	RESDATA Lim-Lim attack1
+CAT1LEMB	RESDATA Lemure attack1
+CAT1LKMB	RESDATA Drone, Light Kill-Me attack1
+CAT1MDRB	RESDATA Modron attack1
+CAT1MKLB	RESDATA Mercykiller attack1
+CAT1MRTB	RESDATA Morte attack1
+CAT1NDMB	RESDATA Nordom attack1
+CAT1NPRB	RESDATA Nupperibo attack1
+CAT1PUZB	RESDATA Ravel Puzzlewell attack1
+CAT1RABB	RESDATA Abishai, Red attack1
+CAT1SM1B	RESDATA Shadow attack1
+CAT1SM2B	RESDATA Shadow Mark II attack1
+CAT1SM3B	RESDATA Shadow Mark III attack1
+CAT1TGTB	RESDATA Trigit attack1
+CAT1TRCB	RESDATA Trocopotoca attack1
+CAT1TREB	RESDATA Trelon attack1
+CAT1TRSB	RESDATA Trias attack1
+CAT1TRZB	RESDATA Transcendent One attack1
+CAT1VGYB	RESDATA Vargoille attack1
+CAT1WIZB	RESDATA Drone Wizard attack1
+CAT1WRMB	RESDATA Wererat, Mantuok attack1
+CAT1WURB	RESDATA Worm Creature attack1
+CAT2ABSB	RESDATA Abishai attack2
+CAT2ACAB	RESDATA Ghoul Queen Acaste attack2
+CAT2ADVB	RESDATA Advocate attack2
+CAT2ARMB	RESDATA Skeleton, Giant Armored attack2
+CAT2CAMB	RESDATA Campatuskanella attack2
+CAT2CGDB	RESDATA Curst Guard attack2
+CAT2COLB	RESDATA Collector attack2
+CAT2CORB	RESDATA Cornugon attack2
+CAT2CRNB	RESDATA Cranium Rat attack2
+CAT2DABB	RESDATA Dabus attack2
+CAT2EBBB	RESDATA Ebb Creakknees attack2
+CAT2FFGB	RESDATA Fall From Grace attack2
+CAT2FHJB	RESDATA Fhjull attack2
+CAT2GABB	RESDATA Abishai, Green attack2
+CAT2GARB	RESDATA Garolyth attack2
+CAT2GDGB	RESDATA Godsman Guard attack2
+CAT2GLAB	RESDATA Glabrezu attack2
+CAT2GRIB	RESDATA Grillig attack2
+CAT2GRKB	RESDATA Gronk attack2
+CAT2GSTB	RESDATA Ghoul Male Stone Golem attack2
+CAT2HARB	RESDATA Harmonium attack2
+CAT2HRSB	RESDATA Horse Guy attack2
+CAT2IGYB	RESDATA Ignus attack2
+CAT2JBRB	RESDATA James Bird attack2
+CAT2JFTB	RESDATA Lim-Lim attack2
+CAT2LEMB	RESDATA Lemure attack2
+CAT2LKMB	RESDATA Drone, Light Kill-Me attack2
+CAT2MDRB	RESDATA Modron attack2
+CAT2MKLB	RESDATA Mercykiller attack2
+CAT2MRTB	RESDATA Morte attack2
+CAT2NDMB	RESDATA Nordom attack2
+CAT2NPRB	RESDATA Nupperibo attack2
+CAT2PUZB	RESDATA Ravel Puzzlewell attack2
+CAT2RABB	RESDATA Abishai, Red attack2
+CAT2SM1B	RESDATA Shadow attack2
+CAT2SM2B	RESDATA Shadow Mark II attack2
+CAT2SM3B	RESDATA Shadow Mark III attack2
+CAT2TGTB	RESDATA Trigit attack2
+CAT2TRCB	RESDATA Trocopotoca attack2
+CAT2TREB	RESDATA Trelon attack2
+CAT2TRSB	RESDATA Trias attack2
+CAT2TRZB	RESDATA Transcendent One attack2
+CAT2VGYB	RESDATA Vargoille attack2
+CAT2WRMB	RESDATA Wererat, Mantuok attack2
+CAT2WURB	RESDATA Worm Creature attack2
+CC2SABSB	RESDATA Abishai stance2stand
+CC2SACAB	RESDATA Ghoul Queen Acaste stance2stand
+CC2SADVB	RESDATA Advocate stance2stand
+CC2SARMB	RESDATA Skeleton, Giant Armored stance2stand
+CC2SCGDB	RESDATA Curst Guard stance2stand
+CC2SCOLB	RESDATA Collector stance2stand
+CC2SCORB	RESDATA Cornugon stance2stand
+CC2SDABB	RESDATA Dabus stance2stand
+CC2SEBBB	RESDATA Ebb Creakknees stance2stand
+CC2SFELB	RESDATA Fell stance2stand
+CC2SFFGB	RESDATA Fall From Grace stance2stand
+CC2SFHJB	RESDATA Fhjull stance2stand
+CC2SGABB	RESDATA Abishai, Green stance2stand
+CC2SGDGB	RESDATA Godsman Guard stance2stand
+CC2SHARB	RESDATA Harmonium stance2stand
+CC2SIGYB	RESDATA Ignus stance2stand
+CC2SLKMB	RESDATA Drone, Light Kill-Me stance2stand
+CC2SLTHB	RESDATA Lothar stance2stand
+CC2SMDRB	RESDATA Modron stance2stand
+CC2SMKLB	RESDATA Mercykiller stance2stand
+CC2SNDMB	RESDATA Nordom stance2stand
+CC2SPUZB	RESDATA Ravel Puzzlewell stance2stand
+CC2SRABB	RESDATA Abishai, Red stance2stand
+CC2SSM2B	RESDATA Shadow Mark II stance2stand
+CC2STRSB	RESDATA Trias stance2stand
+CC2SWIZB	RESDATA Drone Wizard stance2stand
+CC2SWRMB	RESDATA Wererat, Mantuok stance2stand
+CCF1ABSB	RESDATA Abishai stancefidget1
+CCF1ACAB	RESDATA Ghoul Queen Acaste stancefidget1
+CCF1ARMB	RESDATA Skeleton, Giant Armored stancefidget1
+CCF1CAMB	RESDATA Campatuskanella stancefidget1
+CCF1CORB	RESDATA Cornugon stancefidget1
+CCF1CRNB	RESDATA Cranium Rat stancefidget1
+CCF1EBBB	RESDATA Ebb Creakknees stancefidget1
+CCF1FFGB	RESDATA Fall From Grace stancefidget1
+CCF1FHJB	RESDATA Fhjull stancefidget1
+CCF1GABB	RESDATA Abishai, Green stancefidget1
+CCF1GARB	RESDATA Garolyth stancefidget1
+CCF1GLAB	RESDATA Glabrezu stancefidget1
+CCF1GRIB	RESDATA Grillig stancefidget1
+CCF1GRKB	RESDATA Gronk stancefidget1
+CCF1HARB	RESDATA Harmonium stancefidget1
+CCF1HRSB	RESDATA Horse Guy stancefidget1
+CCF1IGYB	RESDATA Ignus stancefidget1
+CCF1JFTB	RESDATA Lim-Lim stancefidget1
+CCF1LEMB	RESDATA Lemure stancefidget1
+CCF1LKMB	RESDATA Drone, Light Kill-Me stancefidget1
+CCF1LTHB	RESDATA Lothar stancefidget1
+CCF1MKLB	RESDATA Mercykiller stancefidget1
+CCF1NDMB	RESDATA Nordom stancefidget1
+CCF1NPRB	RESDATA Nupperibo stancefidget1
+CCF1PUZB	RESDATA Ravel Puzzlewell stancefidget1
+CCF1RABB	RESDATA Abishai, Red stancefidget1
+CCF1SM2B	RESDATA Shadow Mark II stancefidget1
+CCF1SM3B	RESDATA Shadow Mark III stancefidget1
+CCF1TGTB	RESDATA Trigit stancefidget1
+CCF1TREB	RESDATA Trelon stancefidget1
+CCF1TRSB	RESDATA Trias stancefidget1
+CCF1VGYB	RESDATA Vargoille stancefidget1
+CCF1WIZB	RESDATA Drone Wizard stancefidget1
+CCF1WRMB	RESDATA Wererat, Mantuok stancefidget1
+CCF1WURB	RESDATA Worm Creature stancefidget1
+CCF2CAMB	RESDATA Campatuskanella stancefidget2
+CCF2CRNB	RESDATA Cranium Rat spell1
+CCF2VGYB	RESDATA Vargoille stancefidget2
+CDFBABSB	RESDATA Abishai diebackward
+CDFBACAB	RESDATA Ghoul Queen Acaste diebackward
+CDFBADVB	RESDATA Advocate diebackward
+CDFBARMB	RESDATA Skeleton, Giant Armored diebackward
+CDFBCAMB	RESDATA Campatuskanella diebackward
+CDFBCGDB	RESDATA Curst Guard diebackward
+CDFBCOLB	RESDATA Collector diebackward
+CDFBCORB	RESDATA Cornugon diebackward
+CDFBCRNB	RESDATA Cranium Rat diebackward
+CDFBDABB	RESDATA Dabus diebackward
+CDFBDEIB	RESDATA Deionarra diebackward
+CDFBDHLB	RESDATA Dhall diebackward
+CDFBEBBB	RESDATA Ebb Creakknees diebackward
+CDFBFELB	RESDATA Fell diebackward
+CDFBFFGB	RESDATA Fall From Grace diebackward
+CDFBFHJB	RESDATA Fhjull diebackward
+CDFBGABB	RESDATA Abishai, Green diebackward
+CDFBGARB	RESDATA Garolyth diebackward
+CDFBGDGB	RESDATA Godsman Guard diebackward
+CDFBGLAB	RESDATA Glabrezu diebackward
+CDFBGRIB	RESDATA Grillig diebackward
+CDFBGRKB	RESDATA Gronk diebackward
+CDFBGSTB	RESDATA Ghoul Male Stone Golem diebackward
+CDFBHARB	RESDATA Harmonium diebackward
+CDFBHRSB	RESDATA Horse Guy diebackward
+CDFBIGYB	RESDATA Ignus diebackward
+CDFBJBRB	RESDATA James Bird diebackward
+CDFBJFTB	RESDATA Lim-Lim diebackward
+CDFBLEMB	RESDATA Lemure diebackward
+CDFBLKMB	RESDATA Drone, Light Kill-Me diebackward
+CDFBMDRB	RESDATA Modron diebackward
+CDFBMKLB	RESDATA Mercykiller diebackward
+CDFBMRTB	RESDATA Morte diebackward
+CDFBNDMB	RESDATA Nordom diebackward
+CDFBNPRB	RESDATA Nupperibo diebackward
+CDFBPHDB	RESDATA Pharod diebackward
+CDFBPUZB	RESDATA Ravel Puzzlewell diebackward
+CDFBRABB	RESDATA Abishai, Red diebackward
+CDFBSM1B	RESDATA Shadow diebackward
+CDFBSM2B	RESDATA Shadow Mark II diebackward
+CDFBSM3B	RESDATA Shadow Mark III diebackward
+CDFBTGTB	RESDATA Trigit diebackward
+CDFBTRCB	RESDATA Trocopotoca diebackward
+CDFBTREB	RESDATA Trelon diebackward
+CDFBTRSB	RESDATA Trias diebackward
+CDFBVGYB	RESDATA Vargoille diebackward
+CDFBWIZB	RESDATA Drone Wizard diebackward
+CDFBWRMB	RESDATA Wererat, Mantuok diebackward
+CDFBWURB	RESDATA Worm Creature diebackward
+CGUPABSB	RESDATA Abishai getup
+CGUPACAB	RESDATA Ghoul Queen Acaste getup
+CGUPARMB	RESDATA Skeleton, Giant Armored getup
+CGUPFFGB	RESDATA Fall From Grace getup
+CGUPFHJB	RESDATA Fhjull getup
+CGUPGABB	RESDATA Abishai, Green getup
+CGUPIGYB	RESDATA Ignus getup
+CGUPMDRB	RESDATA Modron getup
+CGUPMRTB	RESDATA Morte getup
+CGUPNDMB	RESDATA Nordom getup
+CGUPPUZB	RESDATA Ravel Puzzlewell getup
+CGUPRABB	RESDATA Abishai, Red getup
+CGUPSM1B	RESDATA Shadow getup
+CGUPSM2B	RESDATA Shadow Mark II getup
+CGUPSM3B	RESDATA Shadow Mark III getup
+CGUPTRSB	RESDATA Trias getup
+CGUPWRMB	RESDATA Wererat, Mantuok getup
+CHITABSB	RESDATA Abishai gethit
+CHITACAB	RESDATA Ghoul Queen Acaste gethit
+CHITADVB	RESDATA Advocate gethit
+CHITARMB	RESDATA Skeleton, Giant Armored gethit
+CHITCAMB	RESDATA Campatuskanella gethit
+CHITCGDB	RESDATA Curst Guard gethit
+CHITCOLB	RESDATA Collector gethit
+CHITCORB	RESDATA Cornugon gethit
+CHITCRNB	RESDATA Cranium Rat gethit
+CHITDABB	RESDATA Dabus gethit
+CHITDHLB	RESDATA Dhall gethit
+CHITEBBB	RESDATA Ebb Creakknees gethit
+CHITFELB	RESDATA Fell gethit
+CHITFFGB	RESDATA Fall From Grace gethit
+CHITFHJB	RESDATA Fhjull gethit
+CHITGABB	RESDATA Abishai, Green gethit
+CHITGARB	RESDATA Garolyth gethit
+CHITGDGB	RESDATA Godsman Guard gethit
+CHITGLAB	RESDATA Glabrezu gethit
+CHITGRIB	RESDATA Grillig gethit
+CHITGRKB	RESDATA Gronk gethit
+CHITGSTB	RESDATA Ghoul Male Stone Golem gethit
+CHITHARB	RESDATA Harmonium gethit
+CHITHRSB	RESDATA Horse Guy gethit
+CHITIGYB	RESDATA Ignus gethit
+CHITJBRB	RESDATA James Bird gethit
+CHITJFTB	RESDATA Lim-Lim gethit
+CHITLEMB	RESDATA Lemure gethit
+CHITLKMB	RESDATA Drone, Light Kill-Me gethit
+CHITMDRB	RESDATA Modron gethit
+CHITMKLB	RESDATA Mercykiller gethit
+CHITMRTB	RESDATA Morte gethit
+CHITNDMB	RESDATA Nordom gethit
+CHITNPRB	RESDATA Nupperibo gethit
+CHITPHDB	RESDATA Pharod gethit
+CHITPUZB	RESDATA Ravel Puzzlewell gethit
+CHITRABB	RESDATA Abishai, Red gethit
+CHITSM1B	RESDATA Shadow gethit
+CHITSM2B	RESDATA Shadow Mark II gethit
+CHITSM3B	RESDATA Shadow Mark III gethit
+CHITTGTB	RESDATA Trigit gethit
+CHITTRCB	RESDATA Trocopotoca gethit
+CHITTREB	RESDATA Trelon gethit
+CHITTRSB	RESDATA Trias gethit
+CHITTRZB	RESDATA Transcendent One gethit
+CHITVGYB	RESDATA Vargoille gethit
+CHITWIZB	RESDATA Drone Wizard gethit
+CHITWRMB	RESDATA Wererat, Mantuok gethit
+CHITWURB	RESDATA Worm Creature gethit
+CMS1DEIB	RESDATA Deionarra misc1
+CMS1FELB	RESDATA Fell misc1
+CMS1HRSB	RESDATA Horse Guy misc1
+CMS1LTHB	RESDATA Lothar misc1
+CMS1SM2B	RESDATA Shadow Mark II misc1
+CMS1TGTB	RESDATA Trigit misc1
+CMS2SM2B	RESDATA Shadow Mark II misc2
+CRUNABSB	RESDATA Abishai run
+CRUNADVB	RESDATA Advocate run
+CRUNCAMB	RESDATA Campatuskanella run
+CRUNCGDB	RESDATA Curst Guard run
+CRUNCOLB	RESDATA Collector run
+CRUNCORB	RESDATA Cornugon run
+CRUNCRNB	RESDATA Cranium Rat run
+CRUNDABB	RESDATA Dabus run
+CRUNDEIB	RESDATA Deionarra run
+CRUNEBBB	RESDATA Ebb Creakknees run
+CRUNFFGB	RESDATA Fall From Grace run
+CRUNFHJB	RESDATA Fhjull run
+CRUNGABB	RESDATA Abishai, Green run
+CRUNGARB	RESDATA Garolyth run
+CRUNGDGB	RESDATA Godsman Guard run
+CRUNGLAB	RESDATA Glabrezu run
+CRUNGRIB	RESDATA Grillig run
+CRUNGRKB	RESDATA Gronk run
+CRUNHARB	RESDATA Harmonium run
+CRUNHRSB	RESDATA Horse Guy run
+CRUNIGYB	RESDATA Ignus run
+CRUNJBRB	RESDATA James Bird run
+CRUNJFTB	RESDATA Lim-Lim run
+CRUNLEMB	RESDATA Lemure run
+CRUNLKMB	RESDATA Drone, Light Kill-Me run
+CRUNMDRB	RESDATA Modron run
+CRUNMKLB	RESDATA Mercykiller run
+CRUNMRTB	RESDATA Morte run
+CRUNNDMB	RESDATA Nordom run
+CRUNNPRB	RESDATA Nupperibo run
+CRUNRABB	RESDATA Abishai, Red run
+CRUNSM1B	RESDATA Shadow run
+CRUNSM2B	RESDATA Shadow Mark II run
+CRUNSM3B	RESDATA Shadow Mark III run
+CRUNTGTB	RESDATA Trigit run
+CRUNTRCB	RESDATA Trocopotoca run
+CRUNTREB	RESDATA Trelon run
+CRUNTRSB	RESDATA Trias run
+CRUNVGYB	RESDATA Vargoille run
+CRUNWIZB	RESDATA Drone Wizard run
+CRUNWRMB	RESDATA Wererat, Mantuok run
+CS2CABSB	RESDATA Abishai stand2stance
+CS2CACAB	RESDATA Ghoul Queen Acaste stand2stance
+CS2CADVB	RESDATA Advocate stand2stance
+CS2CARMB	RESDATA Skeleton, Giant Armored stand2stance
+CS2CCGDB	RESDATA Curst Guard stand2stance
+CS2CCOLB	RESDATA Collector stand2stance
+CS2CCORB	RESDATA Cornugon stand2stance
+CS2CDABB	RESDATA Dabus stand2stance
+CS2CEBBB	RESDATA Ebb Creakknees stand2stance
+CS2CFELB	RESDATA Fell stand2stance
+CS2CFFGB	RESDATA Fall From Grace stand2stance
+CS2CFHJB	RESDATA Fhjull stand2stance
+CS2CGABB	RESDATA Abishai, Green stand2stance
+CS2CGDGB	RESDATA Godsman Guard stand2stance
+CS2CHARB	RESDATA Harmonium stand2stance
+CS2CIGYB	RESDATA Ignus stand2stance
+CS2CLKMB	RESDATA Drone, Light Kill-Me stand2stance
+CS2CLTHB	RESDATA Lothar stand2stance
+CS2CMDRB	RESDATA Modron stand2stance
+CS2CMKLB	RESDATA Mercykiller stand2stance
+CS2CNDMB	RESDATA Nordom stand2stance
+CS2CPUZB	RESDATA Ravel Puzzlewell stand2stance
+CS2CRABB	RESDATA Abishai, Red stand2stance
+CS2CSM2B	RESDATA Shadow Mark II stand2stance
+CS2CTRSB	RESDATA Trias stand2stance
+CS2CWIZB	RESDATA Drone Wizard stand2stance
+CS2CWRMB	RESDATA Wererat, Mantuok stand2stance
+CSF1ABSB	RESDATA Abishai standfidget1
+CSF1ACAB	RESDATA Ghoul Queen Acaste standfidget1
+CSF1ADVB	RESDATA Advocate standfidget1
+CSF1ARMB	RESDATA Skeleton, Giant Armored standfidget1
+CSF1CGDB	RESDATA Curst Guard standfidget1
+CSF1COLB	RESDATA Collector standfidget1
+CSF1DABB	RESDATA Dabus standfidget1
+CSF1DEIB	RESDATA Deionarra standfidget1
+CSF1DHLB	RESDATA Dhall standfidget1
+CSF1EBBB	RESDATA Ebb Creakknees standfidget1
+CSF1FELB	RESDATA Fell standfidget1
+CSF1FFGB	RESDATA Fall From Grace standfidget1
+CSF1FHJB	RESDATA Fhjull standfidget1
+CSF1GABB	RESDATA Abishai, Green standfidget1
+CSF1GDGB	RESDATA Godsman Guard standfidget1
+CSF1HARB	RESDATA Harmonium standfidget1
+CSF1IGYB	RESDATA Ignus standfidget1
+CSF1JBRB	RESDATA James Bird standfidget1
+CSF1LTHB	RESDATA Lothar standfidget1
+CSF1MDRB	RESDATA Modron standfidget1
+CSF1MKLB	RESDATA Mercykiller standfidget1
+CSF1MRTB	RESDATA Morte standfidget1
+CSF1NDMB	RESDATA Nordom standfidget1
+CSF1PHDB	RESDATA Pharod standfidget1
+CSF1PUZB	RESDATA Ravel Puzzlewell standfidget1
+CSF1RABB	RESDATA Abishai, Red standfidget1
+CSF1TRSB	RESDATA Trias standfidget1
+CSF1WIZB	RESDATA Drone Wizard standfidget1
+CSF1WRMB	RESDATA Wererat, Mantuok standfidget1
+CSF2DHLB	RESDATA Dhall standfidget2
+CSF2JBRB	RESDATA James Bird standfidget2
+CSF2MRTB	RESDATA Morte spell1
+CSF2PHDB	RESDATA Pharod standfidget2
+CSP1ABSB	RESDATA Abishai spell1
+CSP1CORB	RESDATA Cornugon spell1
+CSP1DEIB	RESDATA Deionarra spell1
+CSP1FELB	RESDATA Fell spell1
+CSP1FFGB	RESDATA Fall From Grace spell1
+CSP1FHJB	RESDATA Fhjull spell1
+CSP1GABB	RESDATA Abishai, Green spell1
+CSP1GARB	RESDATA Garolyth spell1
+CSP1GLAB	RESDATA Glabrezu spell1
+CSP1IGYB	RESDATA Ignus spell1
+CSP1LTHB	RESDATA Lothar spell1
+CSP1MDRB	RESDATA Modron spell1
+CSP1NDMB	RESDATA Nordom spell1
+CSP1PUZB	RESDATA Ravel Puzzlewell spell1
+CSP1RABB	RESDATA Abishai, Red spell1
+CSP1TRSB	RESDATA Trias spell1
+CSP1TRZB	RESDATA Transcendent One spell1
+CSP1WIZB	RESDATA Drone Wizard spell1
+CSP1WRMB	RESDATA Wererat, Mantuok spell1
+CSP2FFGB	RESDATA Fall From Grace spell2
+CSP2FHJB	RESDATA Fhjull spell2
+CSP2IGYB	RESDATA Ignus spell2
+CSP2LTHB	RESDATA Lothar spell2
+CSP2MDRB	RESDATA Modron spell2
+CSP2NDMB	RESDATA Nordom spell2
+CSP2PUZB	RESDATA Ravel Puzzlewell spell2
+CSP2TRSB	RESDATA Trias spell2
+CSP2TRZB	RESDATA Transcendent One spell2
+CSP2WIZB	RESDATA Drone Wizard spell2
+CSP2WRMB	RESDATA Wererat, Mantuok spell2
+CSP3LTHB	RESDATA Lothar spell3
+CSP3TRZB	RESDATA Transcendent One spell3
+CSP4TRZB	RESDATA Transcendent One misc5
+CSTCABSB	RESDATA Abishai stance
+CSTCACAB	RESDATA Ghoul Queen Acaste stance
+CSTCADVB	RESDATA Advocate stance
+CSTCARMB	RESDATA Skeleton, Giant Armored stance
+CSTCCAMB	RESDATA Campatuskanella stance
+CSTCCGDB	RESDATA Curst Guard stance
+CSTCCOLB	RESDATA Collector stance
+CSTCCORB	RESDATA Cornugon stance
+CSTCCRNB	RESDATA Cranium Rat stance
+CSTCDABB	RESDATA Dabus stance
+CSTCEBBB	RESDATA Ebb Creakknees stance
+CSTCFELB	RESDATA Fell stance
+CSTCFFGB	RESDATA Fall From Grace stance
+CSTCFHJB	RESDATA Fhjull stance
+CSTCGABB	RESDATA Abishai, Green stance
+CSTCGARB	RESDATA Garolyth stance
+CSTCGDGB	RESDATA Godsman Guard stance
+CSTCGLAB	RESDATA Glabrezu stance
+CSTCGRIB	RESDATA Grillig stance
+CSTCGRKB	RESDATA Gronk stance
+CSTCHARB	RESDATA Harmonium stance
+CSTCHRSB	RESDATA Horse Guy stance
+CSTCIGYB	RESDATA Ignus stance
+CSTCJFTB	RESDATA Lim-Lim stance
+CSTCLEMB	RESDATA Lemure stance
+CSTCLKMB	RESDATA Drone, Light Kill-Me stance
+CSTCLTHB	RESDATA Lothar stance
+CSTCMDRB	RESDATA Modron stance
+CSTCMKLB	RESDATA Mercykiller stance
+CSTCNDMB	RESDATA Nordom stance
+CSTCNPRB	RESDATA Nupperibo stance
+CSTCPUZB	RESDATA Ravel Puzzlewell stance
+CSTCRABB	RESDATA Abishai, Red stance
+CSTCSM2B	RESDATA Shadow Mark II stance
+CSTCSM3B	RESDATA Shadow Mark III stance
+CSTCTGTB	RESDATA Trigit stance
+CSTCTRCB	RESDATA Trocopotoca stance
+CSTCTREB	RESDATA Trelon stance
+CSTCTRSB	RESDATA Trias stance
+CSTCVGYB	RESDATA Vargoille stance
+CSTCWIZB	RESDATA Drone Wizard stance
+CSTCWRMB	RESDATA Wererat, Mantuok stance
+CSTCWURB	RESDATA Worm Creature stance
+CSTDABSB	RESDATA Abishai stand
+CSTDACAB	RESDATA Ghoul Queen Acaste stand
+CSTDADVB	RESDATA Advocate stand
+CSTDARMB	RESDATA Skeleton, Giant Armored stand
+CSTDCGDB	RESDATA Curst Guard stand
+CSTDCOLB	RESDATA Collector stand
+CSTDCORB	RESDATA Cornugon stand
+CSTDDABB	RESDATA Dabus stand
+CSTDDEIB	RESDATA Deionarra attack1
+CSTDDHLB	RESDATA Dhall attack1
+CSTDEBBB	RESDATA Ebb Creakknees stand
+CSTDFELB	RESDATA Fell stand
+CSTDFFGB	RESDATA Fall From Grace stand
+CSTDFHJB	RESDATA Fhjull stand
+CSTDGABB	RESDATA Abishai, Green stand
+CSTDGDGB	RESDATA Godsman Guard stand
+CSTDGSTB	RESDATA Ghoul Male Stone Golem stand
+CSTDHARB	RESDATA Harmonium stand
+CSTDIGYB	RESDATA Ignus stand
+CSTDJBRB	RESDATA James Bird stand
+CSTDLKMB	RESDATA Drone, Light Kill-Me stand
+CSTDLOPB	RESDATA Lady of Pain attack1
+CSTDLTHB	RESDATA Lothar attack1
+CSTDMDRB	RESDATA Modron stand
+CSTDMKLB	RESDATA Mercykiller stand
+CSTDMRTB	RESDATA Morte stand
+CSTDNDMB	RESDATA Nordom stand
+CSTDPHDB	RESDATA Pharod attack1
+CSTDPUZB	RESDATA Ravel Puzzlewell stand
+CSTDRABB	RESDATA Abishai, Red stand
+CSTDSM1B	RESDATA Shadow stand
+CSTDSM2B	RESDATA Shadow Mark II stand
+CSTDTRDB	RESDATA Trias on Dias attack1
+CSTDTRSB	RESDATA Trias stand
+CSTDTRZB	RESDATA Transcendent One stand
+CSTDUHDB	RESDATA Aaron's Uber Head for AR0510 stand
+CSTDWIZB	RESDATA Drone Wizard stand
+CSTDWRMB	RESDATA Wererat, Mantuok stand
+CTK1ABSB	RESDATA Abishai talk1
+CTK1ACAB	RESDATA Ghoul Queen Acaste talk1
+CTK1ADVB	RESDATA Advocate talk1
+CTK1CGDB	RESDATA Curst Guard talk1
+CTK1COLB	RESDATA Collector talk1
+CTK1CORB	RESDATA Cornugon talk1
+CTK1DABB	RESDATA Dabus talk1
+CTK1DEIB	RESDATA Deionarra talk1
+CTK1DHLB	RESDATA Dhall talk1
+CTK1EBBB	RESDATA Ebb Creakknees talk1
+CTK1FELB	RESDATA Fell talk1
+CTK1FFGB	RESDATA Fall From Grace talk1
+CTK1FHJB	RESDATA Fhjull talk1
+CTK1GABB	RESDATA Abishai, Green talk1
+CTK1GDGB	RESDATA Godsman Guard talk1
+CTK1HARB	RESDATA Harmonium talk1
+CTK1IGYB	RESDATA Ignus talk1
+CTK1LKMB	RESDATA Drone, Light Kill-Me talk1
+CTK1LTHB	RESDATA Lothar talk1
+CTK1MDRB	RESDATA Modron talk1
+CTK1MKLB	RESDATA Mercykiller talk1
+CTK1MRTB	RESDATA Morte talk1
+CTK1NDMB	RESDATA Nordom talk1
+CTK1PHDB	RESDATA Pharod talk1
+CTK1PUZB	RESDATA Ravel Puzzlewell talk1
+CTK1RABB	RESDATA Abishai, Red talk1
+CTK1TRDB	RESDATA Trias on Dias talk1
+CTK1TRSB	RESDATA Trias talk1
+CTK1TRZB	RESDATA Transcendent One talk1
+CTK1WIZB	RESDATA Drone Wizard talk1
+CTK1WRMB	RESDATA Wererat, Mantuok talk1
+CTK2DHLB	RESDATA Dhall talk2
+CTK2EBBB	RESDATA Ebb Creakknees talk2
+CTK2FELB	RESDATA Fell talk2
+CTK2IGYB	RESDATA Ignus talk2
+CTK2MRTB	RESDATA Morte talk2
+CTK2PHDB	RESDATA Pharod talk2
+CTK2PUZB	RESDATA Ravel Puzzlewell talk2
+CTK2TRZB	RESDATA Transcendent One talk2
+CTK2WRMB	RESDATA Wererat, Mantuok talk2
+CTK3DHLB	RESDATA Dhall talk3
+CTK3EBBB	RESDATA Ebb Creakknees talk3
+CTK3FELB	RESDATA Fell talk3
+CTK3PHDB	RESDATA Pharod talk3
+CTK3PUZB	RESDATA Ravel Puzzlewell talk3
+CTK3TRZB	RESDATA Transcendent One talk3
+CTK3WRMB	RESDATA Wererat, Mantuok talk3
+CTK4TRZB	RESDATA Transcendent One misc1
+CTK5TRZB	RESDATA Transcendent One misc2
+CTK6TRZB	RESDATA Transcendent One misc3
+CWLKABSB	RESDATA Abishai walk
+CWLKACAB	RESDATA Ghoul Queen Acaste walk
+CWLKADVB	RESDATA Advocate walk
+CWLKARMB	RESDATA Skeleton, Giant Armored walk
+CWLKCAMB	RESDATA Campatuskanella walk
+CWLKCGDB	RESDATA Curst Guard walk
+CWLKCOLB	RESDATA Collector walk
+CWLKCORB	RESDATA Cornugon walk
+CWLKCRNB	RESDATA Cranium Rat walk
+CWLKDABB	RESDATA Dabus walk
+CWLKDEIB	RESDATA Deionarra walk
+CWLKDHLB	RESDATA Dhall walk
+CWLKEBBB	RESDATA Ebb Creakknees walk
+CWLKFELB	RESDATA Fell walk
+CWLKFFGB	RESDATA Fall From Grace walk
+CWLKFHJB	RESDATA Fhjull walk
+CWLKGABB	RESDATA Abishai, Green walk
+CWLKGARB	RESDATA Garolyth walk
+CWLKGDGB	RESDATA Godsman Guard walk
+CWLKGLAB	RESDATA Glabrezu walk
+CWLKGRIB	RESDATA Grillig walk
+CWLKGRKB	RESDATA Gronk walk
+CWLKGSTB	RESDATA Ghoul Male Stone Golem walk
+CWLKHARB	RESDATA Harmonium walk
+CWLKHRSB	RESDATA Horse Guy walk
+CWLKIGYB	RESDATA Ignus walk
+CWLKJBRB	RESDATA James Bird walk
+CWLKJFTB	RESDATA Lim-Lim walk
+CWLKLEMB	RESDATA Lemure walk
+CWLKLKMB	RESDATA Drone, Light Kill-Me walk
+CWLKLOPB	RESDATA Lady of Pain walk
+CWLKLTHB	RESDATA Lothar walk
+CWLKMDRB	RESDATA Modron walk
+CWLKMKLB	RESDATA Mercykiller walk
+CWLKMRTB	RESDATA Morte walk
+CWLKNDMB	RESDATA Nordom walk
+CWLKNPRB	RESDATA Nupperibo walk
+CWLKPHDB	RESDATA Pharod walk
+CWLKPUZB	RESDATA Ravel Puzzlewell walk
+CWLKRABB	RESDATA Abishai, Red walk
+CWLKSM1B	RESDATA Shadow walk
+CWLKSM2B	RESDATA Shadow Mark II walk
+CWLKSM3B	RESDATA Shadow Mark III walk
+CWLKTGTB	RESDATA Trigit walk
+CWLKTRCB	RESDATA Trocopotoca walk
+CWLKTREB	RESDATA Trelon walk
+CWLKTRSB	RESDATA Trias walk
+CWLKTRZB	RESDATA Transcendent One walk
+CWLKVGYB	RESDATA Vargoille walk
+CWLKWIZB	RESDATA Drone Wizard walk
+CWLKWRMB	RESDATA Wererat, Mantuok walk
+CWLKWURB	RESDATA Worm Creature walk
+DAT1AAFB	RESDATA Aasimar Female attack1
+DAT1ANNB	RESDATA Annah attack1
+DAT1BAUB	RESDATA Baurier Male attack1
+DAT1CTFB	RESDATA Curst Townie Female attack1
+DAT1CTHB	RESDATA Thug attack1
+DAT1CTMB	RESDATA Curst Townie Male attack1
+DAT1DKKB	RESDATA Dakkon attack1
+DAT1DTFB	RESDATA Dustman Female attack1
+DAT1DTMB	RESDATA Dustman Male attack1
+DAT1GHFB	RESDATA Ghoul Female attack1
+DAT1GHMB	RESDATA Ghoul Male attack1
+DAT1GODB	RESDATA Godsman attack1
+DAT1GYTB	RESDATA Githzerai attack1
+DAT1HKMB	RESDATA Drone, Heavy Kill-Me attack1
+DAT1HLFB	RESDATA Lower Class Townie, Female attack1
+DAT1HLMB	RESDATA Lower Class Townie, Male attack1
+DAT1HUFB	RESDATA Upper Class Townie, Female attack1
+DAT1HUMB	RESDATA Upper Class Townie, Male attack1
+DAT1MHTB	RESDATA Merchant attack1
+DAT1MIDB	RESDATA Midwife attack1
+DAT1NOAB	RESDATA Nameless One with Axe attack1
+DAT1NOCB	RESDATA Nameless One with Club attack1
+DAT1NODB	RESDATA Nameless One with Dagger attack1
+DAT1NOFB	RESDATA Nameless One with Fist attack1
+DAT1NOHB	RESDATA Nameless One with Hammer attack1
+DAT1NOMB	RESDATA Nameless One with Dustman Disguise attack1
+DAT1NOSB	RESDATA Nameless One with Severed Arm attack1
+DAT1NOZB	RESDATA Nameless One with Zombie Disguise attack1
+DAT1PROB	RESDATA Prostitute (False Colored) attack1
+DAT1SKWB	RESDATA Skeleton, Worker attack1
+DAT1SPTB	RESDATA Skeleton, Priest attack1
+DAT1TFFB	RESDATA Tiefling Female attack1
+DAT1TFMB	RESDATA Male Tiefling attack1
+DAT1THKB	RESDATA Thokola attack1
+DAT1TLRB	RESDATA Large Thug attack1
+DAT1TWZB	RESDATA Townie Wizard attack1
+DAT1VHAB	RESDATA Vhailor attack1
+DAT1WREB	RESDATA Wererat attack1
+DAT1ZMFB	RESDATA Zombie, Female attack1
+DAT1ZMMB	RESDATA Zombie, Male attack1
+DAT2AAFB	RESDATA Aasimar Female attack2
+DAT2ANNB	RESDATA Annah attack2
+DAT2BAUB	RESDATA Baurier Male attack2
+DAT2CTFB	RESDATA Curst Townie Female attack2
+DAT2CTHB	RESDATA Thug attack2
+DAT2CTMB	RESDATA Curst Townie Male attack2
+DAT2DKKB	RESDATA Dakkon attack2
+DAT2DTFB	RESDATA Dustman Female attack2
+DAT2DTMB	RESDATA Dustman Male attack2
+DAT2GHFB	RESDATA Ghoul Female attack2
+DAT2GHMB	RESDATA Ghoul Male attack2
+DAT2GODB	RESDATA Godsman attack2
+DAT2GYTB	RESDATA Githzerai attack2
+DAT2HKMB	RESDATA Drone, Heavy Kill-Me attack2
+DAT2HLFB	RESDATA Lower Class Townie, Female attack2
+DAT2HLMB	RESDATA Lower Class Townie, Male attack2
+DAT2HUFB	RESDATA Upper Class Townie, Female attack2
+DAT2HUMB	RESDATA Upper Class Townie, Male attack2
+DAT2NOAB	RESDATA Nameless One with Axe attack2
+DAT2NOCB	RESDATA Nameless One with Club attack2
+DAT2NODB	RESDATA Nameless One with Dagger attack2
+DAT2NOFB	RESDATA Nameless One with Fist attack2
+DAT2NOHB	RESDATA Nameless One with Hammer attack2
+DAT2NOMB	RESDATA Nameless One with Dustman Disguise attack2
+DAT2NOSB	RESDATA Nameless One with Severed Arm attack2
+DAT2NOZB	RESDATA Nameless One with Zombie Disguise attack2
+DAT2PROB	RESDATA Prostitute (False Colored) attack2
+DAT2SKWB	RESDATA Skeleton, Worker attack2
+DAT2TFFB	RESDATA Tiefling Female attack2
+DAT2TFMB	RESDATA Male Tiefling attack2
+DAT2THKB	RESDATA Thokola attack2
+DAT2TLRB	RESDATA Large Thug attack2
+DAT2VHAB	RESDATA Vhailor attack2
+DAT2WREB	RESDATA Wererat attack2
+DAT2ZMFB	RESDATA Zombie, Female attack2
+DAT2ZMMB	RESDATA Zombie, Male attack2
+DC2SAAFB	RESDATA Aasimar Female stance2stand
+DC2SANNB	RESDATA Annah stance2stand
+DC2SBAUB	RESDATA Baurier Male stance2stand
+DC2SCTFB	RESDATA Curst Townie Female stance2stand
+DC2SCTHB	RESDATA Thug stance2stand
+DC2SCTMB	RESDATA Curst Townie Male stance2stand
+DC2SDKKB	RESDATA Dakkon stance2stand
+DC2SDTFB	RESDATA Dustman Female stance2stand
+DC2SDTMB	RESDATA Dustman Male stance2stand
+DC2SGHFB	RESDATA Ghoul Female stance2stand
+DC2SGHMB	RESDATA Ghoul Male stance2stand
+DC2SGODB	RESDATA Godsman stance2stand
+DC2SGYTB	RESDATA Githzerai stance2stand
+DC2SHKMB	RESDATA Drone, Heavy Kill-Me stance2stand
+DC2SHLFB	RESDATA Lower Class Townie, Female stance2stand
+DC2SHLMB	RESDATA Lower Class Townie, Male stance2stand
+DC2SHUFB	RESDATA Upper Class Townie, Female stance2stand
+DC2SHUMB	RESDATA Upper Class Townie, Male stance2stand
+DC2SMHTB	RESDATA Merchant stance2stand
+DC2SNOAB	RESDATA Nameless One with Axe stance2stand
+DC2SNOCB	RESDATA Nameless One with Club stance2stand
+DC2SNODB	RESDATA Nameless One with Dagger stance2stand
+DC2SNOFB	RESDATA Nameless One with Fist stance2stand
+DC2SNOHB	RESDATA Nameless One with Hammer stance2stand
+DC2SNOMB	RESDATA Nameless One with Dustman Disguise stance2stand
+DC2SNOSB	RESDATA Nameless One with Severed Arm stance2stand
+DC2SSKWB	RESDATA Skeleton, Worker stance2stand
+DC2SSPTB	RESDATA Skeleton, Priest stance2stand
+DC2STFFB	RESDATA Tiefling Female stance2stand
+DC2STFMB	RESDATA Male Tiefling stance2stand
+DC2STHKB	RESDATA Thokola stance2stand
+DC2STLRB	RESDATA Large Thug stance2stand
+DC2STWZB	RESDATA Townie Wizard stance2stand
+DC2SVHAB	RESDATA Vhailor stance2stand
+DC2SWREB	RESDATA Wererat stance2stand
+DCF1ANNB	RESDATA Annah stancefidget1
+DCF1CTHB	RESDATA Thug stancefidget1
+DCF1DKKB	RESDATA Dakkon stancefidget1
+DCF1GHFB	RESDATA Ghoul Female stancefidget1
+DCF1GHMB	RESDATA Ghoul Male stancefidget1
+DCF1HKMB	RESDATA Drone, Heavy Kill-Me stancefidget1
+DCF1HLMB	RESDATA Lower Class Townie, Male stancefidget1
+DCF1HUMB	RESDATA Upper Class Townie, Male stancefidget1
+DCF1MHTB	RESDATA Merchant stancefidget1
+DCF1NOAB	RESDATA Nameless One with Axe stancefidget1
+DCF1NOCB	RESDATA Nameless One with Club stancefidget1
+DCF1NODB	RESDATA Nameless One with Dagger stancefidget1
+DCF1NOFB	RESDATA Nameless One with Fist stancefidget1
+DCF1NOHB	RESDATA Nameless One with Hammer stancefidget1
+DCF1NOSB	RESDATA Nameless One with Severed Arm stancefidget1
+DCF1SKWB	RESDATA Skeleton, Worker stancefidget1
+DCF1SPTB	RESDATA Skeleton, Priest stancefidget1
+DCF1THKB	RESDATA Thokola stancefidget1
+DCF1TLRB	RESDATA Large Thug stancefidget1
+DCF1TWZB	RESDATA Townie Wizard stancefidget1
+DCF1VHAB	RESDATA Vhailor spell1
+DCF1WREB	RESDATA Wererat stancefidget1
+DDFBAAFB	RESDATA Aasimar Female diebackward
+DDFBANNB	RESDATA Annah diebackward
+DDFBBAUB	RESDATA Baurier Male diebackward
+DDFBCTFB	RESDATA Curst Townie Female diebackward
+DDFBCTHB	RESDATA Thug diebackward
+DDFBCTMB	RESDATA Curst Townie Male diebackward
+DDFBDKKB	RESDATA Dakkon diebackward
+DDFBDTFB	RESDATA Dustman Female diebackward
+DDFBDTMB	RESDATA Dustman Male diebackward
+DDFBGHFB	RESDATA Ghoul Female diebackward
+DDFBGHMB	RESDATA Ghoul Male diebackward
+DDFBGODB	RESDATA Godsman diebackward
+DDFBGYTB	RESDATA Githzerai diebackward
+DDFBHKMB	RESDATA Drone, Heavy Kill-Me diebackward
+DDFBHLFB	RESDATA Lower Class Townie, Female diebackward
+DDFBHLMB	RESDATA Lower Class Townie, Male diebackward
+DDFBHUFB	RESDATA Upper Class Townie, Female diebackward
+DDFBHUMB	RESDATA Upper Class Townie, Male diebackward
+DDFBMHTB	RESDATA Merchant diebackward
+DDFBMIDB	RESDATA Midwife diebackward
+DDFBNOAB	RESDATA Nameless One with Axe diebackward
+DDFBNOCB	RESDATA Nameless One with Club diebackward
+DDFBNODB	RESDATA Nameless One with Dagger diebackward
+DDFBNOFB	RESDATA Nameless One with Fist diebackward
+DDFBNOHB	RESDATA Nameless One with Hammer diebackward
+DDFBNOMB	RESDATA Nameless One with Dustman Disguise diebackward
+DDFBNOSB	RESDATA Nameless One with Severed Arm diebackward
+DDFBNOZB	RESDATA Nameless One with Zombie Disguise diebackward
+DDFBPROB	RESDATA Prostitute (False Colored) diebackward
+DDFBSKWB	RESDATA Skeleton, Worker diebackward
+DDFBSPTB	RESDATA Skeleton, Priest diebackward
+DDFBTFFB	RESDATA Tiefling Female diebackward
+DDFBTFMB	RESDATA Male Tiefling diebackward
+DDFBTHKB	RESDATA Thokola diebackward
+DDFBTLRB	RESDATA Large Thug diebackward
+DDFBTWZB	RESDATA Townie Wizard diebackward
+DDFBVHAB	RESDATA Vhailor diebackward
+DDFBWREB	RESDATA Wererat diebackward
+DDFBZMFB	RESDATA Zombie, Female diebackward
+DDFBZMMB	RESDATA Zombie, Male diebackward
+DGUPANNB	RESDATA Annah getup
+DGUPDKKB	RESDATA Dakkon getup
+DGUPGHFB	RESDATA Ghoul Female getup
+DGUPGHMB	RESDATA Ghoul Male getup
+DGUPNOAB	RESDATA Nameless One with Axe getup
+DGUPNOCB	RESDATA Nameless One with Club getup
+DGUPNODB	RESDATA Nameless One with Dagger getup
+DGUPNOFB	RESDATA Nameless One with Fist getup
+DGUPNOHB	RESDATA Nameless One with Hammer getup
+DGUPNOSB	RESDATA Nameless One with Severed Arm getup
+DGUPNOZB	RESDATA Nameless One with Zombie Disguise getup
+DGUPSKWB	RESDATA Skeleton, Worker getup
+DGUPSPTB	RESDATA Skeleton, Priest getup
+DGUPVHAB	RESDATA Vhailor getup
+DGUPWREB	RESDATA Wererat getup
+DGUPZMFB	RESDATA Zombie, Female getup
+DGUPZMMB	RESDATA Zombie, Male getup
+DHITAAFB	RESDATA Aasimar Female gethit
+DHITANNB	RESDATA Annah gethit
+DHITBAUB	RESDATA Baurier Male gethit
+DHITCTFB	RESDATA Curst Townie Female gethit
+DHITCTHB	RESDATA Thug gethit
+DHITCTMB	RESDATA Curst Townie Male gethit
+DHITDKKB	RESDATA Dakkon gethit
+DHITDTFB	RESDATA Dustman Female gethit
+DHITDTMB	RESDATA Dustman Male gethit
+DHITGHFB	RESDATA Ghoul Female gethit
+DHITGHMB	RESDATA Ghoul Male gethit
+DHITGODB	RESDATA Godsman gethit
+DHITGYTB	RESDATA Githzerai gethit
+DHITHKMB	RESDATA Drone, Heavy Kill-Me gethit
+DHITHLFB	RESDATA Lower Class Townie, Female gethit
+DHITHLMB	RESDATA Lower Class Townie, Male gethit
+DHITHUFB	RESDATA Upper Class Townie, Female gethit
+DHITHUMB	RESDATA Upper Class Townie, Male gethit
+DHITMHTB	RESDATA Merchant gethit
+DHITMIDB	RESDATA Midwife gethit
+DHITNOAB	RESDATA Nameless One with Axe gethit
+DHITNOCB	RESDATA Nameless One with Club gethit
+DHITNODB	RESDATA Nameless One with Dagger gethit
+DHITNOFB	RESDATA Nameless One with Fist gethit
+DHITNOHB	RESDATA Nameless One with Hammer gethit
+DHITNOMB	RESDATA Nameless One with Dustman Disguise gethit
+DHITNOSB	RESDATA Nameless One with Severed Arm gethit
+DHITNOZB	RESDATA Nameless One with Zombie Disguise gethit
+DHITPROB	RESDATA Prostitute (False Colored) gethit
+DHITSKWB	RESDATA Skeleton, Worker gethit
+DHITSPTB	RESDATA Skeleton, Priest gethit
+DHITTFFB	RESDATA Tiefling Female gethit
+DHITTFMB	RESDATA Male Tiefling gethit
+DHITTHKB	RESDATA Thokola gethit
+DHITTLRB	RESDATA Large Thug gethit
+DHITTWZB	RESDATA Townie Wizard gethit
+DHITVHAB	RESDATA Vhailor gethit
+DHITWREB	RESDATA Wererat gethit
+DHITZMFB	RESDATA Zombie, Female gethit
+DHITZMMB	RESDATA Zombie, Male gethit
+DMS1HLMB	RESDATA Lower Class Townie, Male misc1
+DMS1HUMB	RESDATA Upper Class Townie, Male misc1
+DMS1NOFB	RESDATA Nameless One with Axe misc1
+DMS1NOSB	RESDATA Nameless One with Severed Arm misc1
+DMS2NOFB	RESDATA Nameless One with Axe misc2
+DRUNAAFB	RESDATA Aasimar Female run
+DRUNANNB	RESDATA Annah run
+DRUNBAUB	RESDATA Baurier Male run
+DRUNCTFB	RESDATA Curst Townie Female run
+DRUNCTHB	RESDATA Thug run
+DRUNCTMB	RESDATA Curst Townie Male run
+DRUNDKKB	RESDATA Dakkon run
+DRUNDTFB	RESDATA Dustman Female run
+DRUNDTMB	RESDATA Dustman Male run
+DRUNGHFB	RESDATA Ghoul Female run
+DRUNGHMB	RESDATA Ghoul Male run
+DRUNGODB	RESDATA Godsman run
+DRUNGYTB	RESDATA Githzerai run
+DRUNHKMB	RESDATA Drone, Heavy Kill-Me run
+DRUNHLFB	RESDATA Lower Class Townie, Female run
+DRUNHLMB	RESDATA Lower Class Townie, Male run
+DRUNHUFB	RESDATA Upper Class Townie, Female run
+DRUNHUMB	RESDATA Upper Class Townie, Male run
+DRUNNOAB	RESDATA Nameless One with Axe run
+DRUNNOCB	RESDATA Nameless One with Club run
+DRUNNODB	RESDATA Nameless One with Dagger run
+DRUNNOFB	RESDATA Nameless One with Fist run
+DRUNNOHB	RESDATA Nameless One with Hammer run
+DRUNNOMB	RESDATA Nameless One with Dustman Disguise run
+DRUNNOSB	RESDATA Nameless One with Severed Arm run
+DRUNPROB	RESDATA Prostitute (False Colored) run
+DRUNSKWB	RESDATA Skeleton, Worker run
+DRUNSPTB	RESDATA Skeleton, Priest run
+DRUNTFFB	RESDATA Tiefling Female run
+DRUNTFMB	RESDATA Male Tiefling run
+DRUNTHKB	RESDATA Thokola run
+DRUNTLRB	RESDATA Large Thug run
+DRUNTWZB	RESDATA Townie Wizard run
+DRUNVHAB	RESDATA Vhailor run
+DRUNWREB	RESDATA Wererat run
+DS2CAAFB	RESDATA Aasimar Female stand2stance
+DS2CANNB	RESDATA Annah stand2stance
+DS2CBAUB	RESDATA Baurier Male stand2stance
+DS2CCTFB	RESDATA Curst Townie Female stand2stance
+DS2CCTHB	RESDATA Thug stand2stance
+DS2CCTMB	RESDATA Curst Townie Male stand2stance
+DS2CDKKB	RESDATA Dakkon stand2stance
+DS2CDTFB	RESDATA Dustman Female stand2stance
+DS2CDTMB	RESDATA Dustman Male stand2stance
+DS2CGHFB	RESDATA Ghoul Female stand2stance
+DS2CGHMB	RESDATA Ghoul Male stand2stance
+DS2CGODB	RESDATA Godsman stand2stance
+DS2CGYTB	RESDATA Githzerai stand2stance
+DS2CHKMB	RESDATA Drone, Heavy Kill-Me stand2stance
+DS2CHLFB	RESDATA Lower Class Townie, Female stand2stance
+DS2CHLMB	RESDATA Lower Class Townie, Male stand2stance
+DS2CHUFB	RESDATA Upper Class Townie, Female stand2stance
+DS2CMHTB	RESDATA Merchant stand2stance
+DS2CNOAB	RESDATA Nameless One with Axe stand2stance
+DS2CNOCB	RESDATA Nameless One with Club stand2stance
+DS2CNODB	RESDATA Nameless One with Dagger stand2stance
+DS2CNOFB	RESDATA Nameless One with Fist stand2stance
+DS2CNOHB	RESDATA Nameless One with Hammer stand2stance
+DS2CNOMB	RESDATA Nameless One with Dustman Disguise stand2stance
+DS2CNOSB	RESDATA Nameless One with Severed Arm stand2stance
+DS2CSKWB	RESDATA Skeleton, Worker stand2stance
+DS2CSPTB	RESDATA Skeleton, Priest stand2stance
+DS2CTFFB	RESDATA Tiefling Female stand2stance
+DS2CTFMB	RESDATA Male Tiefling stand2stance
+DS2CTHKB	RESDATA Thokola stand2stance
+DS2CTLRB	RESDATA Large Thug stand2stance
+DS2CTWZB	RESDATA Townie Wizard stand2stance
+DS2CVHAB	RESDATA Vhailor stand2stance
+DS2CWREB	RESDATA Wererat stand2stance
+DSF1AAFB	RESDATA Aasimar Female standfidget1
+DSF1ANNB	RESDATA Annah standfidget1
+DSF1BAUB	RESDATA Baurier Male standfidget1
+DSF1CTFB	RESDATA Curst Townie Female standfidget1
+DSF1CTMB	RESDATA Curst Townie Male standfidget1
+DSF1DKKB	RESDATA Dakkon standfidget1
+DSF1DTFB	RESDATA Dustman Female standfidget1
+DSF1DTMB	RESDATA Dustman Male standfidget1
+DSF1GHFB	RESDATA Ghoul Female standfidget1
+DSF1GHMB	RESDATA Ghoul Male standfidget1
+DSF1GODB	RESDATA Godsman standfidget1
+DSF1GYTB	RESDATA Githzerai standfidget1
+DSF1HKMB	RESDATA Drone, Heavy Kill-Me standfidget1
+DSF1HLFB	RESDATA Lower Class Townie, Female standfidget1
+DSF1HLMB	RESDATA Lower Class Townie, Male standfidget1
+DSF1HUFB	RESDATA Upper Class Townie, Female standfidget1
+DSF1HUMB	RESDATA Upper Class Townie, Male standfidget1
+DSF1MHTB	RESDATA Merchant standfidget1
+DSF1MIDB	RESDATA Midwife standfidget1
+DSF1NOAB	RESDATA Nameless One with Axe standfidget1
+DSF1NOCB	RESDATA Nameless One with Club standfidget1
+DSF1NODB	RESDATA Nameless One with Dagger standfidget1
+DSF1NOFB	RESDATA Nameless One with Fist standfidget1
+DSF1NOHB	RESDATA Nameless One with Hammer standfidget1
+DSF1NOMB	RESDATA Nameless One with Dustman Disguise standfidget1
+DSF1NOSB	RESDATA Nameless One with Severed Arm standfidget1
+DSF1NOZB	RESDATA Nameless One with Zombie Disguise standfidget1
+DSF1PROB	RESDATA Prostitute (False Colored) standfidget1
+DSF1SKWB	RESDATA Skeleton, Worker standfidget1
+DSF1SPTB	RESDATA Skeleton, Priest standfidget1
+DSF1TFFB	RESDATA Tiefling Female standfidget1
+DSF1TFMB	RESDATA Male Tiefling standfidget1
+DSF1THKB	RESDATA Thokola standfidget1
+DSF1TWZB	RESDATA Townie Wizard standfidget1
+DSF1VHAB	RESDATA Vhailor standfidget1
+DSF1WREB	RESDATA Wererat standfidget1
+DSF1ZMFB	RESDATA Zombie, Female standfidget1
+DSF1ZMMB	RESDATA Zombie, Male standfidget1
+DSF2NOAB	RESDATA Nameless One with Axe standfidget2
+DSF2NOCB	RESDATA Nameless One with Club standfidget2
+DSF2NODB	RESDATA Nameless One with Dagger standfidget2
+DSF2NOFB	RESDATA Nameless One with Fist standfidget2
+DSF2NOHB	RESDATA Nameless One with Hammer standfidget2
+DSF2NOSB	RESDATA Nameless One with Severed Arm standfidget2
+DSP1AAFB	RESDATA Aasimar Female spell1
+DSP1CTFB	RESDATA Curst Townie Female spell1
+DSP1CTHB	RESDATA Thug spell1
+DSP1CTMB	RESDATA Curst Townie Male spell1
+DSP1DKKB	RESDATA Dakkon spell1
+DSP1DTFB	RESDATA Dustman Female spell1
+DSP1DTMB	RESDATA Dustman Male spell1
+DSP1GYTB	RESDATA Githzerai spell1
+DSP1HLFB	RESDATA Lower Class Townie, Female spell1
+DSP1HLMB	RESDATA Lower Class Townie, Male spell1
+DSP1HUFB	RESDATA Upper Class Townie, Female spell1
+DSP1HUMB	RESDATA Upper Class Townie, Male spell1
+DSP1MHTB	RESDATA Merchant spell1
+DSP1MIDB	RESDATA Midwife spell1
+DSP1NOAB	RESDATA Nameless One with Axe spell1
+DSP1NOCB	RESDATA Nameless One with Club spell1
+DSP1NODB	RESDATA Nameless One with Dagger spell1
+DSP1NOFB	RESDATA Nameless One with Fist spell1
+DSP1NOHB	RESDATA Nameless One with Hammer spell1
+DSP1NOMB	RESDATA Nameless One with Dustman Disguise spell1
+DSP1SPTB	RESDATA Skeleton, Priest spell1
+DSP1TFFB	RESDATA Tiefling Female spell1
+DSP1TFMB	RESDATA Male Tiefling spell1
+DSP1TLRB	RESDATA Large Thug spell1
+DSP1TWZB	RESDATA Townie Wizard spell1
+DSP2DKKB	RESDATA Dakkon spell2
+DSP2MIDB	RESDATA Midwife spell2
+DSP2NOAB	RESDATA Nameless One with Axe spell2
+DSP2NOCB	RESDATA Nameless One with Club spell2
+DSP2NODB	RESDATA Nameless One with Dagger spell2
+DSP2NOFB	RESDATA Nameless One with Fist spell2
+DSP2NOHB	RESDATA Nameless One with Hammer spell2
+DSP2SPTB	RESDATA Skeleton, Priest spell2
+DSP2TWZB	RESDATA Townie Wizard spell2
+DSP3TWZB	RESDATA Townie Wizard spell3
+DSTCAAFB	RESDATA Aasimar Female stance
+DSTCANNB	RESDATA Annah stance
+DSTCBAUB	RESDATA Baurier Male stance
+DSTCCTFB	RESDATA Curst Townie Female stance
+DSTCCTHB	RESDATA Thug stance
+DSTCCTMB	RESDATA Curst Townie Male stance
+DSTCDKKB	RESDATA Dakkon stance
+DSTCDTFB	RESDATA Dustman Female stance
+DSTCDTMB	RESDATA Dustman Male stance
+DSTCGHFB	RESDATA Ghoul Female stance
+DSTCGHMB	RESDATA Ghoul Male stance
+DSTCGODB	RESDATA Godsman stance
+DSTCGYTB	RESDATA Githzerai stance
+DSTCHKMB	RESDATA Drone, Heavy Kill-Me stance
+DSTCHLFB	RESDATA Lower Class Townie, Female stance
+DSTCHLMB	RESDATA Lower Class Townie, Male stance
+DSTCHUFB	RESDATA Upper Class Townie, Female stance
+DSTCHUMB	RESDATA Upper Class Townie, Male stance
+DSTCMHTB	RESDATA Merchant stance
+DSTCNOAB	RESDATA Nameless One with Axe stance
+DSTCNOCB	RESDATA Nameless One with Club stance
+DSTCNODB	RESDATA Nameless One with Dagger stance
+DSTCNOFB	RESDATA Nameless One with Fist stance
+DSTCNOHB	RESDATA Nameless One with Hammer stance
+DSTCNOMB	RESDATA Nameless One with Dustman Disguise stance
+DSTCNOSB	RESDATA Nameless One with Severed Arm stance
+DSTCSKWB	RESDATA Skeleton, Worker stance
+DSTCSPTB	RESDATA Skeleton, Priest stance
+DSTCTFFB	RESDATA Tiefling Female stance
+DSTCTFMB	RESDATA Male Tiefling stance
+DSTCTHKB	RESDATA Thokola stance
+DSTCTLRB	RESDATA Large Thug stance
+DSTCTWZB	RESDATA Townie Wizard stance
+DSTCVHAB	RESDATA Vhailor stance
+DSTCWREB	RESDATA Wererat stance
+DSTDAAFB	RESDATA Aasimar Female stand
+DSTDANNB	RESDATA Annah stand
+DSTDBAUB	RESDATA Baurier Male stand
+DSTDCTFB	RESDATA Curst Townie Female stand
+DSTDCTHB	RESDATA Thug stand
+DSTDCTMB	RESDATA Curst Townie Male stand
+DSTDDKKB	RESDATA Dakkon stand
+DSTDDTFB	RESDATA Dustman Female stand
+DSTDDTMB	RESDATA Dustman Male stand
+DSTDGHFB	RESDATA Ghoul Female stand
+DSTDGHMB	RESDATA Ghoul Male stand
+DSTDGODB	RESDATA Godsman stand
+DSTDGYTB	RESDATA Githzerai stand
+DSTDHKMB	RESDATA Drone, Heavy Kill-Me stand
+DSTDHLFB	RESDATA Lower Class Townie, Female stand
+DSTDHLMB	RESDATA Lower Class Townie, Male stand
+DSTDHUFB	RESDATA Upper Class Townie, Female stand
+DSTDHUMB	RESDATA Upper Class Townie, Male stand
+DSTDMHTB	RESDATA Merchant stand
+DSTDMIDB	RESDATA Midwife stand
+DSTDNOAB	RESDATA Nameless One with Axe stand
+DSTDNOCB	RESDATA Nameless One with Club stand
+DSTDNODB	RESDATA Nameless One with Dagger stand
+DSTDNOFB	RESDATA Nameless One with Fist stand
+DSTDNOHB	RESDATA Nameless One with Hammer stand
+DSTDNOMB	RESDATA Nameless One with Dustman Disguise stand
+DSTDNOSB	RESDATA Nameless One with Severed Arm stand
+DSTDNOZB	RESDATA Nameless One with Zombie Disguise stand
+DSTDPROB	RESDATA Prostitute (False Colored) stand
+DSTDQUIB	RESDATA Qui-Sai the Statue Guy attack1
+DSTDSKWB	RESDATA Skeleton, Worker stand
+DSTDSPTB	RESDATA Skeleton, Priest stand
+DSTDTFFB	RESDATA Tiefling Female stand
+DSTDTFMB	RESDATA Male Tiefling stand
+DSTDTHKB	RESDATA Thokola stand
+DSTDTLRB	RESDATA Large Thug stand
+DSTDTWZB	RESDATA Townie Wizard stand
+DSTDVHAB	RESDATA Vhailor stand
+DSTDWREB	RESDATA Wererat stand
+DSTDZMFB	RESDATA Zombie, Female stand
+DSTDZMMB	RESDATA Zombie, Male stand
+DTK1AAFB	RESDATA Aasimar Female talk1
+DTK1ANNB	RESDATA Annah talk1
+DTK1BAUB	RESDATA Baurier Male talk1
+DTK1CTFB	RESDATA Curst Townie Female talk1
+DTK1CTHB	RESDATA Thug talk1
+DTK1CTMB	RESDATA Curst Townie Male talk1
+DTK1DKKB	RESDATA Dakkon talk1
+DTK1DTFB	RESDATA Dustman Female talk1
+DTK1DTMB	RESDATA Dustman Male talk1
+DTK1GHFB	RESDATA Ghoul Female talk1
+DTK1GHMB	RESDATA Ghoul Male talk1
+DTK1GODB	RESDATA Godsman talk1
+DTK1GYTB	RESDATA Githzerai talk1
+DTK1HKMB	RESDATA Drone, Heavy Kill-Me talk1
+DTK1HLFB	RESDATA Lower Class Townie, Female talk1
+DTK1HLMB	RESDATA Lower Class Townie, Male talk1
+DTK1HUFB	RESDATA Upper Class Townie, Female talk1
+DTK1HUMB	RESDATA Upper Class Townie, Male talk1
+DTK1MHTB	RESDATA Merchant talk1
+DTK1MIDB	RESDATA Midwife talk1
+DTK1NOAB	RESDATA Nameless One with Axe talk1
+DTK1NOCB	RESDATA Nameless One with Club talk1
+DTK1NODB	RESDATA Nameless One with Dagger talk1
+DTK1NOFB	RESDATA Nameless One with Fist talk1
+DTK1NOHB	RESDATA Nameless One with Hammer talk1
+DTK1NOMB	RESDATA Nameless One with Dustman Disguise talk1
+DTK1NOSB	RESDATA Nameless One with Severed Arm talk1
+DTK1NOZB	RESDATA Nameless One with Zombie Disguise talk1
+DTK1PROB	RESDATA Prostitute (False Colored) talk1
+DTK1SKWB	RESDATA Skeleton, Worker talk1
+DTK1SPTB	RESDATA Skeleton, Priest talk1
+DTK1TFFB	RESDATA Tiefling Female talk1
+DTK1TFMB	RESDATA Male Tiefling talk1
+DTK1THKB	RESDATA Thokola talk1
+DTK1TLRB	RESDATA Large Thug talk1
+DTK1TWZB	RESDATA Townie Wizard talk1
+DTK1VHAB	RESDATA Vhailor talk1
+DTK1WREB	RESDATA Wererat talk1
+DTK1ZMFB	RESDATA Zombie, Female talk1
+DTK1ZMMB	RESDATA Zombie, Male talk1
+DTK2MHTB	RESDATA Merchant talk2
+DTK2NOAB	RESDATA Nameless One with Axe talk2
+DTK2NOCB	RESDATA Nameless One with Club talk2
+DTK2NODB	RESDATA Nameless One with Dagger talk2
+DTK2NOFB	RESDATA Nameless One with Fist talk2
+DTK2NOHB	RESDATA Nameless One with Hammer talk2
+DTK2NOSB	RESDATA Nameless One with Severed Arm talk2
+DTK2PROB	RESDATA Prostitute (False Colored) talk2
+DTK3NOAB	RESDATA Nameless One with Axe talk3
+DTK3NOCB	RESDATA Nameless One with Club talk3
+DTK3NODB	RESDATA Nameless One with Dagger talk3
+DTK3NOFB	RESDATA Nameless One with Fist talk3
+DTK3NOHB	RESDATA Nameless One with Hammer talk3
+DTK3NOSB	RESDATA Nameless One with Severed Arm talk3
+DVHSTDB	RESDATA Vhailor Still stand
+DWLKAAFB	RESDATA Aasimar Female walk
+DWLKANNB	RESDATA Annah walk
+DWLKBAUB	RESDATA Baurier Male walk
+DWLKCTFB	RESDATA Curst Townie Female walk
+DWLKCTHB	RESDATA Thug walk
+DWLKCTMB	RESDATA Curst Townie Male walk
+DWLKDKKB	RESDATA Dakkon walk
+DWLKDTFB	RESDATA Dustman Female walk
+DWLKDTMB	RESDATA Dustman Male walk
+DWLKGHFB	RESDATA Ghoul Female walk
+DWLKGHMB	RESDATA Ghoul Male walk
+DWLKGODB	RESDATA Godsman walk
+DWLKGYTB	RESDATA Githzerai walk
+DWLKHKMB	RESDATA Drone, Heavy Kill-Me walk
+DWLKHLFB	RESDATA Lower Class Townie, Female walk
+DWLKHLMB	RESDATA Lower Class Townie, Male walk
+DWLKHUFB	RESDATA Upper Class Townie, Female walk
+DWLKHUMB	RESDATA Upper Class Townie, Male walk
+DWLKMHTB	RESDATA Merchant walk
+DWLKMIDB	RESDATA Midwife walk
+DWLKNOAB	RESDATA Nameless One with Axe walk
+DWLKNOCB	RESDATA Nameless One with Club walk
+DWLKNODB	RESDATA Nameless One with Dagger walk
+DWLKNOFB	RESDATA Nameless One with Fist walk
+DWLKNOHB	RESDATA Nameless One with Hammer walk
+DWLKNOMB	RESDATA Nameless One with Dustman Disguise walk
+DWLKNOSB	RESDATA Nameless One with Severed Arm walk
+DWLKNOZB	RESDATA Nameless One with Zombie Disguise walk
+DWLKPROB	RESDATA Prostitute (False Colored) walk
+DWLKSKWB	RESDATA Skeleton, Worker walk
+DWLKSPTB	RESDATA Skeleton, Priest walk
+DWLKTFFB	RESDATA Tiefling Female walk
+DWLKTFMB	RESDATA Male Tiefling walk
+DWLKTHKB	RESDATA Thokola walk
+DWLKTLRB	RESDATA Large Thug walk
+DWLKTWZB	RESDATA Townie Wizard walk
+DWLKVHAB	RESDATA Vhailor walk
+DWLKWREB	RESDATA Wererat walk
+DWLKZMFB	RESDATA Zombie, Female walk
+DWLKZMMB	RESDATA Zombie, Male walk
+IGARM	0xF101 STAR_Iron_Golem
+IGARMB	0xF101 STAR_Iron_Golem
+IGHEAD	0xF101 STAR_Iron_Golem
+POSMAIN	0xF100 STAR_Pillar_of_Skulls

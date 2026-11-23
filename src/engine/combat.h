@@ -44,6 +44,13 @@ struct EffectView {
   int32_t left = 0;  // ticks to expiry (absolute/delayed types), else 0
 };
 std::vector<EffectView> TimedEffects(int32_t id);
+// The creature's colour glow effects (opcodes 8, 9, 52, 61, 353 tint screen; symbols.h "Colour effects").
+struct ColorEffectView {
+  int opcode = 0;
+  uint32_t param1 = 0, param2 = 0;  // param1 = colour 0xBBGGRR00
+  uint64_t key = 0;                 // identity of the effect while it lives (compare only)
+};
+std::vector<ColorEffectView> ColorEffects(int32_t id);
 int PersistentCount(int32_t id);
 
 // Every projectile's AIUpdate asks `run(caster id, projectile id, lingers)` first and is skipped on

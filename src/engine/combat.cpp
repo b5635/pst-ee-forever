@@ -228,6 +228,23 @@ std::vector<EffectView> TimedEffects(int32_t id) {
   return out;
 }
 
+std::vector<ColorEffectView> ColorEffects(int32_t id) {
+  std::vector<ColorEffectView> out;
+  const uint64_t p = ClockSymbolsOk() ? LookupSprite(id) : 0;
+  if (!p) return out;
+  ForEachEffect(p, [&](uint64_t eff) {
+    const int op = R<int32_t>(eff + sym::kOffEffOpcode);
+    if (op != 8 && op != 9 && op != 52 && op != 61 && op != 353) return;
+    ColorEffectView v;
+    v.opcode = op;
+    v.param1 = R<uint32_t>(eff + sym::kOffEffParam1);
+    v.param2 = R<uint32_t>(eff + sym::kOffEffParam2);
+    v.key = eff;
+    out.push_back(v);
+  });
+  return out;
+}
+
 int PersistentCount(int32_t id) {
   const uint64_t p = ClockSymbolsOk() ? LookupSprite(id) : 0;
   if (!p) return 0;

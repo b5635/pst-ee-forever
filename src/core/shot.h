@@ -6,6 +6,9 @@
 
 namespace pstf {
 
+// Read-framebuffer binding found by the last SaveScreenshot (0 = default, as expected).
+extern int g_last_read_fbo;
+
 // Returns "" on success, else the reason.
 std::string SaveScreenshot(const std::string& path);
 

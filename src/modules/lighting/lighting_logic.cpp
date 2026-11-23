@@ -261,6 +261,233 @@ bool FootprintInBuffer(const ViewMap& m, const BakedLight& l, float to_phys, int
   return true;
 }
 
+bool IsGlowBlend(uint32_t flags) { return (flags & 0x208u) != 0 && (flags & 0x20000000u) == 0; }
+
+uint64_t PackResRef(const char* r) {
+  uint64_t v = 0;
+  for (int i = 0; i < 8 && r[i]; ++i) {
+    char c = r[i];
+    if (c >= 'a' && c <= 'z') c = char(c - 32);
+    v |= uint64_t(uint8_t(c)) << (8 * i);
+  }
+  return v;
+}
+
+bool Emits(const std::vector<uint64_t>& names, const char* resref, uint32_t flags) {
+  if (IsGlowBlend(flags)) return true;
+  return resref && resref[0] && std::binary_search(names.begin(), names.end(), PackResRef(resref));
+}
+
+std::vector<uint64_t> ParseEmitList(const std::string& text) {
+  std::vector<uint64_t> out;
+  std::istringstream in(text);
+  std::string line;
+  while (std::getline(in, line)) {
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) line.pop_back();
+    if (line.empty() || line[0] == '#' || line.size() > 8) continue;
+    out.push_back(PackResRef(line.c_str()));
+  }
+  std::sort(out.begin(), out.end());
+  out.erase(std::unique(out.begin(), out.end()), out.end());
+  return out;
+}
+
+uint64_t VfxKey(const char* resref, int cycle, int frame) {
+  uint64_t name = 0;  // up to 8 upper-case chars packed: unique, no hashing needed
+  for (int i = 0; i < 8 && resref[i]; ++i) {
+    char c = resref[i];
+    if (c >= 'a' && c <= 'z') c = char(c - 32);
+    name |= uint64_t(uint8_t(c)) << (8 * i);
+  }
+  // 8 chars use all 64 bits; fold cycle/frame in with a mix that keeps (name, cycle, frame) distinct
+  // in practice (cycle < 256, frame < 4096 in every PST BAM).
+  const uint64_t cf = (uint64_t(uint8_t(cycle)) << 12) | uint64_t(uint16_t(frame) & 0xFFF);
+  return name * 0x100000001B3ull ^ (cf * 0x9E3779B97F4A7C15ull);
+}
+
+const VfxFrame* VfxTable::Find(const char* resref, int cycle, int frame) const {
+  const uint64_t k = VfxKey(resref, cycle, frame);
+  auto it = std::lower_bound(rows.begin(), rows.end(), k,
+                             [](const std::pair<uint64_t, VfxFrame>& r, uint64_t v) { return r.first < v; });
+  return (it != rows.end() && it->first == k) ? &it->second : nullptr;
+}
+
+bool ParseVfxTable(const std::string& text, VfxTable* out) {
+  out->rows.clear();
+  std::istringstream stream(text);
+  std::string line;
+  while (std::getline(stream, line)) {
+    if (line.empty() || line[0] == '#') continue;
+    std::istringstream in(line);
+    std::string name;
+    int cycle = -1, frame = -1;
+    VfxFrame f;
+    if (!(in >> name >> cycle >> frame >> f.r >> f.g >> f.b >> f.strength >> f.cx >> f.cy >> f.bright)) continue;
+    if (name.empty() || name.size() > 8 || cycle < 0 || frame < 0) continue;
+    out->rows.emplace_back(VfxKey(name.c_str(), cycle, frame), f);
+  }
+  std::sort(out->rows.begin(), out->rows.end(),
+            [](const std::pair<uint64_t, VfxFrame>& a, const std::pair<uint64_t, VfxFrame>& b) {
+              return a.first < b.first;
+            });
+  return !out->rows.empty();
+}
+
+bool FxLight(const GlowDraw& d, float gain, BakedLight* out) {
+  if (!d.vfx || d.vfx->strength <= 0.01f || d.w <= 0 || d.h <= 0) return false;
+  const float k = std::min(0.9f, std::max(0.12f, d.vfx->strength * gain));
+  BakedLight l;
+  l.x = d.x + std::max(0.0f, std::min(d.w, d.vfx->cx));
+  const float cy = d.y + std::max(0.0f, std::min(d.h, d.vfx->cy));
+  l.y = d.y + d.h;                 // ground: the frame bottom
+  l.z = std::max(0.0f, l.y - cy);  // drawn on the bright centroid
+  l.radius = std::min(380.0f, std::max(60.0f, std::max(d.w, d.h) * 1.3f));
+  l.r = d.vfx->r * k;
+  l.g = d.vfx->g * k;
+  l.b = d.vfx->b * k;
+  l.strength = 1.0f;
+  l.kind = Kind::Steady;
+  *out = l;
+  return true;
+}
+
+std::vector<BakedLight> MergeFxLights(std::vector<BakedLight> in, float dist, size_t budget) {
+  auto power = [](const BakedLight& l) { return (l.r + l.g + l.b) * l.radius; };
+  std::stable_sort(in.begin(), in.end(),
+                   [&](const BakedLight& a, const BakedLight& b) { return power(a) > power(b); });
+  std::vector<BakedLight> out;
+  for (const BakedLight& l : in) {
+    bool merged = false;
+    for (BakedLight& o : out) {
+      const float dx = o.x - l.x, dy = (o.y - o.z) - (l.y - l.z);
+      if (dx * dx + dy * dy < dist * dist) {
+        o.r = std::min(1.5f, o.r + l.r);
+        o.g = std::min(1.5f, o.g + l.g);
+        o.b = std::min(1.5f, o.b + l.b);
+        o.radius = std::max(o.radius, l.radius);
+        merged = true;
+        break;
+      }
+    }
+    if (!merged && out.size() < budget) out.push_back(l);
+  }
+  return out;
+}
+
+bool MatchPattern(const char* pat, const char* res) {
+  int i = 0;
+  for (; i < 8 && pat[i]; ++i) {
+    char c = res[i];
+    if (!c) return false;
+    if (c >= 'a' && c <= 'z') c = char(c - 32);
+    if (pat[i] != '?' && pat[i] != c) return false;
+  }
+  return i == 8 || res[i] == 0;
+}
+
+std::vector<HandLight> ParseHandLights(const std::string& text) {
+  std::vector<HandLight> out;
+  std::istringstream stream(text);
+  std::string line;
+  while (std::getline(stream, line)) {
+    if (line.empty() || line[0] == '#') continue;
+    std::istringstream in(line);
+    std::string pat, kind;
+    HandLight h;
+    float strength = 1.0f;
+    if (!(in >> pat >> h.light.r >> h.light.g >> h.light.b >> h.light.radius >> h.light.z >> kind)) continue;
+    in >> strength;
+    if (pat.empty() || pat.size() > 8 || !ParseKind(kind, &h.light.kind)) continue;
+    for (size_t i = 0; i < pat.size(); ++i) {
+      char c = pat[i];
+      if (c >= 'a' && c <= 'z') c = char(c - 32);
+      h.pattern[i] = c;
+    }
+    h.light.r = Clamp01(h.light.r);
+    h.light.g = Clamp01(h.light.g);
+    h.light.b = Clamp01(h.light.b);
+    h.light.radius = std::max(10.0f, std::min(600.0f, h.light.radius));
+    h.light.strength = Clamp01(strength);
+    out.push_back(h);
+  }
+  return out;
+}
+
+const HandLight* FindHandLight(const std::vector<HandLight>& t, const char* res) {
+  if (!res || !res[0]) return nullptr;
+  for (const HandLight& h : t)
+    if (MatchPattern(h.pattern, res)) return &h;
+  return nullptr;
+}
+
+BakedLight HandLightAt(const HandLight& h, const GlowDraw& d, size_t index, double t_ms, float gain) {
+  BakedLight l = h.light;
+  l.x = d.x + d.w * 0.5f;
+  l.y = d.y + d.h;
+  const float k = h.light.strength * gain * Flicker(h.light.kind, index, t_ms);
+  l.r *= k;
+  l.g *= k;
+  l.b *= k;
+  return l;
+}
+
+bool ColorEffectLight(int op, uint32_t p1, uint32_t p2, double age_ms, double t_ms, float gain, Rgb* out) {
+  Rgb c{float((p1 >> 8) & 0xFF) / 255.0f, float((p1 >> 16) & 0xFF) / 255.0f, float((p1 >> 24) & 0xFF) / 255.0f};
+  if (op == 353) c = {float(p1 & 0xFF) / 255.0f, float((p1 >> 8) & 0xFF) / 255.0f, float((p1 >> 16) & 0xFF) / 255.0f};
+  float k;
+  const int speed = int((p2 >> 16) & 0xFFFF);
+  if (op == 8 || op == 52) {
+    k = 1.0f;
+  } else if (op == 9) {  // pulse: one cycle per 1.5 s (GemRB uses the same visual period)
+    k = 0.55f + 0.45f * float(std::sin(t_ms * 2.0 * 3.14159265358979 / 1500.0));
+  } else if (op == 61) {  // dissipate: from full colour to nothing; speed = colour steps per tick (15/s)
+    const double fade_ms = std::max(300.0, std::min(4000.0, 255.0 / std::max(1, speed) * 66.7));
+    k = float(std::max(0.0, 1.0 - age_ms / fade_ms));
+  } else if (op == 353) {  // tint screen: rises and fades with the screen tint (about 1.5 s)
+    k = age_ms < 1500.0 ? float(std::sin(3.14159265358979 * age_ms / 1500.0)) : 0.0f;
+  } else {
+    return false;
+  }
+  if (k <= 0.01f || Luma(c) <= 0.01f) return false;
+  k *= gain;
+  *out = {c.r * k, c.g * k, c.b * k};
+  return true;
+}
+
+float SoftKnee(float l, float t, float k) {
+  float soft = std::max(0.0f, std::min(2.0f * k, l - t + k));
+  soft = soft * soft / (4.0f * k + 0.0001f);
+  return std::max(soft, l - t) / std::max(l, 0.0001f);
+}
+
+float AtmosphereT(const Atmosphere& a, float h) {
+  const float t = Clamp01((h - a.h0) / (a.h1 - a.h0));
+  return t * t * (3.0f - 2.0f * t);
+}
+
+Rgb ApplyAtmosphere(const Atmosphere& a, const Rgb& c, float h, const Rgb& hz, float strength) {
+  const float t = AtmosphereT(a, h) * strength;
+  if (t <= 0) return c;
+  const float l = Luma(c);
+  // Only surfaces get the haze lift: the void (black, stored as a saturated 1024 backdrop) stays black.
+  const float s = Clamp01((l - 0.02f) / (0.15f - 0.02f));
+  const float surface = s * s * (3.0f - 2.0f * s);
+  auto one = [&](float v, float haze) {
+    v = v + (l - v) * a.desat * t;                              // toward grey
+    v = (v - 0.5f) * (1.0f - a.contrast * t * surface) + 0.5f;  // flatter
+    v = v + (haze - v) * a.haze * t * surface;                  // lifted toward the haze colour
+    return Clamp01(v);
+  };
+  return {one(c.r, hz.r), one(c.g, hz.g), one(c.b, hz.b)};
+}
+
+Rgb HazeColour(const AreaScene& s, const Rgb& ambient) {
+  if (!s.has_key) return ambient;
+  const Rgb k{s.key_ambient[0], s.key_ambient[1], s.key_ambient[2]};
+  const float kl = std::max(Luma(k), 0.001f), al = Luma(ambient);
+  return {std::min(1.0f, k.r / kl * al), std::min(1.0f, k.g / kl * al), std::min(1.0f, k.b / kl * al)};
+}
+
 const char* DebugName(DebugMode m) {
   switch (m) {
     case DebugMode::Lit: return "lit";
@@ -268,6 +495,7 @@ const char* DebugName(DebugMode m) {
     case DebugMode::RoundTrip: return "roundtrip";
     case DebugMode::Falloff: return "falloff";
     case DebugMode::Off: return "off";
+    case DebugMode::Emissive: return "emissive";
   }
   return "?";
 }

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Hand light table for the lighting module (deployed to pst_forever\assets\vfx\vfxlight.tsv).
+# Any world draw whose BAM matches the pattern ('?' = any one char) carries this light, centred on the
+# drawn frame, standing on its bottom edge, z px up.
+# pattern   r     g     b     radius  z   kind   [strength]
+# Ignus burns permanently: all his animations are ????IGYB (RESDATA.INI section Ignus).
+????IGYB    1.00  0.55  0.22  240     55  fire   1.0

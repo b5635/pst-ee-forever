@@ -11,6 +11,7 @@
 #include <fstream>
 #include <initializer_list>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -18,7 +19,9 @@
 #include "core/shot.h"
 #include "engine/gl_world.h"
 #include "engine/lua.h"
+#include "engine/combat.h"
 #include "engine/render.h"
+#include "engine/sprites.h"
 #include "modules/dev/lua_bridge.h"
 #include "modules/lighting/lighting_logic.h"
 
@@ -41,14 +44,25 @@ struct Settings {
   bool baked_lights = true, height_map = true, occlusion = true, area_normals = true, key_light = true;
   float light_gain = 1.0f, ambient = 1.0f, normal_strength = 0.8f, max_light = 1.25f, keep = 0.6f;
   int occlusion_steps = 16, budget = 64;
+  // phase 4
+  bool emissive = true, bloom = true, fx_lights = true;
+  float emissive_keep = 0.8f, bloom_strength = 0.35f, bloom_threshold = 0.45f, fx_light_gain = 1.0f;
+  int fx_budget = 24;
+  // phase 5
+  bool atmosphere = true;
+  float atmosphere_strength = 1.0f;
+  // hand lights (vfxlight.tsv) and buff colour lights
+  bool hand_lights = true, buff_lights = true;
+  float hand_light_gain = 1.5f, buff_light_gain = 0.7f;
 };
 Settings g_set;
 DebugMode g_mode = DebugMode::Lit;
 
 engine::Gl g_gl = {};
 bool g_ready = false, g_off = false;  // GL set up / turned itself off
-unsigned g_light_prog = 0, g_comp_prog = 0;
+unsigned g_light_prog = 0, g_comp_prog = 0, g_fill_prog = 0, g_post_prog = 0;
 unsigned g_scene_tex = 0, g_light_tex = 0, g_light_fbo = 0, g_height_tex = 0, g_normal_tex = 0, g_ao_tex = 0;
+unsigned g_emis_tex = 0, g_emis_fbo = 0, g_bloom_tex[2] = {}, g_bloom_fbo[2] = {};
 int g_scene_w = 0, g_scene_h = 0, g_light_w = 0, g_light_h = 0;
 
 struct LightUni {
@@ -56,8 +70,40 @@ struct LightUni {
       occl_bias, occl_thick, texel, bump, normal_strength, debug;
 } g_lu = {};
 struct CompUni {
-  int scene, light, vp_origin, vp_size, mode, keep, max_light;
+  int scene, light, vp_origin, vp_size, mode, keep, max_light, emis, bloom, height, map, texel, has_height,
+      emis_keep, bloom_strength, atmo, haze_colour;
 } g_cu = {};
+struct FillUni {
+  int target;
+} g_fu = {};
+struct PostUni {
+  int mode, src, emis, src_size, dir, threshold, to_phys, target, vp_origin;
+} g_pu = {};
+
+// Phase 4: the effect table and this frame's glow draws.
+VfxTable g_vfx;
+std::vector<GlowDraw> g_glows;
+// Emitters beyond the additive blend: effect BAMs named by the exe's effect code or by effect data
+// (assets/vfx/vfxemit.txt from tools/vfxscan.py). Packed upper-case names.
+std::vector<uint64_t> g_emit_names;
+std::vector<HandLight> g_hand;   // assets/vfx/vfxlight.tsv
+// Buff colour lights: first time each colour effect was seen (age for the fade), pruned each frame.
+std::vector<std::pair<uint64_t, double>> g_color_seen;
+int g_hand_lights = 0, g_buff_lights = 0;  // probe: this frame
+// Emissive capture (engine/gl_world.h SetEmissiveCallbacks): this frame's buffer state.
+bool g_cap_used = false;     // something was captured this frame (cleared at the pre-draw)
+int g_cap_w = 0, g_cap_h = 0;
+int g_cap_prev_fbo = 0;
+uint64_t g_cap_draws = 0;    // probe: captured draws since start
+bool g_cov_req = false;      // probe: measure the capture's coverage on the next frame with emitters
+double g_cov = -1;           // lit capture pixels / sum of the emitting draws' frame rects (px)
+int g_fx_lights = 0, g_fx_hits = 0, g_fx_glows = 0;
+uint64_t g_fx_frames_with_light = 0;
+std::vector<BakedLight> g_last_fx;  // probe: this frame's effect lights
+ViewMap g_last_vm;                  // probe: last frame's mapping
+int g_last_vw = 0, g_last_vh = 0;
+float g_bloom_max = 0;              // probe: brightest bloom texel of the last frame with glow draws
+bool g_bloom_req = false;
 
 // Current area.
 std::string g_wed;
@@ -170,26 +216,101 @@ const char* kCompVs = R"(#version 130
 void main() { gl_Position = vec4(gl_Vertex.xy, 0.0, 1.0); }
 )";
 
+// Composite: lit = scene x light (soft shoulder, highlight keep); glow pixels keep their own brightness
+// (emissive keep); atmosphere by height; bloom of the glow draws added screen-ish (GemRB PostFS).
 const char* kCompFs = R"(#version 130
 uniform sampler2D u_scene;
 uniform sampler2D u_light;
+uniform sampler2D u_emis;    // emissive capture: the emitting draws over black, window px
+uniform sampler2D u_bloom;   // blurred bright pass of the glow draws
+uniform sampler2D u_height;  // R32F, area px
 uniform vec2 u_vpOrigin;
 uniform vec2 u_vpSize;
-uniform int u_mode;  // 0 lit, 1/3 light buffer, 2 round trip
+uniform int u_mode;  // 0 lit, 1/3 light buffer, 2 round trip, 5 emissive + bloom
 uniform float u_keep;
 uniform float u_maxLight;
+uniform vec4 u_map;      // area = phys * xy + zw
+uniform float u_texel;
+uniform int u_hasHeight;
+uniform float u_emisKeep;
+uniform float u_bloomStrength;
+uniform vec4 u_atmo;     // haze, desat, contrast, strength (0 = off)
+uniform vec3 u_hazeColour;
+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+float heightAt(vec2 area) {
+  ivec2 sz = textureSize(u_height, 0);
+  ivec2 t = clamp(ivec2(floor(area / max(u_texel, 1.0))), ivec2(0), sz - ivec2(1));
+  return texelFetch(u_height, t, 0).r;
+}
 void main() {
   vec2 p = gl_FragCoord.xy - u_vpOrigin;
   vec4 c = texelFetch(u_scene, ivec2(floor(p)), 0);
   if (u_mode == 2) { gl_FragColor = c; return; }
-  vec3 l = texture(u_light, p / u_vpSize).rgb;
+  vec2 uv = p / u_vpSize;
+  vec3 l = texture(u_light, uv).rgb;
   if (u_mode == 1 || u_mode == 3) { gl_FragColor = vec4(l, c.a); return; }
+  vec3 ec = texelFetch(u_emis, ivec2(floor(gl_FragCoord.xy)), 0).rgb;
+  float e = smoothstep(0.04, 0.35, max(ec.r, max(ec.g, ec.b))) * step(0.0001, u_emisKeep);
+  vec3 b = texture(u_bloom, uv).rgb;
+  if (u_mode == 5) { gl_FragColor = vec4(e, luma(b) * 4.0, luma(c.rgb) * 0.25, c.a); return; }
   vec3 over = max(l - 1.0, vec3(0.0));
   l = min(l, vec3(1.0)) + over / (1.0 + over / max(u_maxLight - 1.0, 0.001));
   vec3 lit = c.rgb * l;
   float hi = smoothstep(0.72, 1.0, max(c.r, max(c.g, c.b)));
   lit = mix(lit, max(lit, c.rgb), hi * u_keep);
+  lit = mix(lit, max(lit, c.rgb), e * u_emisKeep);  // emitting pixels keep their own brightness
+  if (u_atmo.w > 0.0 && u_hasHeight == 1) {
+    vec2 m = (p + 0.5) * u_map.xy + u_map.zw;
+    float t = smoothstep(200.0, 1024.0, heightAt(m)) * u_atmo.w;
+    if (t > 0.0) {
+      float surface = smoothstep(0.02, 0.15, luma(lit));  // the void stays black (ApplyAtmosphere)
+      lit = mix(lit, vec3(luma(lit)), u_atmo.y * t);
+      lit = (lit - 0.5) * (1.0 - u_atmo.z * t * surface) + 0.5;
+      lit = mix(lit, u_hazeColour, u_atmo.x * t * surface);
+    }
+  }
+  lit = clamp(lit, 0.0, 1.0);
+  if (u_bloomStrength > 0.0) {
+    vec3 bb = b * u_bloomStrength;
+    lit = lit + bb * (1.0 - lit * 0.5);
+  }
   gl_FragColor = vec4(min(lit, vec3(1.0)), c.a);
+}
+)";
+
+// Solid fill (the glow mask): quads in light-buffer pixels.
+const char* kFillFs = R"(#version 130
+void main() { gl_FragColor = vec4(1.0); }
+)";
+
+// Bloom (GemRB PostFS modes 0/1): bright pass of the scene under the glow mask, separable 9-tap blur.
+const char* kPostFs = R"(#version 130
+uniform int u_mode;
+uniform sampler2D u_src;   // mode 0: the scene copy (framebuffer px); mode 1: the previous bloom buffer
+uniform sampler2D u_emis;
+uniform vec2 u_srcSize;    // light-buffer size
+uniform vec2 u_dir;
+uniform float u_threshold;
+uniform float u_toPhys;
+uniform vec2 u_vpOrigin;
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_srcSize;
+  if (u_mode == 0) {
+    vec3 c = texelFetch(u_emis, ivec2(floor(gl_FragCoord.xy * u_toPhys + u_vpOrigin)), 0).rgb;
+    float e = 1.0;
+    float l = max(c.r, max(c.g, c.b));
+    float knee = 0.18;
+    float soft = clamp(l - u_threshold + knee, 0.0, 2.0 * knee);
+    soft = soft * soft / (4.0 * knee + 0.0001);
+    float w = max(soft, l - u_threshold) / max(l, 0.0001);
+    gl_FragColor = vec4(c * w * e, 1.0);
+    return;
+  }
+  vec2 d = u_dir / u_srcSize;
+  vec3 c = texture(u_src, uv).rgb * 0.2270270;
+  c += (texture(u_src, uv + d * 1.3846154).rgb + texture(u_src, uv - d * 1.3846154).rgb) * 0.3162162;
+  c += (texture(u_src, uv + d * 3.2307692).rgb + texture(u_src, uv - d * 3.2307692).rgb) * 0.0702703;
+  gl_FragColor = vec4(c, 1.0);
 }
 )";
 
@@ -255,7 +376,9 @@ bool SetUp() {
   const char* ver = reinterpret_cast<const char*>(g_gl.GetString(kVersion));
   g_light_prog = Link(kLightVs, kLightFs, "light");
   g_comp_prog = Link(kCompVs, kCompFs, "composite");
-  if (!g_light_prog || !g_comp_prog) {
+  g_fill_prog = Link(kLightVs, kFillFs, "fill");
+  g_post_prog = Link(kLightVs, kPostFs, "bloom");
+  if (!g_light_prog || !g_comp_prog || !g_fill_prog || !g_post_prog) {
     Log("lighting: off, shaders did not build (GL %s)", ver ? ver : "?");
     return false;
   }
@@ -273,11 +396,28 @@ bool SetUp() {
   g_cu = {gl.GetUniformLocation(cp, "u_scene"),  gl.GetUniformLocation(cp, "u_light"),
           gl.GetUniformLocation(cp, "u_vpOrigin"), gl.GetUniformLocation(cp, "u_vpSize"),
           gl.GetUniformLocation(cp, "u_mode"),   gl.GetUniformLocation(cp, "u_keep"),
-          gl.GetUniformLocation(cp, "u_maxLight")};
+          gl.GetUniformLocation(cp, "u_maxLight"), gl.GetUniformLocation(cp, "u_emis"),
+          gl.GetUniformLocation(cp, "u_bloom"),  gl.GetUniformLocation(cp, "u_height"),
+          gl.GetUniformLocation(cp, "u_map"),    gl.GetUniformLocation(cp, "u_texel"),
+          gl.GetUniformLocation(cp, "u_hasHeight"), gl.GetUniformLocation(cp, "u_emisKeep"),
+          gl.GetUniformLocation(cp, "u_bloomStrength"), gl.GetUniformLocation(cp, "u_atmo"),
+          gl.GetUniformLocation(cp, "u_hazeColour")};
+  g_fu = {gl.GetUniformLocation(g_fill_prog, "u_target")};
+  const unsigned pp = g_post_prog;
+  g_pu = {gl.GetUniformLocation(pp, "u_mode"),    gl.GetUniformLocation(pp, "u_src"),
+          gl.GetUniformLocation(pp, "u_emis"),    gl.GetUniformLocation(pp, "u_srcSize"),
+          gl.GetUniformLocation(pp, "u_dir"),     gl.GetUniformLocation(pp, "u_threshold"),
+          gl.GetUniformLocation(pp, "u_toPhys"),  gl.GetUniformLocation(pp, "u_target"),
+          gl.GetUniformLocation(pp, "u_vpOrigin")};
   gl.ActiveTexture(kTexture0);
   g_scene_tex = NewTexture(kNearest);
   g_light_tex = NewTexture(kLinear);
+  g_emis_tex = NewTexture(kNearest);  // emissive capture, sized to the world viewport (Capture*)
+  g_bloom_tex[0] = NewTexture(kLinear);
+  g_bloom_tex[1] = NewTexture(kLinear);
   gl.GenFramebuffers(1, &g_light_fbo);
+  gl.GenFramebuffers(1, &g_emis_fbo);
+  gl.GenFramebuffers(2, g_bloom_fbo);
   g_off = false;
   g_ready = true;
   Log("lighting: GL ready (%s), programs %u/%u, engine draw program %u", ver ? ver : "?", g_light_prog, g_comp_prog,
@@ -351,8 +491,152 @@ void EnsureTargets(int w, int h) {
     gl.FramebufferTexture2D(kFramebuffer, kColorAttach0, kTex2D, g_light_tex, 0);
     const unsigned st = gl.CheckFramebufferStatus(kFramebuffer);
     if (st != kFbComplete) Log("lighting: light buffer %dx%d incomplete (%X)", lw, lh, st);
+    auto attach = [&](unsigned tex, unsigned fbo, int internal, unsigned type, const char* what) {
+      gl.BindTexture(kTex2D, tex);
+      gl.TexImage2D(kTex2D, 0, internal, lw, lh, 0, kRgba, type, nullptr);
+      gl.BindFramebuffer(kFramebuffer, fbo);
+      gl.FramebufferTexture2D(kFramebuffer, kColorAttach0, kTex2D, tex, 0);
+      const unsigned s2 = gl.CheckFramebufferStatus(kFramebuffer);
+      if (s2 != kFbComplete) Log("lighting: %s buffer %dx%d incomplete (%X)", what, lw, lh, s2);
+    };
+    attach(g_bloom_tex[0], g_bloom_fbo[0], kRgba16F, kFloat, "bloom 0");
+    attach(g_bloom_tex[1], g_bloom_fbo[1], kRgba16F, kFloat, "bloom 1");
     g_light_w = lw;
     g_light_h = lh;
+  }
+}
+
+void Quad(float x0, float y0, float x1, float y1) {
+  auto& gl = g_gl;
+  gl.Begin(kQuads);
+  gl.Vertex2f(x0, y0);
+  gl.Vertex2f(x1, y0);
+  gl.Vertex2f(x1, y1);
+  gl.Vertex2f(x0, y1);
+  gl.End();
+}
+
+// This frame's glow draws (engine adapter, draw space) -> area rects with their table rows, and the
+// effect lights they make.
+// Buff colour lights: creatures in view with a colour glow effect (8/9/52/61) carry a light of that colour.
+void GatherBuffLights(const ViewMap& vm, int vw, int vh, double t, std::vector<BakedLight>* out) {
+  g_buff_lights = 0;
+  if (!g_set.buff_lights) return;
+  float x0, y0, x1, y1;
+  ToArea(vm, 0, float(vh), &x0, &y0);
+  ToArea(vm, float(vw), 0, &x1, &y1);
+  const float margin = 200;
+  std::vector<std::pair<uint64_t, double>> seen;
+  for (const engine::SpriteInfo& sp : engine::AllSprites()) {
+    if (!sp.alive || sp.area == 0 || sp.x < x0 - margin || sp.x > x1 + margin || sp.y < y0 - margin ||
+        sp.y > y1 + margin + 100)
+      continue;
+    for (const engine::ColorEffectView& e : engine::ColorEffects(sp.id)) {
+      double first = t;
+      for (const auto& p : g_color_seen)
+        if (p.first == e.key) first = p.second;
+      seen.emplace_back(e.key, first);
+      Rgb c;
+      if (!ColorEffectLight(e.opcode, e.param1, e.param2, t - first, t, g_set.buff_light_gain, &c)) continue;
+      BakedLight l;
+      l.x = float(sp.x);
+      l.y = float(sp.y);
+      l.z = 45.0f;
+      l.radius = 170.0f;
+      l.r = c.r;
+      l.g = c.g;
+      l.b = c.b;
+      out->push_back(l);
+      ++g_buff_lights;
+    }
+  }
+  g_color_seen.swap(seen);
+}
+
+std::vector<BakedLight> GatherFx(float ox, float oy, const ViewMap& vm, int vw, int vh) {
+  int n = 0;
+  const engine::EngineGlowDraw* d = engine::GlowDraws(&n);
+  g_glows.clear();
+  g_fx_hits = 0;
+  g_hand_lights = 0;
+  const double t = double(GetTickCount64());
+  std::vector<BakedLight> lights, fixed;
+  for (int i = 0; i < n; ++i) {
+    GlowDraw g;
+    g.x = float(d[i].x) + ox;
+    g.y = float(d[i].y) + oy;
+    g.w = float(d[i].w);
+    g.h = float(d[i].h);
+    if (const HandLight* h = g_set.hand_lights ? FindHandLight(g_hand, d[i].resref) : nullptr) {
+      fixed.push_back(HandLightAt(*h, g, size_t(i), t, g_set.hand_light_gain));
+      ++g_hand_lights;
+      continue;
+    }
+    if (d[i].resref[0]) g.vfx = g_vfx.Find(d[i].resref, d[i].cycle, d[i].frame);
+    if (g.vfx) ++g_fx_hits;
+    static int misses_logged = 0;
+    if (!g.vfx && misses_logged < 40) {
+      ++misses_logged;
+      Log("lighting: glow draw not in the vfx table: '%s' cycle %u frame %u, %dx%d, flags %08X", d[i].resref,
+          d[i].cycle, d[i].frame, d[i].w, d[i].h, d[i].flags);
+    }
+    g_glows.push_back(g);
+    BakedLight l;
+    if (g_set.fx_lights && FxLight(g, 2.6f, &l)) lights.push_back(l);
+  }
+  g_fx_glows = int(g_glows.size());
+  lights = MergeFxLights(std::move(lights), 48.0f, size_t(g_set.fx_budget));
+  for (BakedLight& l : lights) {
+    l.r *= g_set.fx_light_gain;
+    l.g *= g_set.fx_light_gain;
+    l.b *= g_set.fx_light_gain;
+  }
+  g_fx_lights = int(lights.size());
+  if (!lights.empty()) ++g_fx_frames_with_light;
+  g_last_fx = lights;
+  GatherBuffLights(vm, vw, vh, t, &fixed);
+  lights.insert(lights.end(), fixed.begin(), fixed.end());
+  return lights;
+}
+
+// Bright pass of the emissive capture into bloom 0, blur H into 1, blur V back into 0.
+void BloomPass(float to_phys, int vx, int vy) {
+  auto& gl = g_gl;
+  gl.BindFramebuffer(kFramebuffer, g_bloom_fbo[0]);
+  gl.Viewport(0, 0, g_light_w, g_light_h);
+  gl.ClearColor(0, 0, 0, 0);
+  gl.Clear(kColorBit);
+  if (!g_set.bloom || !g_cap_used) return;
+  gl.UseProgram(g_post_prog);
+  gl.Uniform2f(g_pu.vp_origin, float(vx), float(vy));
+  gl.Uniform2f(g_pu.target, float(g_light_w), float(g_light_h));
+  gl.Uniform2f(g_pu.src_size, float(g_light_w), float(g_light_h));
+  gl.Uniform1f(g_pu.threshold, g_set.bloom_threshold);
+  gl.Uniform1f(g_pu.to_phys, to_phys);
+  gl.Uniform1i(g_pu.src, 0);
+  gl.Uniform1i(g_pu.emis, 4);
+  gl.ActiveTexture(kTexture0 + 4);
+  gl.BindTexture(kTex2D, g_emis_tex);
+  gl.ActiveTexture(kTexture0);
+  gl.BindTexture(kTex2D, g_scene_tex);
+  gl.Uniform1i(g_pu.mode, 0);
+  Quad(0, 0, float(g_light_w), float(g_light_h));
+  gl.Uniform1i(g_pu.mode, 1);
+  for (int pass = 0; pass < 2; ++pass) {
+    gl.BindFramebuffer(kFramebuffer, g_bloom_fbo[1 - pass]);
+    gl.BindTexture(kTex2D, g_bloom_tex[pass]);
+    gl.Uniform2f(g_pu.dir, pass == 0 ? 1.0f : 0.0f, pass == 0 ? 0.0f : 1.0f);
+    Quad(0, 0, float(g_light_w), float(g_light_h));
+  }
+  if (g_bloom_req) {  // bloom fbo 0 is bound: the final blur
+    std::vector<float> px(size_t(g_light_w) * g_light_h * 4);
+    gl.PixelStorei(kPackAlign, 4);
+    gl.ReadPixels(0, 0, g_light_w, g_light_h, kRgba, kFloat, px.data());
+    float m = 0;
+    for (size_t i = 0; i < px.size(); i += 4) m = std::max(m, std::max(px[i], std::max(px[i + 1], px[i + 2])));
+    g_bloom_max = m;
+    g_bloom_req = false;
+    Log("lighting: bloom max %.3f over %zu glow draws", m, g_glows.size());
   }
 }
 
@@ -393,7 +677,7 @@ void Compare(const ViewMap& vm, float to_phys, bool has_h) {
       g_cmp_bad, g_cmp_max);
 }
 
-void LightPass(const ViewMap& vm, float to_phys) {
+void LightPass(const ViewMap& vm, float to_phys, const std::vector<BakedLight>& fx) {
   auto& gl = g_gl;
   gl.BindFramebuffer(kFramebuffer, g_light_fbo);
   gl.Viewport(0, 0, g_light_w, g_light_h);
@@ -402,7 +686,9 @@ void LightPass(const ViewMap& vm, float to_phys) {
   else gl.ClearColor(g_ambient.r, g_ambient.g, g_ambient.b, 1);
   gl.Clear(kColorBit);
   g_drawn = 0;
-  if (!g_set.baked_lights || g_scene.lights.empty()) return;
+  const bool baked = g_set.baked_lights && !g_scene.lights.empty();
+  const bool with_fx = !fx.empty() && !g_cmp_req;  // the GPU/CPU compare covers baked lights only
+  if (!baked && !with_fx) return;
 
   const bool has_h = g_set.height_map && g_height_tex && !g_scene.height.empty();
   const bool has_n = g_set.area_normals && g_normal_tex && !g_scene.normal.empty();
@@ -435,20 +721,24 @@ void LightPass(const ViewMap& vm, float to_phys) {
 
   const float amb_luma = Luma(g_ambient);
   const double t = double(GetTickCount64());
-  for (size_t i = 0; i < g_scene.lights.size() && g_drawn < g_set.budget; ++i) {
+  for (size_t i = 0; baked && i < g_scene.lights.size() && g_drawn < g_set.budget; ++i) {
     const BakedLight& l = g_scene.lights[i];
     Rect r;
     if (!FootprintInBuffer(vm, l, to_phys, g_light_w, g_light_h, &r)) continue;
     const float k = LightScale(l, g_set.light_gain, Flicker(l.kind, i, t), amb_luma);
     gl.Uniform4f(g_lu.light_pos, l.x, l.y, l.z, l.radius);
     gl.Uniform3f(g_lu.light_color, l.r * k, l.g * k, l.b * k);
-    gl.Begin(kQuads);
-    gl.Vertex2f(r.x0, r.y0);
-    gl.Vertex2f(r.x1, r.y0);
-    gl.Vertex2f(r.x1, r.y1);
-    gl.Vertex2f(r.x0, r.y1);
-    gl.End();
+    Quad(r.x0, r.y0, r.x1, r.y1);
     ++g_drawn;
+  }
+  // Effect lights: colour already scaled (FxLight, fx_light_gain). Same model, occlusion included.
+  for (size_t i = 0; with_fx && i < fx.size(); ++i) {
+    const BakedLight& l = fx[i];
+    Rect r;
+    if (!FootprintInBuffer(vm, l, to_phys, g_light_w, g_light_h, &r)) continue;
+    gl.Uniform4f(g_lu.light_pos, l.x, l.y, l.z, l.radius);
+    gl.Uniform3f(g_lu.light_color, l.r, l.g, l.b);
+    Quad(r.x0, r.y0, r.x1, r.y1);
   }
   gl.Disable(kBlend);
   if (g_cmp_req && dbg) Compare(vm, to_phys, has_h);
@@ -502,6 +792,9 @@ void Composite() {
     return;
   }
   const ViewMap vm = MakeViewMap(vw, vh, st, ox, oy);
+  g_last_vm = vm;
+  g_last_vw = vw;
+  g_last_vh = vh;
   const bool check = g_check_req;
   if (check) {
     gl.BindFramebuffer(0x8CA8 /*read*/, static_cast<unsigned>(saved.draw_fbo));
@@ -516,9 +809,29 @@ void Composite() {
   gl.ActiveTexture(kTexture0);
   gl.BindTexture(kTex2D, g_scene_tex);
   gl.CopyTexSubImage2D(kTex2D, 0, 0, 0, vx, vy, vw, vh);
-  // 2. light buffer (skipped for the round trip)
+  // 2. glow draws -> effect lights, glow mask, bloom; light buffer (all skipped for the round trip)
   const float to_phys = float(vw) / float(g_light_w);
-  if (g_mode != DebugMode::RoundTrip) LightPass(vm, to_phys);
+  const bool has_h = g_height_tex && !g_scene.height.empty();
+  if (g_mode != DebugMode::RoundTrip) {
+    const std::vector<BakedLight> fx = GatherFx(ox, oy, vm, vw, vh);
+    LightPass(vm, to_phys, fx);
+    BloomPass(to_phys, vx, vy);
+  }
+  if (g_cov_req && g_cap_used && !g_glows.empty()) {
+    std::vector<uint8_t> px(size_t(g_cap_w) * g_cap_h * 4);
+    gl.BindFramebuffer(0x8CA8 /*read*/, g_emis_fbo);
+    gl.PixelStorei(kPackAlign, 1);
+    gl.ReadPixels(0, 0, g_cap_w, g_cap_h, kRgba, kUByte, px.data());
+    long long lit = 0;
+    for (size_t i = 0; i < px.size(); i += 4)
+      if (std::max(px[i], std::max(px[i + 1], px[i + 2])) > 10) ++lit;
+    double rects = 0;
+    for (const GlowDraw& g : g_glows) rects += double(g.w) * g.h / std::fabs(double(vm.ax) * vm.ay);
+    g_cov = rects > 0 ? double(lit) / rects : -1;
+    g_cov_req = false;
+    Log("lighting: emissive capture covers %lld px for %zu draws (%.0f px of frame rects): ratio %.3f", lit,
+        g_glows.size(), rects, g_cov);
+  }
   // 3. composite back into the engine's target
   gl.BindFramebuffer(kFramebuffer, static_cast<unsigned>(saved.draw_fbo));
   gl.Viewport(vx, vy, vw, vh);
@@ -526,21 +839,34 @@ void Composite() {
   gl.UseProgram(g_comp_prog);
   gl.Uniform1i(g_cu.scene, 0);
   gl.Uniform1i(g_cu.light, 1);
+  gl.Uniform1i(g_cu.height, 2);
+  gl.Uniform1i(g_cu.emis, 4);
+  gl.Uniform1i(g_cu.bloom, 5);
   gl.Uniform2f(g_cu.vp_origin, float(vx), float(vy));
   gl.Uniform2f(g_cu.vp_size, float(vw), float(vh));
   gl.Uniform1i(g_cu.mode, static_cast<int>(g_mode));
   gl.Uniform1f(g_cu.keep, g_set.keep);
   gl.Uniform1f(g_cu.max_light, g_set.max_light);
+  gl.Uniform4f(g_cu.map, vm.ax, vm.ay, vm.bx, vm.by);
+  gl.Uniform1f(g_cu.texel, float(g_scene.height.texel > 0 ? g_scene.height.texel : 2));
+  gl.Uniform1i(g_cu.has_height, has_h ? 1 : 0);
+  gl.Uniform1f(g_cu.emis_keep, g_set.emissive && g_cap_used ? g_set.emissive_keep : 0.0f);
+  gl.Uniform1f(g_cu.bloom_strength, g_set.bloom && g_cap_used ? g_set.bloom_strength : 0.0f);
+  const Atmosphere atmo;
+  gl.Uniform4f(g_cu.atmo, atmo.haze, atmo.desat, atmo.contrast, g_set.atmosphere ? g_set.atmosphere_strength : 0.0f);
+  const Rgb hz = HazeColour(g_scene, g_ambient);
+  gl.Uniform3f(g_cu.haze_colour, hz.r, hz.g, hz.b);
+  gl.ActiveTexture(kTexture0 + 5);
+  gl.BindTexture(kTex2D, g_bloom_tex[0]);
+  gl.ActiveTexture(kTexture0 + 4);
+  gl.BindTexture(kTex2D, g_emis_tex);
+  gl.ActiveTexture(kTexture0 + 2);
+  gl.BindTexture(kTex2D, has_h ? g_height_tex : 0);
   gl.ActiveTexture(kTexture0 + 1);
   gl.BindTexture(kTex2D, g_light_tex);
   gl.ActiveTexture(kTexture0);
   gl.BindTexture(kTex2D, g_scene_tex);
-  gl.Begin(kQuads);
-  gl.Vertex2f(-1, -1);
-  gl.Vertex2f(1, -1);
-  gl.Vertex2f(1, 1);
-  gl.Vertex2f(-1, 1);
-  gl.End();
+  Quad(-1, -1, 1, 1);
 
   if (check) {
     gl.BindFramebuffer(0x8CA8 /*read*/, static_cast<unsigned>(saved.draw_fbo));
@@ -571,13 +897,80 @@ void Composite() {
   }
 }
 
-void PreDraw() { engine::ArmWorldComposite(); }
+void PreDraw() {
+  engine::ArmWorldComposite();
+  g_cap_used = false;
+}
+
+int EmitDecision(const char* res, uint16_t cycle, uint16_t frame, uint32_t flags) {
+  if (g_mode == DebugMode::Off || g_mode == DebugMode::RoundTrip) return 0;  // debug "vanilla" modes
+  if (g_set.hand_lights && FindHandLight(g_hand, res)) return 2;           // e.g. Ignus: light, no glow mask
+  if (!(g_set.emissive || g_set.bloom || g_set.fx_lights)) return 0;
+  const bool glow = IsGlowBlend(flags);
+  const bool listed = !glow && Emits(g_emit_names, res, 0);
+  static int logged = 0;
+  if ((glow || listed) && logged < 40) {
+    ++logged;
+    Log("lighting: emit '%s' cycle %u frame %u flags %08X (%s)", res, cycle, frame, flags, glow ? "additive" : "listed");
+  }
+  return (glow || listed) ? 1 : 0;
+}
+
+// Binds the emissive buffer (cleared on the first capture of the frame) as the draw target.
+bool CaptureBegin() {
+  if (!g_ready || !(g_set.emissive || g_set.bloom)) return false;
+  auto& gl = g_gl;
+  int vp[4];
+  gl.GetIntegerv(kViewport, vp);
+  const int w = vp[0] + vp[2], h = vp[1] + vp[3];
+  if (w <= 0 || h <= 0 || w > 16384 || h > 16384) return false;
+  gl.GetIntegerv(0x8CA6 /*draw fbo*/, &g_cap_prev_fbo);
+  if (w != g_cap_w || h != g_cap_h) {
+    int prev_read = 0;
+    gl.GetIntegerv(0x8CAA /*read fbo*/, &prev_read);
+    int active = 0, bound = 0;
+    gl.GetIntegerv(0x84E0, &active);
+    gl.ActiveTexture(kTexture0);
+    gl.GetIntegerv(0x8069, &bound);
+    gl.BindTexture(kTex2D, g_emis_tex);
+    gl.TexImage2D(kTex2D, 0, kRgba8, w, h, 0, kRgba, kUByte, nullptr);
+    gl.BindTexture(kTex2D, unsigned(bound));
+    gl.ActiveTexture(unsigned(active));
+    gl.BindFramebuffer(kFramebuffer, g_emis_fbo);
+    gl.FramebufferTexture2D(kFramebuffer, kColorAttach0, kTex2D, g_emis_tex, 0);
+    const bool complete = gl.CheckFramebufferStatus(kFramebuffer) == kFbComplete;
+    gl.BindFramebuffer(0x8CA8 /*read*/, unsigned(prev_read));  // GL_FRAMEBUFFER bound both: restore read
+    if (!complete) {
+      Log("lighting: emissive capture %dx%d incomplete", w, h);
+      gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_cap_prev_fbo));
+      return false;
+    }
+    g_cap_w = w;
+    g_cap_h = h;
+  }
+  gl.BindFramebuffer(0x8CA9 /*draw*/, g_emis_fbo);
+  if (!g_cap_used) {
+    float cc[4];
+    gl.GetFloatv(0x0C22, cc);
+    const bool sc = gl.IsEnabled(kScissor) != 0;
+    if (sc) gl.Disable(kScissor);
+    gl.ClearColor(0, 0, 0, 0);
+    gl.Clear(kColorBit);
+    gl.ClearColor(cc[0], cc[1], cc[2], cc[3]);
+    if (sc) gl.Enable(kScissor);
+    g_cap_used = true;
+  }
+  ++g_cap_draws;
+  return true;
+}
+
+void CaptureEnd() { g_gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_cap_prev_fbo)); }
 
 // --- Lua probes ------------------------------------------------------------------------------------
-// PSTF_LightDebug(mode) -> mode name. 0 lit, 1 light buffer, 2 round trip, 3 falloff, 4 off.
+// PSTF_LightDebug(mode) -> mode name. 0 lit, 1 light buffer, 2 round trip, 3 falloff, 4 off, 5 emissive.
 int __cdecl LuaDebug(engine::LuaState* L) {
   const int m = static_cast<int>(engine::LuaNumberArg(L, 1, -1));
-  if (m >= 0 && m <= 4) g_mode = static_cast<DebugMode>(m);
+  if (m >= 0 && m <= 5) g_mode = static_cast<DebugMode>(m);
   Log("lua: PSTF_LightDebug(%d) -> %s", m, DebugName(g_mode));
   engine::LuaPushString(L, DebugName(g_mode));
   return 1;
@@ -630,11 +1023,113 @@ int __cdecl LuaCompareResult(engine::LuaState* L) {
   return 4;
 }
 
+// PSTF_LightFx() -> glow draws, table hits, effect lights (this frame), frames with an effect light,
+// and the strongest effect light's drawn point x, y (area px; -1 without one). Logs a summary.
+// PSTF_LightBloom() -> brightest bloom texel measured on the last frame with glow draws (asks for a new
+// measurement on the next such frame).
+int __cdecl LuaBloom(engine::LuaState* L) {
+  engine::LuaPushNumber(L, g_bloom_max);
+  g_bloom_req = true;
+  return 1;
+}
+
+// PSTF_LightAtmo() -> share of the last frame's pixels the atmosphere changes (t > 0.01, every 8th
+// pixel, CPU from the height map), mean t over those. Logs.
+int __cdecl LuaAtmo(engine::LuaState* L) {
+  const Atmosphere a;
+  int n = 0, hit = 0;
+  double sum = 0;
+  for (int y = 0; y < g_last_vh; y += 8)
+    for (int x = 0; x < g_last_vw; x += 8) {
+      float mx, my;
+      ToArea(g_last_vm, x + 0.5f, y + 0.5f, &mx, &my);
+      const float t = AtmosphereT(a, HeightAt(g_scene.height, mx, my)) * g_set.atmosphere_strength;
+      ++n;
+      if (g_set.atmosphere && t > 0.01f) {
+        ++hit;
+        sum += t;
+      }
+    }
+  const double share = n ? double(hit) / n : 0.0, mean = hit ? sum / hit : 0.0;
+  Log("lua: PSTF_LightAtmo -> %s: %.3f of the view hazed, mean t %.3f", g_wed.c_str(), share, mean);
+  engine::LuaPushNumber(L, share);
+  engine::LuaPushNumber(L, mean);
+  return 2;
+}
+
+// PSTF_LightSet(name, value) -> 1 if known: runtime toggles for A/B tests (ini names; percents as 0..300).
+int __cdecl LuaSet(engine::LuaState* L) {
+  const std::string k = engine::LuaStringArg(L, 1);
+  const double v = engine::LuaNumberArg(L, 2, 0);
+  bool ok = true;
+  if (k == "atmosphere") g_set.atmosphere = v != 0;
+  else if (k == "atmosphere_strength") g_set.atmosphere_strength = float(v) / 100.0f;
+  else if (k == "bloom") g_set.bloom = v != 0;
+  else if (k == "bloom_strength") g_set.bloom_strength = float(v) / 100.0f;
+  else if (k == "emissive") g_set.emissive = v != 0;
+  else if (k == "fx_lights") g_set.fx_lights = v != 0;
+  else if (k == "baked_lights") g_set.baked_lights = v != 0;
+  else if (k == "occlusion") g_set.occlusion = v != 0;
+  else if (k == "light_gain") g_set.light_gain = float(v) / 100.0f;
+  else if (k == "ambient") {
+    g_set.ambient = float(v) / 100.0f;
+    g_ambient = Ambient(g_area_type, g_set.ambient, &g_scene, g_set.key_light);
+  } else ok = false;
+  Log("lua: PSTF_LightSet(%s, %g) -> %d", k.c_str(), v, ok ? 1 : 0);
+  engine::LuaPushNumber(L, ok ? 1 : 0);
+  return 1;
+}
+
+// PSTF_LightTrace(prefix): log how cells whose resref starts with prefix are drawn (path, flags).
+int __cdecl LuaTrace(engine::LuaState* L) {
+  const std::string p = engine::LuaStringArg(L, 1);
+  engine::TraceDraws(p.c_str());
+  engine::LuaPushNumber(L, 1);
+  return 1;
+}
+
+// PSTF_LightCoverage() -> last measured capture coverage (lit capture px / frame-rect px; -1 none yet) and
+// asks for a new measurement. A per-pixel capture stays well below 1; the old rect mask was exactly 1.
+int __cdecl LuaCoverage(engine::LuaState* L) {
+  engine::LuaPushNumber(L, g_cov);
+  engine::LuaPushNumber(L, static_cast<double>(g_cap_draws));
+  g_cov_req = true;
+  return 2;
+}
+
+int __cdecl LuaFx(engine::LuaState* L) {
+  float lx = -1, ly = -1;
+  if (!g_last_fx.empty()) {
+    lx = g_last_fx[0].x;
+    ly = g_last_fx[0].y - g_last_fx[0].z;
+  }
+  uint64_t rt = 0, rtw = 0, r3 = 0;
+  uint32_t fl = 0;
+  engine::GlowStats(&rt, &rtw, &r3, &fl);
+  static int calls = 0;
+  if (g_fx_glows > 0 || ++calls % 50 == 1)
+  Log("lua: PSTF_LightFx -> glows %d hits %d lights %d frames %llu dropped %d top %.0f,%.0f (RenderTexture %llu, in "
+      "world %llu, Render3d %llu, flags %08X)",
+      g_fx_glows, g_fx_hits, g_fx_lights, static_cast<unsigned long long>(g_fx_frames_with_light),
+      engine::GlowDrawsDropped(), lx, ly, static_cast<unsigned long long>(rt), static_cast<unsigned long long>(rtw),
+      static_cast<unsigned long long>(r3), fl);
+  engine::LuaPushNumber(L, g_fx_glows);
+  engine::LuaPushNumber(L, g_fx_hits);
+  engine::LuaPushNumber(L, g_fx_lights);
+  engine::LuaPushNumber(L, static_cast<double>(g_fx_frames_with_light));
+  engine::LuaPushNumber(L, lx);
+  engine::LuaPushNumber(L, ly);
+  engine::LuaPushNumber(L, g_hand_lights);
+  engine::LuaPushNumber(L, g_buff_lights);
+  return 8;
+}
+
 // PSTF_LightShot(path) -> "" or the error: saves the last presented frame (half-size BMP).
 int __cdecl LuaShot(engine::LuaState* L) {
   const std::string path = engine::LuaStringArg(L, 1);
   const std::string err = SaveScreenshot(path);
-  Log("lua: PSTF_LightShot(%s) -> %s", path.c_str(), err.empty() ? "ok" : err.c_str());
+  Log("lua: PSTF_LightShot(%s) -> %s (read fbo was %d)", path.c_str(), err.empty() ? "ok" : err.c_str(),
+      g_last_read_fbo);
   engine::LuaPushString(L, err.c_str());
   return 1;
 }
@@ -660,13 +1155,54 @@ void InstallLighting(const IniMap& ini) {
   g_set.normal_strength = pct("lighting.normal_strength", 80, 0, 100);
   g_set.max_light = pct("lighting.max_light", 125, 100, 300);
   g_set.keep = pct("lighting.highlight_keep", 60, 0, 100);
+  g_set.emissive = IniBool(ini, "lighting.emissive", true);
+  g_set.emissive_keep = pct("lighting.emissive_keep", 80, 0, 100);
+  g_set.bloom = IniBool(ini, "lighting.bloom", true);
+  g_set.bloom_strength = pct("lighting.bloom_strength", 35, 0, 200);
+  g_set.bloom_threshold = pct("lighting.bloom_threshold", 45, 0, 100);
+  g_set.fx_lights = IniBool(ini, "lighting.fx_lights", true);
+  g_set.fx_light_gain = pct("lighting.fx_light_gain", 100, 0, 300);
+  g_set.fx_budget = std::max(0, std::min(64, IniInt(ini, "lighting.fx_budget", 24)));
+  g_set.atmosphere = IniBool(ini, "lighting.atmosphere", true);
+  g_set.hand_lights = IniBool(ini, "lighting.hand_lights", true);
+  g_set.hand_light_gain = pct("lighting.hand_light_gain", 150, 0, 300);
+  g_set.buff_lights = IniBool(ini, "lighting.buff_lights", true);
+  g_set.buff_light_gain = pct("lighting.buff_light_gain", 70, 0, 300);
+  g_set.atmosphere_strength = pct("lighting.atmosphere_strength", 100, 0, 300);
   int dbg = IniInt(ini, "lighting.debug", 0);
   if (const char* e = std::getenv("PSTF_LIGHT_DEBUG")) dbg = std::atoi(e);
-  if (dbg >= 0 && dbg <= 4) g_mode = static_cast<DebugMode>(dbg);
+  if (dbg >= 0 && dbg <= 5) g_mode = static_cast<DebugMode>(dbg);
 
   if (!engine::InstallWorldComposite(&Composite) || !engine::InstallWorldPreDraw(&PreDraw)) {
     Log("lighting: off, world pass sites do not match");
     return;
+  }
+  // Phase 4: glow draws need the sprite hooks; without them the rest still runs.
+  const bool want_glow = g_set.emissive || g_set.bloom || g_set.fx_lights;
+  if (want_glow && !engine::InstallGlowGather()) {
+    Log("lighting: glow hooks do not match: no emissive, bloom or effect lights");
+    g_set.emissive = g_set.bloom = g_set.fx_lights = false;
+  }
+  {
+    std::vector<uint8_t> buf;
+    const std::string path = std::string(DataDir()) + "\\assets\\vfx\\vfxemit.txt";
+    if (ReadFile(path, &buf)) g_emit_names = ParseEmitList(std::string(buf.begin(), buf.end()));
+    Log("lighting: %zu effect BAMs emit besides the additive draws", g_emit_names.size());
+  }
+  {
+    std::vector<uint8_t> buf;
+    const std::string path = std::string(DataDir()) + "\\assets\\vfx\\vfxlight.tsv";
+    if (ReadFile(path, &buf)) g_hand = ParseHandLights(std::string(buf.begin(), buf.end()));
+    Log("lighting: %zu hand lights (vfxlight.tsv)", g_hand.size());
+  }
+  engine::SetEmissiveCallbacks(&EmitDecision, &CaptureBegin, &CaptureEnd);
+  if (g_set.fx_lights) {
+    std::vector<uint8_t> buf;
+    const std::string path = std::string(DataDir()) + "\\assets\\vfx\\vfxauto.tsv";
+    if (ReadFile(path, &buf) && ParseVfxTable(std::string(buf.begin(), buf.end()), &g_vfx))
+      Log("lighting: vfx table %zu frames", g_vfx.rows.size());
+    else
+      Log("lighting: no vfx table at %s: glow draws give no light (tools/vfxscan.py run)", path.c_str());
   }
   dev::AddLuaFunction("PSTF_LightDebug", &LuaDebug);
   dev::AddLuaFunction("PSTF_LightState", &LuaState);
@@ -675,6 +1211,12 @@ void InstallLighting(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_LightShot", &LuaShot);
   dev::AddLuaFunction("PSTF_LightCompare", &LuaCompare);
   dev::AddLuaFunction("PSTF_LightCompareResult", &LuaCompareResult);
+  dev::AddLuaFunction("PSTF_LightFx", &LuaFx);
+  dev::AddLuaFunction("PSTF_LightBloom", &LuaBloom);
+  dev::AddLuaFunction("PSTF_LightAtmo", &LuaAtmo);
+  dev::AddLuaFunction("PSTF_LightSet", &LuaSet);
+  dev::AddLuaFunction("PSTF_LightTrace", &LuaTrace);
+  dev::AddLuaFunction("PSTF_LightCoverage", &LuaCoverage);
   Log("lighting: installed (mode %s, gain %.2f, ambient %.2f, occlusion %d x%d, normals %d)", DebugName(g_mode),
       g_set.light_gain, g_set.ambient, g_set.occlusion ? 1 : 0, g_set.occlusion_steps, g_set.area_normals ? 1 : 0);
 }

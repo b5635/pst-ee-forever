@@ -158,6 +158,21 @@ int wmain(int argc, wchar_t** argv) {
   call_to(sym::kRvaEndScaledFlushCall, sym::kImageBase + sym::kRvaDrawFlush, "DrawEndScaled_GL -> flush");
   rip(sym::kRvaWorldStStore, 7, 3, sym::kVaWorldSt, "uST slot 1");
   rip(sym::kRvaProgramTableLea, 7, 3, sym::kVaProgramTable, "program table");
+  // Phase 4: the cell renderers call RenderTexture (1404ADDC0 / 1404AD630 / 1404AECF0 -> 1404AEA60).
+  {
+    int calls = 0;
+    for (uint32_t base : {sym::kRvaRender3d, sym::kRvaFxRender3d, 0x4AECF0u})
+      for (uint32_t off = 0; off < 0x500; ++off) {
+        const uint8_t* p = img.At(base + off, 5);
+        if (!p || p[0] != 0xE8) continue;
+        auto t = Rel32Target(sym::kImageBase + base + off, p);
+        if (t && *t == sym::kImageBase + sym::kRvaRenderTexture) {
+          ++calls;
+          break;
+        }
+      }
+    if (calls != 3) Fail("Render3d/FXRender3d/FXBltToBack wrapper do not all call RenderTexture", "glow gather");
+  }
 
   call_to(sym::kRvaAreaRenderCall, sym::kVaAreaRender, "RenderZoomed -> CGameArea::Render");
   call_to(sym::kRvaRenderActionsLine, sym::kImageBase + sym::kRvaDrawLine2d, "RenderActions -> DrawLine2d");

@@ -290,3 +290,169 @@ TEST_CASE("lighting: framebuffer <-> area mapping from the engine's uST (FBO bra
   ToArea(m2, 0, 768, &x, &y);
   CHECK(Near(x, 300, 1e-2) && Near(y, 400, 1e-2));
 }
+
+TEST_CASE("lighting fx: glow blend flags (RenderTexture 1404AEAE0)") {
+  CHECK(!IsGlowBlend(0));            // SRC_ALPHA, 1-SRC_ALPHA
+  CHECK(IsGlowBlend(0x8));           // 1-DST_COLOR, ONE
+  CHECK(IsGlowBlend(0x200));         // DST_COLOR, ONE
+  CHECK(IsGlowBlend(0x208));         // SRC_COLOR, ONE
+  CHECK(IsGlowBlend(0x208 | 0x100)); // other bits do not matter
+  CHECK(!IsGlowBlend(0x208 | 0x20000000));  // bit 29: multiply
+  CHECK(!IsGlowBlend(0x40000000));   // the BAM v2 multiply flag is not a glow
+  CHECK(sym::kRenderTextureBlendBytes[1] == 0x08 && sym::kRenderTextureBlendBytes[2] == 0x02);
+  CHECK(sym::kRenderTextureCopy == 5 && sym::kRenderTextureBytes[0] == 0x4C);  // mov [rsp+20h], r9: 5 bytes
+  CHECK(sym::kRender3dCopy == 6 && sym::kFxRender3dCopy == 6);  // 40 5x, 5x, 5x, 41 5x
+}
+
+TEST_CASE("lighting fx: vfx table parse and lookup") {
+  VfxTable t;
+  CHECK(ParseVfxTable("# header\nSPFIRE\t0\t0\t1.000\t0.500\t0.100\t0.2500\t10.0\t20.0\t42\n"
+                      "SPFIRE\t0\t1\t1\t0.6\t0.2\t0.3\t11\t21\t40\n"
+                      "spark\t2\t7\t0.2\t0.4\t1\t0.1\t3\t4\t5\nTOOLONGNAME 0 0 1 1 1 1 1 1 1\nbad line\n",
+                      &t));
+  CHECK(t.rows.size() == 3);
+  const VfxFrame* f = t.Find("SPFIRE", 0, 1);
+  CHECK(f && Near(f->g, 0.6) && Near(f->strength, 0.3) && f->cx == 11.0f && f->bright == 40);
+  CHECK(t.Find("spfire", 0, 0) && Near(t.Find("spfire", 0, 0)->b, 0.1));  // case-insensitive
+  CHECK(t.Find("SPARK", 2, 7) && t.Find("SPARK", 2, 7)->bright == 5);
+  CHECK(!t.Find("SPFIRE", 1, 0) && !t.Find("SPFIRE", 0, 2) && !t.Find("SPFIR", 0, 0));
+  CHECK(VfxKey("AB", 0, 1) != VfxKey("AB", 1, 0) && VfxKey("AB", 0, 0) != VfxKey("BA", 0, 0));
+  VfxTable e;
+  CHECK(!ParseVfxTable("# nothing\n", &e));
+}
+
+TEST_CASE("lighting fx: effect light from a glow draw (GemRB AddGlowLight numbers)") {
+  VfxFrame v;
+  v.r = 1.0f;
+  v.g = 0.5f;
+  v.b = 0.25f;
+  v.strength = 0.2f;
+  v.cx = 30;
+  v.cy = 20;
+  GlowDraw d;
+  d.x = 100;
+  d.y = 200;
+  d.w = 60;
+  d.h = 80;
+  d.vfx = &v;
+  BakedLight l;
+  CHECK(FxLight(d, 2.6f, &l));
+  CHECK(Near(l.x, 130) && Near(l.y, 280) && Near(l.z, 60));  // ground = frame bottom, drawn on (130, 220)
+  CHECK(Near(l.radius, 104));                                 // 80 * 1.3
+  CHECK(Near(l.r, 0.52) && Near(l.g, 0.26) && Near(l.b, 0.13));  // k = 0.2 * 2.6
+  v.strength = 0.01f;
+  CHECK(!FxLight(d, 2.6f, &l));  // too faint
+  v.strength = 0.02f;
+  CHECK(FxLight(d, 2.6f, &l) && Near(l.r, 0.12));  // k floor 0.12
+  v.strength = 1.0f;
+  CHECK(FxLight(d, 2.6f, &l) && Near(l.r, 0.9));   // k cap 0.9
+  d.w = d.h = 10;
+  CHECK(FxLight(d, 2.6f, &l) && l.radius == 60.0f);  // radius floor
+  d.w = d.h = 1000;
+  CHECK(FxLight(d, 2.6f, &l) && l.radius == 380.0f);  // radius cap
+  d.vfx = nullptr;
+  CHECK(!FxLight(d, 2.6f, &l));  // not in the table: no light
+}
+
+TEST_CASE("lighting fx: merge close effect lights, keep the strongest within budget") {
+  auto mk = [](float x, float y, float r, float rad) {
+    BakedLight l;
+    l.x = x;
+    l.y = y;
+    l.z = 0;
+    l.r = l.g = l.b = r;
+    l.radius = rad;
+    return l;
+  };
+  std::vector<BakedLight> in = {mk(0, 0, 0.2f, 100), mk(10, 10, 0.5f, 60), mk(500, 0, 0.1f, 60), mk(900, 0, 0.9f, 200)};
+  auto out = MergeFxLights(in, 48.0f, 8);
+  CHECK(out.size() == 3);
+  CHECK(Near(out[0].r, 0.9) && out[0].x == 900.0f);  // strongest first
+  CHECK(Near(out[1].r, 0.7) && out[1].x == 10.0f && out[1].radius == 100.0f);  // 0.5 + 0.2 merged
+  auto two = MergeFxLights(in, 48.0f, 2);
+  CHECK(two.size() == 2 && two[1].x == 10.0f);
+  auto cap = MergeFxLights({mk(0, 0, 1.0f, 60), mk(1, 1, 1.0f, 60)}, 48.0f, 4);
+  CHECK(cap.size() == 1 && cap[0].r == 1.5f);
+}
+
+TEST_CASE("lighting bloom: soft knee (GemRB PostFS, knee 0.18)") {
+  CHECK(SoftKnee(0.1f, 0.45f, 0.18f) == 0.0f);                  // far below: nothing
+  CHECK(Near(SoftKnee(1.0f, 0.45f, 0.18f), 0.55));              // above the knee: (l - t) / l
+  CHECK(Near(SoftKnee(0.45f, 0.45f, 0.18f), 0.1, 1e-3));  // at t: k^2/(4k) / l = 0.045 / 0.45
+  CHECK(SoftKnee(0.5f, 0.45f, 0.18f) > SoftKnee(0.4f, 0.45f, 0.18f));
+}
+
+TEST_CASE("lighting atmosphere v1: ramp by height, haze colour from the key light") {
+  Atmosphere a;
+  CHECK(AtmosphereT(a, 0) == 0.0f && AtmosphereT(a, 200) == 0.0f && AtmosphereT(a, 1024) == 1.0f);
+  CHECK(Near(AtmosphereT(a, 612), 0.5));
+  const Rgb c{0.8f, 0.2f, 0.4f}, hz{0.5f, 0.5f, 0.6f};
+  const Rgb flat = ApplyAtmosphere(a, c, 100, hz, 1.0f);
+  CHECK(flat.r == c.r && flat.g == c.g && flat.b == c.b);  // floor level: untouched
+  const Rgb hi = ApplyAtmosphere(a, c, 1024, hz, 1.0f);
+  // t = 1: r = 0.8 -> desat (l = 0.4022): 0.76818; contrast (v-0.5)*0.95+0.5: 0.75477; haze + (0.5-v)*0.06:
+  // 0.73948
+  CHECK(Near(hi.r, 0.73948, 1e-4));
+  // black void at the saturated height stays exactly black (no contrast lift, no haze)
+  const Rgb black = ApplyAtmosphere(a, {0, 0, 0}, 1024, hz, 1.0f);
+  CHECK(black.r == 0.0f && black.g == 0.0f && black.b == 0.0f);
+  const Rgb off = ApplyAtmosphere(a, c, 1024, hz, 0.0f);
+  CHECK(off.r == c.r);
+  AreaScene s;
+  const Rgb amb{0.6f, 0.6f, 0.6f};
+  CHECK(HazeColour(s, amb).r == 0.6f);  // no key line: the ambient
+  s.has_key = true;
+  s.key_ambient[0] = 1.2f;
+  s.key_ambient[1] = 1.0f;
+  s.key_ambient[2] = 0.8f;
+  const Rgb h = HazeColour(s, amb);  // key hue at the ambient luma 0.6: luma(key) = 1.037
+  CHECK(Near(h.r, 1.2 / 1.037 * 0.6, 1e-3) && Near(h.b, 0.8 / 1.037 * 0.6, 1e-3));
+}
+
+TEST_CASE("lighting fx: emit list (vfxemit.txt) and the emit rule") {
+  const auto names = ParseEmitList("# header\r\nA003INTR\r\ns031axst\nS031AXST\n\nTOOLONGNAME\n  \nSPMAGMIS\n");
+  CHECK(names.size() == 3);  // case-folded, deduplicated, comments/blank/too long skipped
+  CHECK(PackResRef("a003intr") == PackResRef("A003INTR") && PackResRef("AB") != PackResRef("ABC"));
+  CHECK(Emits(names, "A003INTR", 0x1));         // normal blend, listed (CGameSprite::ApplyCastingEffect)
+  CHECK(Emits(names, "s031axst", 0x30091));     // listed, any blend
+  CHECK(!Emits(names, "DSTDDKKB", 0x30091));    // a creature, normal blend: no
+  CHECK(Emits(names, "DSTDDKKB", 0x208));       // anything additive emits
+  CHECK(!Emits(names, "", 0x1) && Emits(names, "", 0x200));  // unknown cell: only by blend
+  CHECK(!Emits(names, "GRNDGLOW", 0x208 | 0x20000000));      // multiply is not a glow
+}
+
+TEST_CASE("lighting: hand light table (Ignus) and pattern match") {
+  const auto t = ParseHandLights("# c\n????IGYB 1.0 0.55 0.22 240 55 fire 1.0\nBAD 1 1\nlongpattern1 1 1 1 1 1 fire\n"
+                                 "x?z 2 -1 0.5 5 10 nope\nSPARK 0.5 0.5 1 900 20 magic\n");
+  CHECK(t.size() == 2);
+  CHECK(MatchPattern("????IGYB", "CSTDIGYB") && MatchPattern("????IGYB", "cat1igyb"));
+  CHECK(!MatchPattern("????IGYB", "CSTDIGY") && !MatchPattern("????IGYB", "CSTDMRTB") && !MatchPattern("????IGYB", ""));
+  CHECK(MatchPattern("SPARK", "SPARK") && !MatchPattern("SPARK", "SPARKS") && !MatchPattern("SPARK", "SPAR"));
+  CHECK(FindHandLight(t, "DWLKIGYB") == &t[0] && !FindHandLight(t, "DSTDDKKB") && !FindHandLight(t, ""));
+  CHECK(t[1].light.radius == 600.0f && t[1].light.kind == Kind::Magic);  // radius clamped
+  GlowDraw d;
+  d.x = 100;
+  d.y = 200;
+  d.w = 60;
+  d.h = 90;
+  const BakedLight l = HandLightAt(t[0], d, 0, 0.0, 1.0f);  // fire flicker at t=0, index 0: 0.88
+  CHECK(Near(l.x, 130) && Near(l.y, 290) && Near(l.z, 55) && Near(l.radius, 240));
+  CHECK(Near(l.r, 0.88) && Near(l.g, 0.55 * 0.88) && Near(l.b, 0.22 * 0.88, 1e-4));
+}
+
+TEST_CASE("lighting: colour effect lights (ops 8, 9, 52, 61, 353)") {
+  Rgb c;
+  // op 8 solid: param1 0xBBGGRR00 = red 0xFF, green 0x80, blue 0
+  CHECK(ColorEffectLight(8, 0x0080FF00u, 0, 0, 0, 1.0f, &c) && Near(c.r, 1.0) && Near(c.g, 128 / 255.0) && c.b == 0.0f);
+  CHECK(ColorEffectLight(52, 0xFF000000u, 0, 0, 0, 0.5f, &c) && Near(c.b, 0.5) && c.r == 0.0f);
+  CHECK(ColorEffectLight(9, 0x00FF0000u, 0, 0, 375.0, 1.0f, &c) && Near(c.g, 1.0));    // pulse peak (1/4 cycle)
+  CHECK(ColorEffectLight(9, 0x00FF0000u, 0, 0, 1125.0, 1.0f, &c) && Near(c.g, 0.1));   // trough
+  // op 61 fade: speed 10 (high word of param2) -> 255/10 steps * 66.7 ms = 1700.9 ms
+  CHECK(ColorEffectLight(61, 0x0000FF00u, 10u << 16, 850.45, 0, 1.0f, &c) && Near(c.r, 0.5, 1e-3));
+  CHECK(!ColorEffectLight(61, 0x0000FF00u, 10u << 16, 1800, 0, 1.0f, &c));             // faded out
+  // op 353 tint screen: colour in the low bytes (SPWI406 0x808080), rises and falls over 1.5 s
+  CHECK(ColorEffectLight(353, 0x808080u, 5, 750, 0, 1.0f, &c) && Near(c.r, 128 / 255.0) && Near(c.b, 128 / 255.0));
+  CHECK(!ColorEffectLight(353, 0x808080u, 5, 1600, 0, 1.0f, &c));
+  CHECK(!ColorEffectLight(8, 0, 0, 0, 0, 1.0f, &c));     // black: no light
+  CHECK(!ColorEffectLight(51, 0x00FF0000u, 0, 0, 0, 1.0f, &c));  // solid tint darkens: no light
+}

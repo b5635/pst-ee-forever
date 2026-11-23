@@ -506,6 +506,24 @@ inline constexpr uint8_t kAreaTypeReadBytes[] = {0x45, 0x0F, 0xB7, 0x47, 0x40}; 
 constexpr uint32_t kRvaAreaHeaderCopy = 0x1A1AE1, kRvaAreaTypeRead = 0x1A1E48;
 constexpr uint32_t kOffAreaWed = 0x0, kOffAreaType = 0x40;
 
+// --- lighting phase 4: glow draws -------------------------------------------------------------------
+// Every BAM v1 world sprite (creatures, VVCs, projectiles, area animations) ends in
+// CVidCell::RenderTexture(x, y, CRect const& frame, CSize, CRect const& clip, CRect const&, uint flags)
+// (lin 687BA0 / win 1404AEA60; static, x/y = frame top-left in draw space, frame = {0,0,w,h}).
+// Blend from flags (win 1404AEAE0 `and eax,208h`, lin table unk_C08260 -> GL): 0 (SRC_ALPHA,1-SRC_ALPHA),
+// 8 (1-DST_COLOR,ONE), 0x200 (DST_COLOR,ONE), 0x208 (SRC_COLOR,ONE); bit 29 (1404AEB21 `bt edi,1Dh`)
+// then sets (DST_COLOR,1-SRC_ALPHA). Callers: CVidCell::Render3d (lin 688270 / win 1404ADDC0),
+// CVidCell::FXRender3d (lin 6889E0 / win 1404AD630), FXBltToBack's wrapper 1404AECF0 (no cell).
+// BAM v2 (PVRZ) frames go through sub_6873C0 instead; its 0x40000000 flag is MULTIPLY (6877C0: edi 2,
+// esi 7), not a glow: VISUALS_PLAN §1 was wrong about it.
+inline constexpr uint8_t kRenderTextureBytes[] = {0x4C, 0x89, 0x4C, 0x24, 0x20, 0x55, 0x53, 0x56};
+inline constexpr uint8_t kRender3dBytes[] = {0x40, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55};
+inline constexpr uint8_t kFxRender3dBytes[] = {0x40, 0x55, 0x53, 0x57, 0x41, 0x54, 0x41, 0x55};
+inline constexpr uint8_t kRenderTextureBlendBytes[] = {0x25, 0x08, 0x02, 0x00, 0x00};  // and eax, 208h
+constexpr uint32_t kRvaRenderTexture = 0x4AEA60, kRvaRender3d = 0x4ADDC0, kRvaFxRender3d = 0x4AD630;
+constexpr uint32_t kRvaRenderTextureBlend = 0x4AEAE0;
+constexpr size_t kRenderTextureCopy = 5, kRender3dCopy = 6, kFxRender3dCopy = 6;  // whole instructions
+
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 // --- round clock for effects (turn-based: effects advance one round at their owner's turn) -------
 // CGameSprite::ProcessEffectList (lin 4E21F0, win 1404231E0) runs the persistent effects (poison,
@@ -538,6 +556,16 @@ constexpr uint32_t kRvaEffTypeStore = 0x209436;
 constexpr uint32_t kOffSpriteRegenStamp = 0x4B6C, kOffSpriteEffTimed = 0x4718, kOffSpriteEffEquip = 0x46C8;
 constexpr uint32_t kOffSpriteForceEffects = 0x48BC, kOffEffType = 0x24, kOffEffTick = 0x28;
 constexpr uint32_t kOffEffOpcode = 0x10, kOffEffSpriteSel = 0x4BBC;
+// CGameEffect param1/param2: the effect record follows the EFF v2 layout from +8 (opcode +0x10 = v2 0x08,
+// timing +0x24 = v2 0x1C, both confirmed on Windows above), so param1 = +0x1C (v2 0x14), param2 = +0x20
+// (v2 0x18). Linux CGameEffectColorGlowPulse::ApplyEffect (1D96D0) reads the colour as
+// `*((int*)this + 7) >> 8` (+0x1C, 0xBBGGRR00) and the speed/location from `*((_DWORD*)this + 8)` (+0x20).
+// Colour effects by opcode (CGameEffect::DecodeEffect lin 2012B0 / win 1401FE380 switch -> vtables):
+// 7 ColorChange (E12610), 8 ColorGlowSolid (E12680), 9 ColorGlowPulse (E126F0), 51 ColorTintSolid
+// (E12760), 52 ColorLightSolid (E127D0), 61 ColorGlowDissipate (E128B0), 353 TintScreen (E1BDC8; the buffs'
+// fade in/out colour, e.g. SPWI406; colour read as bytes 0..2 of param1, CGameEffectTintScreen::ApplyEffect
+// lin 1DCAB0 / win 1401E7BE0).
+constexpr uint32_t kOffEffParam1 = 0x1C, kOffEffParam2 = 0x20;
 // Held creatures still take effects at once: CGameSprite::ProcessEffectList(int) lin 4E21F0, win 1404231E0
 // (its per-tick caller is ProcessAI, which held creatures skip). Its once-a-second gate compares the
 // AI tick counter sprite+0x3A0 (`mov r8d,[rsi+3A0h]` 14042338C; lin this+232*4, ++ in ProcessAI L653).
@@ -823,6 +851,10 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CVidCell::SequenceSet", kRvaCellSeqStore, kCellSeqStoreBytes, "lin 68B920 / win 14049B340"),
     PSTF_SYM("CGameArea::Unmarshal.header", kRvaAreaHeaderCopy, kAreaHeaderCopyBytes, "lin 1BEB10 / win 1401A1AE1"),
     PSTF_SYM("CGameArea::Unmarshal.areaType", kRvaAreaTypeRead, kAreaTypeReadBytes, "win 1401A1E48"),
+    PSTF_SYM("CVidCell::RenderTexture", kRvaRenderTexture, kRenderTextureBytes, "lin 687BA0 / win 1404AEA60"),
+    PSTF_SYM("CVidCell::Render3d", kRvaRender3d, kRender3dBytes, "lin 688270 / win 1404ADDC0"),
+    PSTF_SYM("CVidCell::FXRender3d", kRvaFxRender3d, kFxRender3dBytes, "lin 6889E0 / win 1404AD630"),
+    PSTF_SYM("CVidCell::RenderTexture.blend", kRvaRenderTextureBlend, kRenderTextureBlendBytes, "win 1404AEAE0"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.
