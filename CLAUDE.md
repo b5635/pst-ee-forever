@@ -178,6 +178,19 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   draws seen / with depth / drawn, frames, mean LM, depth files), `PSTF_LightSpriteCheck()` (buffer px, coverage px,
   both; measured on the next frame), debug mode 6 (creatures violet, engine shadow blobs green, key shadows yellow).
   `src/core/inflate.*` = our zlib decoder (for .DEP); `src/modules/lighting/sprite_depth.*` = SPD1 reader.
+  Shadows (`tests\ingame\lighting_shadows.lua`, same env, save 126): `[lighting] bam_shadows=0` NOPs the four
+  "cell has shadow" checks so palette entry 1 (the BAM blob) is always cleared; our contact shadows (ellipse per
+  creature draw) + key shadows replace it. Probe `PSTF_LightShadows()` -> contact count, bam hidden, buffer used,
+  last creature light x/y/red. Creature lights: `data/vfxlight.tsv` `anim:N` rows (Ignus `anim:36 ... noshadow
+  glow=????IGYB`): at the creature's SHOWN position (`engine::InterpDrawPos`, smooth-interpolated), steady;
+  noshadow = nothing blocks it, no contact/key shadow; glow = its BAMs are emissive. Probe
+  `PSTF_LightCreatureTrace(frames)` then `()` -> samples, moving, holds, largest step px (light, sprite anchor):
+  per drawn frame, so it sees the draw-only frames between ticks (the walk check in lighting_shadows.lua). Engine fact: PST realizes creature palettes without flag 4
+  (cdb: 0x300C0), the blob alpha is the BAM palette's own alpha byte.
+  Day/night (`tests\ingame\lighting_night.lua`, night save `000000166`): the engine's time-of-day tint (CInfinity
+  +0x2EC; applied = min(+0x2E4, +0x2EC) + +0x2E0) is divided out in the composite and replaced by our ambient
+  (moonlight / dusk warmth / night light gain / lightmap pools, `[lighting] day_night` keys). Probe
+  `PSTF_LightGlobal()` -> tod, applied, day/night flag; log `lighting: time of day: ...` when it changes.
 - Gore (`[gore]`, `src/modules/gore/`, GemRB ScenePolish port): `CGameSprite::AddBlood(dir, type)` hook; gushes 3/4/5,
   artery 6, exploding death 7 become material effects (RESDATA.INI `armor` per animation, `data/hitarmor.tsv` from
   `python -I tools/hitmat.py` - re-run after a mod changes RESDATA - refined by `data/hitmat.2da` ANIM/ARMOR rows; EE

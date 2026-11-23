@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
 
@@ -137,6 +138,45 @@ Rgb Ambient(uint16_t type, float strength, const AreaScene* scene, bool use_key)
     a.b = a.b * 0.5f + 0.5f * l * scene->key_ambient[2];
   }
   return a;
+}
+
+Rgb TintRgb(uint32_t c) {
+  return {float(c & 0xFF) / 255.0f, float((c >> 8) & 0xFF) / 255.0f, float((c >> 16) & 0xFF) / 255.0f};
+}
+
+float Nightness(uint32_t tod, float night_luma) {
+  const float l = Luma(TintRgb(tod));
+  if (night_luma >= 0.999f) return 0.0f;
+  return std::max(0.0f, std::min(1.0f, (1.0f - l) / (1.0f - night_luma)));
+}
+
+Rgb TimeOfDayAmbient(const Rgb& day, float n, const DayNight& d) {
+  n = std::max(0.0f, std::min(1.0f, n));
+  const float dl = Luma(day);
+  const Rgb moon{dl * d.night_level * 0.66f, dl * d.night_level * 0.84f, dl * d.night_level * 1.28f};
+  Rgb a{day.r + (moon.r - day.r) * n, day.g + (moon.g - day.g) * n, day.b + (moon.b - day.b) * n};
+  const float warm = d.dusk_warmth * 4.0f * n * (1.0f - n);  // peaks half way: dusk and dawn
+  const float l = Luma(a);
+  a.r += (l * 1.25f - a.r) * warm;
+  a.g += (l * 0.92f - a.g) * warm;
+  a.b += (l * 0.62f - a.b) * warm;
+  return a;
+}
+
+float NightLightGain(float n, const DayNight& d) {
+  return 1.0f + (d.night_light - 1.0f) * std::max(0.0f, std::min(1.0f, n));
+}
+
+Rgb UndoTint(const Rgb& c, const Rgb& t) {
+  return {std::min(1.0f, c.r / std::max(t.r, 0.2f)), std::min(1.0f, c.g / std::max(t.g, 0.2f)),
+          std::min(1.0f, c.b / std::max(t.b, 0.2f))};
+}
+
+Rgb LightmapPool(const Rgb& lm, float mean_luma, float k) {
+  const float over = Luma(lm) - mean_luma;
+  if (over <= 0.0f || k <= 0.0f) return {};
+  const float s = k * over / std::max(Luma(lm), 1e-4f);  // the pool's own colour, by how far it rises
+  return {lm.r * s, lm.g * s, lm.b * s};
 }
 
 float Flicker(Kind kind, size_t index, double t_ms) {
@@ -397,8 +437,25 @@ std::vector<HandLight> ParseHandLights(const std::string& text) {
     float strength = 1.0f;
     if (!(in >> pat >> h.light.r >> h.light.g >> h.light.b >> h.light.radius >> h.light.z >> kind)) continue;
     in >> strength;
-    if (pat.empty() || pat.size() > 8 || !ParseKind(kind, &h.light.kind)) continue;
-    for (size_t i = 0; i < pat.size(); ++i) {
+    for (std::string flag; in >> flag;) {
+      if (flag == "noshadow") h.noshadow = true;
+      if (flag.size() > 5 && flag.size() <= 13 && flag.compare(0, 5, "glow=") == 0)
+        for (size_t i = 5; i < flag.size(); ++i) {
+          char c = flag[i];
+          if (c >= 'a' && c <= 'z') c = char(c - 32);
+          h.glow[i - 5] = c;
+        }
+    }
+    if (!ParseKind(kind, &h.light.kind)) continue;
+    if (pat.size() > 5 && (pat.compare(0, 5, "anim:") == 0 || pat.compare(0, 5, "ANIM:") == 0)) {
+      char* end = nullptr;
+      const long id = std::strtol(pat.c_str() + 5, &end, 10);
+      if (!end || *end || id < 0 || id > 0xFFFF) continue;
+      h.anim = int(id);
+    } else if (pat.empty() || pat.size() > 8) {
+      continue;
+    }
+    for (size_t i = 0; h.anim < 0 && i < pat.size(); ++i) {
       char c = pat[i];
       if (c >= 'a' && c <= 'z') c = char(c - 32);
       h.pattern[i] = c;
@@ -416,8 +473,30 @@ std::vector<HandLight> ParseHandLights(const std::string& text) {
 const HandLight* FindHandLight(const std::vector<HandLight>& t, const char* res) {
   if (!res || !res[0]) return nullptr;
   for (const HandLight& h : t)
-    if (MatchPattern(h.pattern, res)) return &h;
+    if (h.anim < 0 && MatchPattern(h.pattern, res)) return &h;
   return nullptr;
+}
+
+const HandLight* FindCreatureLight(const std::vector<HandLight>& t, int anim) {
+  if (anim < 0) return nullptr;
+  for (const HandLight& h : t)
+    if (h.anim == anim) return &h;
+  for (const HandLight& h : t)
+    if (h.anim >= 0 && h.anim == (anim & 0xFF)) return &h;
+  return nullptr;
+}
+
+BakedLight CreatureLightAt(const HandLight& h, float x, float y, double t_ms, float gain) {
+  BakedLight l = h.light;
+  l.x = x;
+  l.y = y;
+  l.owned = true;
+  l.unblocked = h.noshadow;
+  const float k = h.light.strength * gain * Flicker(h.light.kind, size_t(h.anim < 0 ? 0 : h.anim), t_ms);
+  l.r *= k;
+  l.g *= k;
+  l.b *= k;
+  return l;
 }
 
 BakedLight HandLightAt(const HandLight& h, const GlowDraw& d, size_t index, double t_ms, float gain) {
@@ -479,6 +558,15 @@ void UnpackSpriteG(float g, float* lm, float* depth) {
 
 float SpriteLight(float l, float ambient, float lm, float gain) {
   return ambient + std::max(0.0f, l - ambient) / std::max(lm, 0.3f) * gain;
+}
+
+float ContactShadow(float dx, float dy, float rx, float ry, float k) {
+  if (rx <= 0 || ry <= 0) return 0.0f;
+  const float r = std::sqrt((dx / rx) * (dx / rx) + (dy / ry) * (dy / ry));
+  if (r >= 1.0f) return 0.0f;
+  float t = (r - 0.3f) / 0.7f;  // GLSL smoothstep(0.3, 1.0, r)
+  t = std::max(0.0f, std::min(1.0f, t));
+  return k * (1.0f - t * t * (3.0f - 2.0f * t));
 }
 
 void KeyShadowAxes(float dir_x, float dir_y, float k, float* sx, float* sy) {

@@ -18,6 +18,10 @@ struct BakedLight {
   float x = 0, y = 0, z = 0, radius = 0, r = 1, g = 1, b = 1, strength = 1;
   Kind kind = Kind::Steady;
   bool casts_shadow = false;
+  // Carried by a creature standing at (x, y): its own sprite does not block it (no self-shadow ring).
+  bool owned = false;
+  // A burning creature (Ignus): no creature blocks this light at all (it is all around him).
+  bool unblocked = false;
 };
 
 struct SceneMap {
@@ -169,6 +173,9 @@ float SpriteLight(float l, float ambient, float lm, float gain);
 void KeyShadowAxes(float dir_x, float dir_y, float k, float* sx, float* sy);
 bool KeyShadowSource(float mx, float my, float feet, float sx, float sy, float max_h, float* src_x, float* src_y,
                      float* h);
+// Contact shadow (our replacement for the BAM blob, shadow shader mode 1): darkening at (dx, dy) area px
+// from a creature's feet, ellipse radii rx, ry: k at the centre, flat to r = 0.3, smooth to 0 at the rim.
+float ContactShadow(float dx, float dy, float rx, float ry, float k);
 
 // Hand glow overrides (assets/vfx/vfxglow.tsv, shipped from data/vfxglow.tsv): BAMs matching `pattern`
 // ('?' = any char) glow or not, and are softened (screen blend) or not, whatever the scan says.
@@ -183,15 +190,34 @@ const GlowOverride* FindGlowOverride(const std::vector<GlowOverride>& table, con
 // Hand light table (assets/vfx/vfxlight.tsv, shipped from data/vfxlight.tsv): any world draw whose BAM
 // matches `pattern` ('?' = any one char, upper case, <= 8) carries a light: Ignus is always on fire.
 // Line: pattern r g b radius z kind [strength]   (kind fire|magic|steady|pool; '#' comments)
+// pattern "anim:N" = a creature light instead: every creature of animation id N (RESDATA.INI section)
+// carries it at its own drawn feet, z px up: fixed to the creature, not to the drawn frame.
+// Creature light flags after the strength: "noshadow" (the creature is the light: it casts no contact or
+// key shadow and no creature blocks its light), "glow=PATTERN" (its BAMs keep their brightness: emissive).
 struct HandLight {
   char pattern[9] = {};
-  BakedLight light;  // x/y unused; z = height above the frame bottom, radius, colour, kind, strength
+  char glow[9] = {};    // creature lights: BAM pattern drawn emissive ("" = none)
+  bool noshadow = false;
+  int anim = -1;     // >= 0: creature light for this animation id (pattern unused)
+  BakedLight light;  // x/y unused; z = height above the frame bottom / feet, radius, colour, kind, strength
 };
 std::vector<HandLight> ParseHandLights(const std::string& text);
 bool MatchPattern(const char* pattern, const char* resref);
 const HandLight* FindHandLight(const std::vector<HandLight>& table, const char* resref);
 // The light for a matched draw (frame rect in area px): centred, ground at the frame bottom.
 BakedLight HandLightAt(const HandLight& h, const GlowDraw& d, size_t index, double t_ms, float gain);
+// Creature light for animation id `anim`: exact id first, then its low byte (EE ids past 255); null = none.
+const HandLight* FindCreatureLight(const std::vector<HandLight>& table, int anim);
+// The light of a creature standing at (x, y) area px: owned, flicker phase from the animation id (stable
+// from frame to frame, whatever else is drawn).
+BakedLight CreatureLightAt(const HandLight& h, float x, float y, double t_ms, float gain);
+// Sprite occlusion of an owned light (GLSL occlusion(), u_owner): a sprite pixel whose feet line is within
+// 8 px of the owner's feet and whose ray sample is within 40 px of the owner's x is the owner itself, and
+// does not block the light it carries.
+inline bool OwnerSprite(float owner_x, float owner_feet, float sample_x, float sprite_feet) {
+  return (sprite_feet - owner_feet < 8.0f && owner_feet - sprite_feet < 8.0f) &&
+         (sample_x - owner_x < 40.0f && owner_x - sample_x < 40.0f);
+}
 
 // Colour glow effects on creatures (opcodes 8 solid, 9 pulse, 52 bright tint, 61 fade; param1 =
 // 0xBBGGRR00; 353 tint screen, param1 = 0x00BBGGRR, the buffs' fade in/out): a light of that colour on
@@ -209,6 +235,30 @@ inline BuffLightShape BuffLightFor(uint32_t timing, float weapon_radius, float w
 }
 bool ColorEffectLight(int opcode, uint32_t param1, uint32_t param2, double age_ms, double t_ms, float gain,
                       Rgb* out);
+
+// --- Day / night -------------------------------------------------------------------------------------
+// The engine darkens a day/night area with one global tint (CInfinity +0x2EC, time of day: white by day,
+// SetDusk/SetDawn ramp it, the night colour at night). The composite divides that tint back out of the
+// scene (albedo) and lights it with our own time-of-day ambient, so lights act on the real colours.
+struct DayNight {
+  float night_level = 0.45f;   // night ambient / day ambient
+  float night_light = 1.5f;    // dynamic lights at full night (x)
+  float dusk_warmth = 0.35f;   // warm tint at dusk and dawn
+  float lightmap = 0.6f;       // lightmap light pools at night
+  float night_luma = 0.43f;    // luma of the engine's full-night tint (n = 1 there)
+};
+// 0 = day (tint white) .. 1 = full night, from the engine's time-of-day tint (0x00BBGGRR).
+float Nightness(uint32_t tod_tint, float night_luma);
+// The ambient at nightness n: day ambient -> moonlight (cool, night_level), warm between (dusk/dawn).
+Rgb TimeOfDayAmbient(const Rgb& day, float n, const DayNight& d);
+// Light gain at nightness n: 1 by day, night_light at full night.
+float NightLightGain(float n, const DayNight& d);
+// Scene pixel with the engine tint taken out (composite): c / max(tint, 0.2), capped at 1.
+Rgb UndoTint(const Rgb& c, const Rgb& tint);
+Rgb TintRgb(uint32_t bbggrr);
+// Night light of the area lightmap (LM, painted light pools): what a LM texel holds above the area's
+// mean LM luma, scaled by k (0 where it is at or below the mean).
+Rgb LightmapPool(const Rgb& lm, float mean_luma, float k);
 
 // --- Phase 5: atmosphere v1 ------------------------------------------------------------------------
 // Vertical depth cue: surfaces high above the floor drift toward the haze colour (VISUALS_PLAN §5.4).

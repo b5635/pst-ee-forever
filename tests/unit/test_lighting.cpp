@@ -440,6 +440,49 @@ TEST_CASE("lighting: hand light table (Ignus) and pattern match") {
   CHECK(Near(l.r, 0.88) && Near(l.g, 0.55 * 0.88) && Near(l.b, 0.22 * 0.88, 1e-4));
 }
 
+TEST_CASE("lighting: creature lights (anim:N, Ignus = RESDATA [36]) are fixed to the creature") {
+  const auto t = ParseHandLights("anim:36 1.0 0.55 0.22 240 55 steady 1.0\nanim:x 1 1 1 1 1 fire\n"
+                                 "anim:70000 1 1 1 1 1 fire\n????IGYB 1 1 1 100 10 fire\n");
+  CHECK(t.size() == 2 && t[0].anim == 36 && t[0].pattern[0] == 0 && t[1].anim == -1);
+  CHECK(FindHandLight(t, "CSTDIGYB") == &t[1]);  // anim rows never match a BAM
+  CHECK(FindCreatureLight(t, 36) == &t[0] && FindCreatureLight(t, 0x1024) == &t[0]);  // exact, then the low byte
+  CHECK(!FindCreatureLight(t, 37) && !FindCreatureLight(t, -1));
+  // Same light whatever the time: steady, at the feet, owned.
+  const BakedLight a = CreatureLightAt(t[0], 500, 700, 0.0, 1.5f), b = CreatureLightAt(t[0], 500, 700, 12345.0, 1.5f);
+  CHECK(Near(a.x, 500) && Near(a.y, 700) && Near(a.z, 55) && Near(a.radius, 240) && a.owned);
+  CHECK(Near(a.r, 1.5) && Near(a.g, 0.55 * 1.5) && Near(b.r, a.r) && Near(b.b, a.b));
+  // The owner's own sprite does not block its light; another creature 50 px away does.
+  CHECK(OwnerSprite(500, 700, 520, 703) && !OwnerSprite(500, 700, 550, 700) && !OwnerSprite(500, 700, 500, 712));
+}
+
+TEST_CASE("lighting: contact shadow (replaces the BAM blob)") {
+  CHECK(Near(ContactShadow(0, 0, 22, 11, 0.45f), 0.45) && Near(ContactShadow(6, 0, 22, 11, 0.45f), 0.45));  // flat core
+  CHECK(Near(ContactShadow(0, 7.15f, 22, 11, 0.45f), 0.225, 1e-3));  // r = 0.65: halfway down the smooth rim
+  CHECK(ContactShadow(22, 0, 22, 11, 0.45f) == 0.0f && ContactShadow(0, 11.5f, 22, 11, 0.45f) == 0.0f);
+  CHECK(ContactShadow(15, 0, 22, 11, 0.45f) > ContactShadow(15, 5, 22, 11, 0.45f));  // flatter than wide
+  CHECK(ContactShadow(0, 0, 0, 11, 1.0f) == 0.0f);
+}
+
+TEST_CASE("lighting: day / night (engine tint undone, our ambient, lightmap pools)") {
+  const DayNight d;
+  CHECK(Nightness(0xFFFFFF, d.night_luma) == 0.0f);
+  CHECK(Near(Nightness(0x6E6E6E, 110 / 255.0f), 1.0, 1e-4));  // the night tint itself: full night
+  CHECK(Near(Nightness(0xB6B6B6, 110 / 255.0f), (1 - 182 / 255.0) / (1 - 110 / 255.0), 1e-4));
+  CHECK(Nightness(0x000000, 0.43f) == 1.0f);  // clamped
+  const Rgb day{0.86f, 0.86f, 0.86f};
+  const Rgb a0 = TimeOfDayAmbient(day, 0.0f, d), a1 = TimeOfDayAmbient(day, 1.0f, d), ah = TimeOfDayAmbient(day, 0.5f, d);
+  CHECK(Near(a0.r, 0.86) && Near(a0.b, 0.86));  // day: unchanged
+  CHECK(Near(a1.r, 0.86 * 0.45 * 0.66, 1e-4) && Near(a1.b, 0.86 * 0.45 * 1.28, 1e-4));  // moonlight: cool, dark
+  CHECK(ah.r > ah.b && Luma(ah) < Luma(a0) && Luma(ah) > Luma(a1));  // dusk: warm, in between
+  CHECK(NightLightGain(0, d) == 1.0f && Near(NightLightGain(1, d), 1.5) && Near(NightLightGain(0.5f, d), 1.25));
+  const Rgb u = UndoTint({0.2f, 0.3f, 0.6f}, TintRgb(0x80A0FF));  // tint r 1.0, g 160/255, b 128/255
+  CHECK(Near(u.r, 0.2) && Near(u.g, 0.3 / (160 / 255.0), 1e-4) && Near(u.b, 1.0));  // b capped at 1
+  CHECK(Near(UndoTint({0.1f, 0.1f, 0.1f}, {0.0f, 0.0f, 0.0f}).r, 0.5));            // tint floor 0.2
+  const Rgb pool = LightmapPool({0.9f, 0.6f, 0.3f}, 0.4f, 0.6f);  // luma 0.6555: 0.2555 above the mean
+  CHECK(Near(pool.r, 0.9 * 0.6 * 0.2555 / 0.6555, 1e-3) && pool.r > pool.b);
+  CHECK(LightmapPool({0.3f, 0.3f, 0.3f}, 0.4f, 0.6f).r == 0.0f);  // darker than the mean: no pool
+}
+
 TEST_CASE("lighting: colour effect lights (ops 8, 9, 52, 61, 353)") {
   Rgb c;
   // op 8 solid: param1 0xBBGGRR00 = red 0xFF, green 0x80, blue 0

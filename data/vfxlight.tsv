@@ -3,5 +3,9 @@
 # Any world draw whose BAM matches the pattern ('?' = any one char) carries this light, centred on the
 # drawn frame, standing on its bottom edge, z px up.
 # pattern   r     g     b     radius  z   kind   [strength]
-# Ignus burns permanently: all his animations are ????IGYB (RESDATA.INI section Ignus).
-????IGYB    1.00  0.55  0.22  240     55  fire   1.0
+# "anim:N" instead of a pattern = a creature light: every creature of animation id N (RESDATA.INI [N])
+# carries it at its own position (feet), z px up, whatever frame it draws (no jumping with the sprite).
+# Flags after the strength: noshadow (the creature is the light: no contact/key shadow, nothing blocks
+# its light), glow=PATTERN (its BAMs keep their full brightness: emissive, bloom).
+# Ignus burns permanently: RESDATA.INI [36] (his BAMs are ????IGYB). Steady: no flicker.
+anim:36     1.00  0.55  0.22  260     55  steady 1.0  noshadow glow=????IGYB

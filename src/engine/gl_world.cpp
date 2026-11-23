@@ -4,6 +4,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 
@@ -102,6 +103,23 @@ const sym::Symbol* Find(uint32_t rva) {
   return nullptr;
 }
 
+// --- BAM contact shadows -----------------------------------------------------------------------------
+}  // namespace
+
+bool HideBamShadows() {
+  const uint32_t rvas[] = {sym::kRvaShadowKeepFx, sym::kRvaShadowKeep3d, sym::kRvaShadowKeepRanged,
+                           sym::kRvaShadowKeepFade};
+  for (uint32_t r : rvas) {
+    const sym::Symbol* s = Find(r);
+    if (!s || !CheckSymbol(*s)) return false;
+  }
+  static const uint8_t kNop2[] = {0x66, 0x90};  // jnz skip -> nop: palette entry 1 always cleared
+  bool ok = true;
+  for (uint32_t r : rvas) ok = PatchCode(*Find(r), kNop2, sizeof kNop2) && ok;
+  return ok;
+}
+
+namespace {
 // --- glow gather -------------------------------------------------------------------------------------
 constexpr int kMaxGlow = 256;
 EngineGlowDraw g_glow[kMaxGlow];
@@ -595,6 +613,37 @@ float AreaTintLuma(uint64_t area, int x, int y) {
   const uint32_t c = reinterpret_cast<TintFn>(Va(sym::kRvaGetTintColor))(area, pt, 0);
   const float r = float(c & 0xFF) / 255.0f, g = float((c >> 8) & 0xFF) / 255.0f, b = float((c >> 16) & 0xFF) / 255.0f;
   return 0.299f * r + 0.587f * g + 0.114f * b;
+}
+
+uint32_t AreaTintColor(uint64_t area, int x, int y) {
+  static const int ok = [] {
+    const sym::Symbol* s = Find(sym::kRvaGetTintColor);
+    return (s && CheckSymbol(*s)) ? 1 : 0;
+  }();
+  if (!ok || !PlausiblePtr(area)) return 0xFFFFFFFFu;
+  const int pt[2] = {x, y};
+  using TintFn = uint32_t(__fastcall*)(uint64_t, const int*, uint8_t);
+  return reinterpret_cast<TintFn>(Va(sym::kRvaGetTintColor))(area, pt, 0) & 0xFFFFFFu;
+}
+
+bool AreaGlobalLight(uint64_t area, GlobalLight* out) {
+  if (!PlausiblePtr(area)) return false;
+  const uint64_t inf = area + sym::kOffAreaInfinity;
+  out->tod = R<uint32_t>(inf + sym::kOffInfTodTint) & 0xFFFFFF;
+  out->weather = R<uint32_t>(inf + sym::kOffInfWeatherTint) & 0xFFFFFF;
+  out->add = R<uint32_t>(inf + sym::kOffInfAddTint) & 0xFFFFFF;
+  out->day_night = (R<uint16_t>(area + sym::kOffAreaFlags) & 0x400) != 0;
+  if (R<uint64_t>(inf + sym::kOffInfOverride)) {
+    out->applied = R<uint32_t>(inf + sym::kOffInfOverrideTint) & 0xFFFFFF;
+    return true;
+  }
+  uint32_t c = 0;
+  for (int sh = 0; sh < 24; sh += 8) {
+    const uint32_t v = std::min((out->tod >> sh) & 0xFF, (out->weather >> sh) & 0xFF) + ((out->add >> sh) & 0xFF);
+    c |= std::min(v, 255u) << sh;
+  }
+  out->applied = c;
+  return true;
 }
 
 uint16_t AreaTypeFlags(uint64_t area) { return PlausiblePtr(area) ? R<uint16_t>(area + sym::kOffAreaType) : 0; }

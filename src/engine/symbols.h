@@ -517,6 +517,14 @@ inline constexpr uint8_t kAreaHeaderCopyBytes[] = {0x0F, 0x10, 0x46, 0x08, 0x41,
 inline constexpr uint8_t kAreaTypeReadBytes[] = {0x45, 0x0F, 0xB7, 0x47, 0x40};  // movzx r8d, word [r15+40h]
 constexpr uint32_t kRvaAreaHeaderCopy = 0x1A1AE1, kRvaAreaTypeRead = 0x1A1E48;
 constexpr uint32_t kOffAreaWed = 0x0, kOffAreaType = 0x40;
+// Global lighting of the area's CInfinity (area+0x5D8), CInfinity::GetGlobalLighting (lin 3A9100, win
+// 140305600): colour = min(+0x2E4, +0x2EC) + (+0x2E0) per channel (0x00BBGGRR), then the screen fade;
+// with a non-null +0x280 the colour is +0x298 instead. +0x2EC is the time-of-day tint: CInfinity::SetDay
+// (lin 3AEB80) writes 0xFFFFFF, SetDusk/SetDawn (win 140308D80 / 1403089E0) the dusk/night colour, gated in
+// PST by the area flag 0x400 (CGameArea +0x880, win SetDay 1401A0050). +0x2AC = dusk/dawn progress byte.
+constexpr uint32_t kOffInfAddTint = 0x2E0, kOffInfWeatherTint = 0x2E4, kOffInfTodTint = 0x2EC,
+                   kOffInfOverride = 0x280, kOffInfOverrideTint = 0x298, kOffInfDayness = 0x2AC;
+constexpr uint32_t kOffAreaFlags = 0x880;  // CGameArea word; 0x400 = day/night cycle (PST)
 
 // --- lighting phase 4: glow draws -------------------------------------------------------------------
 // Every BAM v1 world sprite (creatures, VVCs, projectiles, area animations) ends in
@@ -535,6 +543,23 @@ inline constexpr uint8_t kRenderTextureBlendBytes[] = {0x25, 0x08, 0x02, 0x00, 0
 constexpr uint32_t kRvaRenderTexture = 0x4AEA60, kRvaRender3d = 0x4ADDC0, kRvaFxRender3d = 0x4AD630;
 constexpr uint32_t kRvaRenderTextureBlend = 0x4AEAE0;
 constexpr size_t kRenderTextureCopy = 5, kRender3dCopy = 6, kFxRender3dCopy = 6;  // whole instructions
+// BAM contact shadows: palette entry CVidPalette::SHADOW_ENTRY (= 1, .rdata 14065DA3A) of a cell whose
+// "has shadow" byte (+0x130) is set. PST:EE realizes creature palettes without the shadow flag 4 (cdb: flags
+// 0x300C0 at win 1404B7C63), so the blob's translucency is the BAM palette's own alpha byte (lin 69EA90 L421).
+// Right after realizing, each cell draw path clears entry 1 (0 = invisible) unless +0x130 is set:
+//   if (!cell->hasShadow) rgbTempPal[SHADOW_ENTRY] = 0 (or the colour key)
+// The lighting module (`[lighting] bam_shadows=0`) NOPs those four `jnz` (75 xx -> 66 90), so entry 1 is
+// always cleared: no blob. Each site: `cmp byte [cell+130h], 0; jnz skip; <clear entry 1>`.
+//   CVidCell::FXRender3d (FX surface: creatures)  lin 688C90 L44 / win 1404AD91A
+//   CVidCell::Render3d                            lin 688270 L87 / win 1404ADF36
+//   CPSRangedTranslucentVidCell::Blt8To32TranslucentFade  lin 68E2D0 / win 14049882C
+//   CVidCellFade::Blt8To32TranslucentFade         lin 68D9D0 L56 / win 140498E8E
+inline constexpr uint8_t kShadowKeepFxBytes[] = {0x75, 0x0B, 0x0F, 0xB6, 0x05, 0x17, 0x01, 0x1B, 0x00};
+inline constexpr uint8_t kShadowKeep3dBytes[] = {0x75, 0x07, 0x0F, 0xB6, 0xC2, 0x44, 0x89, 0x24, 0x87};
+inline constexpr uint8_t kShadowKeepRangedBytes[] = {0x75, 0x0B, 0x0F, 0xB6, 0x0D, 0x05, 0x52, 0x1C, 0x00};
+inline constexpr uint8_t kShadowKeepFadeBytes[] = {0x75, 0x1C, 0x48, 0x8B, 0x05, 0xD9, 0x33, 0x29, 0x00};
+constexpr uint32_t kRvaShadowKeepFx = 0x4AD91A, kRvaShadowKeep3d = 0x4ADF36, kRvaShadowKeepRanged = 0x49882C,
+                   kRvaShadowKeepFade = 0x498E8E;
 
 #define PSTF_SYM(n, rva, b, ev) Symbol{n, rva, b, sizeof(b), ev}
 // --- round clock for effects (turn-based: effects advance one round at their owner's turn) -------
@@ -890,6 +915,12 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CVidCell::Render3d", kRvaRender3d, kRender3dBytes, "lin 688270 / win 1404ADDC0"),
     PSTF_SYM("CVidCell::FXRender3d", kRvaFxRender3d, kFxRender3dBytes, "lin 6889E0 / win 1404AD630"),
     PSTF_SYM("CVidCell::RenderTexture.blend", kRvaRenderTextureBlend, kRenderTextureBlendBytes, "win 1404AEAE0"),
+    PSTF_SYM("CVidCell::FXRender3d.shadowKeep", kRvaShadowKeepFx, kShadowKeepFxBytes, "lin 688C90 / win 1404AD91A"),
+    PSTF_SYM("CVidCell::Render3d.shadowKeep", kRvaShadowKeep3d, kShadowKeep3dBytes, "lin 688270 / win 1404ADF36"),
+    PSTF_SYM("CPSRangedTranslucentVidCell::Blt8To32TranslucentFade.shadowKeep", kRvaShadowKeepRanged,
+             kShadowKeepRangedBytes, "lin 68E2D0 / win 14049882C"),
+    PSTF_SYM("CVidCellFade::Blt8To32TranslucentFade.shadowKeep", kRvaShadowKeepFade, kShadowKeepFadeBytes,
+             "lin 68D9D0 / win 140498E8E"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.

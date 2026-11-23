@@ -95,6 +95,15 @@ uint16_t AreaTypeFlags(uint64_t area);
 // CGameArea::GetTintColor at an area point (the LM tint a creature standing there gets), as 0..1 luma;
 // -1 when the symbol does not match. Game thread.
 float AreaTintLuma(uint64_t area, int x, int y);
+// Area LM colour at an area point (CGameArea::GetTintColor, 0x00BBGGRR; 0xFFFFFFFF = unreadable).
+uint32_t AreaTintColor(uint64_t area, int x, int y);
+// The engine's global lighting of the area (what CInfinity::GetGlobalLighting gives the tiles, without the
+// screen fade): tod = time-of-day tint, applied = min(tod, weather) + add (or the override), 0x00BBGGRR.
+struct GlobalLight {
+  uint32_t tod = 0xFFFFFF, weather = 0xFFFFFF, add = 0, applied = 0xFFFFFF;
+  bool day_night = false;  // the area has the day/night cycle (flag 0x400)
+};
+bool AreaGlobalLight(uint64_t area, GlobalLight* out);
 
 using CompositeFn = void (*)();
 // Installs the four call-site hooks (once) and adds the callback; callbacks run in `order` (lighting 50:
@@ -120,6 +129,9 @@ struct EngineGlowDraw {
   uint8_t pure;            // the blit held only emitting cells (no creature): drawn per pixel, softened
 };
 bool InstallGlowGather();
+// Hides the BAM contact shadows (palette entry 1 of cells with a shadow): the four cell draw paths clear
+// the entry for every cell (symbols.h kRvaShadowKeep*). All sites are checked first; false = nothing patched. Call once at install, before the first palette is realized.
+bool HideBamShadows();
 // Which world draws emit (module decides from the cell's resref/sequence/frame and the blend flags; the
 // resref is "" when unknown). Emitting draws are gathered and, with the capture callbacks, drawn a second
 // time with the normal blend into the module's emissive buffer: begin binds it (false = skip), end
