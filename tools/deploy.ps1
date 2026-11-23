@@ -38,6 +38,10 @@ $vfx = Join-Path $data 'assets\vfx'
 New-Item -ItemType Directory -Force $vfx | Out-Null
 Copy-Item (Join-Path $root 'data\vfxlight.tsv') $vfx -Force  # hand light table (lighting module)
 Copy-Item (Join-Path $root 'data\vfxglow.tsv') $vfx -Force   # hand glow overrides (lighting module)
+$gore = Join-Path $data 'assets\gore'
+New-Item -ItemType Directory -Force $gore | Out-Null
+Copy-Item (Join-Path $root 'data\hitmat.2da') $gore -Force    # material rows (gore module; GemRB unhardcoded/pst)
+Copy-Item (Join-Path $root 'data\hitarmor.tsv') $gore -Force  # animation -> armor (tools/hitmat.py)
 $ini = Join-Path $data 'pst_forever.ini'
 if ($ResetIni -or -not (Test-Path $ini)) { Copy-Item (Join-Path $root 'data\pst_forever.ini') $ini -Force }
 Write-Host "deploy: ok -> $Game"

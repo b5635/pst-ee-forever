@@ -31,6 +31,7 @@ std::vector<SpriteInfo> AllSprites();       // every CGameSprite in the object a
 std::vector<int32_t> PartyIds();            // CInfGame party slots, in order
 bool GetSprite(int32_t id, SpriteInfo* out);
 int32_t SpriteIdOf(const void* sprite);     // for hooks that receive `this`
+int SpriteAnimId(int32_t id);               // animation id (RESDATA.INI section), -1 if unreadable
 
 void ClearAI(int32_t id);    // CGameSprite::ClearAI(0): actions, triggers, current action
 void DropPath(int32_t id);   // CGameSprite::DropPath

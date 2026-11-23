@@ -422,6 +422,14 @@ bool GetSprite(int32_t id, SpriteInfo* out) {
   return true;
 }
 
+int SpriteAnimId(int32_t id) {
+  const uint64_t p = LookupSprite(id);
+  if (!p) return -1;
+  const uint64_t anim = *reinterpret_cast<const volatile uint64_t*>(p + sym::kOffSpriteAnim);
+  if (!Plausible(anim)) return -1;
+  return int(*reinterpret_cast<const volatile uint16_t*>(anim + sym::kOffAnimId));
+}
+
 int32_t SpriteIdOf(const void* sprite) {
   return R<int32_t>(reinterpret_cast<uint64_t>(sprite) + sym::kOffSpriteId);
 }

@@ -57,7 +57,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   script raised no error. ~3 s to a loaded save. Smoke test: `tools\launch.ps1 -Lua tests\ingame\smoke.lua -Close`.
   How: sets Baldur.lua `Last Save PST`, env `PSTF_AUTOLOAD=1`/`PSTF_RUN_LUA`, the `dev` module presses Continue.
   Baldur.lua on this machine has `Cheats=1` (console) and `Disable Movies=1` (skips ALL movies, story ones too);
-  backup of the original in `buildackup\`.
+  backup of the original in `build\backup\`.
 - `python tools\pstf.py CMD` queries a running game over the dev pipe (`lua`, `actors`, `actor ID`, `hooks`, `shot`).
 - RE tooling guards: `python -m pytest tests/tools -q` (exe hashes, dump completeness, key mappings).
 - RE pipeline: `bash tools/re_pipeline.sh` (see `docs/ARCHITECTURE.md` §2); ~2.5 h, run in the background.
@@ -178,5 +178,13 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   draws seen / with depth / drawn, frames, mean LM, depth files), `PSTF_LightSpriteCheck()` (buffer px, coverage px,
   both; measured on the next frame), debug mode 6 (creatures violet, engine shadow blobs green, key shadows yellow).
   `src/core/inflate.*` = our zlib decoder (for .DEP); `src/modules/lighting/sprite_depth.*` = SPD1 reader.
+- Gore (`[gore]`, `src/modules/gore/`, GemRB ScenePolish port): `CGameSprite::AddBlood(dir, type)` hook; gushes 3/4/5,
+  artery 6, exploding death 7 become material effects (RESDATA.INI `armor` per animation, `data/hitarmor.tsv` from
+  `python -I tools/hitmat.py` - re-run after a mod changes RESDATA - refined by `data/hitmat.2da` ANIM/ARMOR rows; EE
+  animation ids go past 255, exact id first, then the low byte). Crits 10..17 keep their animation plus an
+  exaggerated spray. Stains draw at the floor point (after `CInfinity::Render`, before objects: under the actors,
+  lit by the lighting pass). Test: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\gore.lua -Env @{PSTF_TEST_TICK='1';
+  PSTF_TBC_AUTOPARTY='1'} -Until 'gore: ok|TEST FAIL' -Close -Timeout 300`. Probes: `PSTF_GoreState()`,
+  `PSTF_GoreHit(id, severity[, crit[, anim]])`. Deploy keeps an existing ini: add new sections to the game's ini by hand.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

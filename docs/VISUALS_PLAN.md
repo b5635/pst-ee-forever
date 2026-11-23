@@ -1,7 +1,7 @@
 # Lighting, depth and visual effects for PST:EE: investigation and plan
 
 Status: phases 0, 1, 2, 4 and 5 done 2026-11-22 (`src/modules/lighting/`, `src/engine/gl_world.*`, ini `[lighting]`).
-Sprite depth maps: all 1,154 character BAMs (`tools/sprite_depth/`, 338 MB in `<game>\pst_foreverssets\sprites\depth`),
+Sprite depth maps: all 1,154 character BAMs (`tools/sprite_depth/`, 338 MB in `<game>\pst_forever\assets\sprites\depth`),
 used by phase 2 (they replace the phase-3 normal maps: normals come from the depth gradient).
 Module name: `lighting` (ARCHITECTURE.md §3.3).
 Rule from CLAUDE.md applies everywhere: loose on presentation, exact on anything a script can observe.

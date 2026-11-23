@@ -35,6 +35,8 @@ struct Gl {
   void(__stdcall* Begin)(unsigned);
   void(__stdcall* End)();
   void(__stdcall* Vertex2f)(float, float);
+  void(__stdcall* Color4f)(float, float, float, float);
+  void(__stdcall* TexCoord2f)(float, float);
   void(__stdcall* ReadPixels)(int, int, int, int, unsigned, unsigned, void*);
   void(__stdcall* PixelStorei)(unsigned, int);
   void(__stdcall* ColorMask)(unsigned char, unsigned char, unsigned char, unsigned char);
@@ -95,8 +97,13 @@ uint16_t AreaTypeFlags(uint64_t area);
 float AreaTintLuma(uint64_t area, int x, int y);
 
 using CompositeFn = void (*)();
-// Installs the four call-site hooks (once). The callback runs under SEH; on a fault it is turned off.
-bool InstallWorldComposite(CompositeFn fn);
+// Installs the four call-site hooks (once) and adds the callback; callbacks run in `order` (lighting 50:
+// gore draws blended particles at 40, before the light pass, and glowing ones at 60, after). Each runs
+// under its own SEH guard; a faulting one is turned off.
+bool InstallWorldComposite(CompositeFn fn, int order = 50);
+// Floor draw point: right after the area's tiles (CInfinity::Render), before any object. Arm-gated like
+// the composite; callbacks run in install order under SEH.
+bool InstallWorldFloor(CompositeFn fn);
 // Arms the callback for the frame being drawn (call from a world pre-draw hook).
 void ArmWorldComposite();
 

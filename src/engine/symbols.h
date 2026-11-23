@@ -692,6 +692,24 @@ inline constexpr uint8_t kSetViewPosBytes[] = {0x48, 0x8B, 0xC4, 0x48, 0x89, 0x5
 inline constexpr uint8_t kCenterLeaderJmpBytes[] = {0xE9, 0xC5, 0x63, 0x03, 0x00};
 constexpr uint32_t kRvaSetViewPos = 0x309630, kRvaCenterLeaderJmp = 0x2D3266;
 
+// Gore (material hit effects). CGameSprite::AddBlood(short, short dir, short type) (lin 50D8F0 / win 1403B83F0,
+// confirmed: type 7 = CBlood::EXPLODING_DEATH builds a CBlood, every other type goes to StartSpriteEffect(0,
+// type, 0); called from CGameEffectDamage::DisplayCriticalBam / ApplyEffect, CGameEffectDeath::ApplyEffect).
+// Prologue `push rbx; push rsi; push rdi; sub rsp,60h` (8 bytes), then a RIP-relative load.
+inline constexpr uint8_t kAddBloodBytes[] = {0x40, 0x53, 0x56, 0x57, 0x48, 0x83, 0xEC, 0x60, 0x48, 0x8B, 0x05, 0xD9,
+                                             0x0B, 0x37, 0x00, 0x48, 0x33, 0xC4, 0x48, 0x89, 0x44, 0x24, 0x58, 0x48};
+constexpr uint32_t kRvaAddBlood = 0x3B83F0;
+constexpr size_t kAddBloodCopy = 8;
+// Sprite position: AddBlood passes *(i32*)(sprite+12), *(i32*)(sprite+16) to CBlood::CBlood as the point;
+// animation id: the u16 at anim+8 (lin CGameAnimationTypePlanescapeCharacter::Render passes it to
+// AnimTypeIsTranslucent), anim = sprite+0x3950 (kOffSpriteAnim).
+constexpr uint32_t kOffSpritePosX = 12, kOffSpritePosY = 16, kOffAnimId = 8;
+// CGameArea::Render -> CInfinity::Render (tiles only: CInfTileSet::Render between DrawBeginSort/EndSort,
+// lin 3AB3D0), before any object: the floor draw point (lin 1BB560 / win 14019E725 -> 1403062B0).
+inline constexpr uint8_t kTileRenderCallBytes[] = {0xE8, 0x86, 0x7B, 0x16, 0x00};
+constexpr uint32_t kRvaTileRenderCall = 0x19E725;
+constexpr uint64_t kVaInfinityRender = 0x1403062B0ull;
+
 inline constexpr Symbol kAll[] = {
     PSTF_SYM("entry", kEntryRva, kEntryBytes, "PE AddressOfEntryPoint"),
     PSTF_SYM("CTlkTable::Fetch", kRvaTlkFetch, kTlkFetchBytes, "lin 673C70 / win 1404A0840"),
@@ -844,6 +862,8 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CGameArea::Render.scrollDest", kRvaAreaDestRead, kAreaDestReadBytes, "lin 1BB560 / win 14019E5F2"),
     PSTF_SYM("CGameArea::Render.scrollSpeed", kRvaAreaSpeedRead, kAreaSpeedReadBytes, "lin 1BB560 / win 14019E687"),
     PSTF_SYM("CGameArea::Render.floatMsg", kRvaFloatMsgCall, kFloatMsgCallBytes, "lin 1BB560 L445 / win 14019EAC7"),
+    PSTF_SYM("CGameSprite::AddBlood", kRvaAddBlood, kAddBloodBytes, "lin 50D8F0 / win 1403B83F0"),
+    PSTF_SYM("CGameArea::Render.tiles", kRvaTileRenderCall, kTileRenderCallBytes, "lin 1BB560 / win 14019E725"),
     PSTF_SYM("CGameArea::Render.transitions", kRvaTransitionsCall, kTransitionsCallBytes,
              "lin 1BB560 L427 / win 14019EB23"),
     PSTF_SYM("CGameArea::Render.fog", kRvaFogCall, kFogCallBytes, "lin 1BB560 L456 / win 14019EB4F"),

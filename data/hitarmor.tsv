@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Written by tools/hitmat.py from RESDATA.INI: animation id (low byte), armor (hit sound set), name.
+0	5	# Abishai
+1	0	# Advocate
+2	0	# Annah
+4	2	# Campatuskanella
+5	0	# Collector
+6	1	# Thug
+7	5	# Cornugon
+8	5	# Cranium Rat
+9	2	# Curst Guard
+10	0	# Curst Townie Female
+11	0	# Curst Townie Male
+12	0	# Dabus
+13	1	# Dakkon
+14	6	# Deionarra
+15	0	# Dhall
+16	2	# Drone, Heavy Kill-Me
+17	2	# Drone, Light Kill-Me
+18	0	# Drone Wizard
+19	0	# Dustman Female
+20	0	# Dustman Male
+21	2	# Ebb Creakknees
+22	0	# Fall From Grace
+23	5	# Fhjull
+24	5	# Garolyth
+25	0	# Ghoul Female
+26	0	# Ghoul Male
+27	3	# Ghoul Male Stone Golem
+28	0	# Ghoul Queen Acaste
+29	1	# Githzerai
+30	5	# Glabrezu
+31	1	# Godsman
+32	2	# Godsman Guard
+33	5	# Grillig
+34	5	# Gronk
+35	5	# Horse Guy
+36	10	# Ignus
+37	5	# James Bird
+38	5	# Lim-Lim
+39	0	# Lady of Pain
+40	5	# Lemure
+41	0	# Lothar
+42	0	# Merchant
+43	2	# Mercykiller
+44	0	# Midwife
+45	7	# Modron
+46	4	# Morte
+47	8	# Nameless One with Axe
+48	8	# Nameless One with Club
+49	8	# Nameless One with Dagger
+50	8	# Nameless One with Fist
+51	8	# Nameless One with Hammer
+52	7	# Nordom
+53	5	# Nupperibo
+54	0	# Pharod
+55	0	# Prostitute (False Colored)
+56	0	# Ravel Puzzlewell
+57	9	# Shadow
+58	2	# Skeleton, Giant Armored
+59	0	# Skeleton, Priest
+60	4	# Skeleton, Worker
+61	0	# Lower Class Townie, Female
+62	0	# Lower Class Townie, Male
+63	0	# Upper Class Townie, Female
+64	0	# Upper Class Townie, Male
+65	6	# Transcendent One
+66	5	# Trigit
+67	5	# Trelon
+68	5	# Trias
+69	5	# Trocopotoca
+70	5	# Vargoille
+71	2	# Vhailor
+72	0	# Wererat
+73	1	# Wererat, Mantuok
+74	5	# Worm Creature
+75	5	# Zombie, Female
+76	5	# Zombie, Male
+77	0	# Fell
+78	9	# Shadow Mark II
+79	9	# Shadow Mark III
+80	5	# Thokola
+81	8	# Nameless One with Severed Arm
+82	5	# Nameless One with Zombie Disguise
+83	0	# Tiefling Female
+84	1	# Large Thug
+85	1	# Male Tiefling
+86	1	# Baurier Male (False Colored)
+87	2	# Harmonium
+88	0	# Midwife (False color)
+89	0	# Aasimar Female
+90	5	# Abishai, Green
+91	5	# Abishai, Red
+92	0	# Townie Wizard
+93	0	# Nameless One with Dustman Disguise
+94	3	# Aaron's Uber Head for AR0510
+95	3	# Qui-Sai the Statue Guy
+96	5	# Trias on Dias
+97	8	# Nameless One Incarnations
+98	2	# Vhailor Still
+558	2	# Skeleton, Armored, Large
+2062	6	# Deionarra Translucent

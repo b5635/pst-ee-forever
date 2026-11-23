@@ -56,19 +56,35 @@ Site g_sites[4] = {{sym::kRvaFloatMsgCall, sym::kVaFloatMsgRender, nullptr},
                    {sym::kRvaTransitionsCall, sym::kVaRenderTransitions, nullptr},
                    {sym::kRvaFogCall, sym::kVaRenderFog, nullptr},
                    {sym::kRvaPostRenderCall, sym::kVaPostRender, nullptr}};
-CompositeFn g_fn = nullptr;
-bool g_armed = false, g_faulted = false;
+struct Cb {
+  CompositeFn fn;
+  int order;
+  bool faulted;
+};
+Cb g_cbs[6] = {};
+int g_cb_n = 0;
+Cb g_floor[4] = {};
+int g_floor_n = 0;
+bool g_sites_installed = false, g_floor_installed = false;
+bool g_armed = false, g_floor_armed = false;
 
-void CallComposite(uint64_t) { g_fn(); }
+void CallCb(uint64_t p) { reinterpret_cast<Cb*>(p)->fn(); }
+
+void RunList(Cb* list, int n, const char* what) {
+  for (int i = 0; i < n; ++i) {
+    if (list[i].faulted) continue;
+    uint32_t code = 0;
+    if (!GuardedCall(&CallCb, reinterpret_cast<uint64_t>(&list[i]), &code)) {
+      list[i].faulted = true;
+      Log("gl_world: %s callback %d faulted (%08X); it is off for this session", what, i, code);
+    }
+  }
+}
 
 void RunComposite() {
-  if (!g_armed || g_faulted || !g_fn) return;
+  if (!g_armed || !g_cb_n) return;
   g_armed = false;
-  uint32_t code = 0;
-  if (!GuardedCall(&CallComposite, 0, &code)) {
-    g_faulted = true;
-    Log("lighting: composite faulted (%08X); lighting off for this session", code);
-  }
+  RunList(g_cbs, g_cb_n, "composite");
 }
 
 // Each detour forwards up to four integer arguments unchanged (x64: rcx, rdx, r8, r9).
@@ -451,7 +467,7 @@ std::string LoadGl(Gl* g) {
   L(Disable, "glDisable") L(BindTexture, "glBindTexture") L(GenTextures, "glGenTextures")
   L(DeleteTextures, "glDeleteTextures") L(TexImage2D, "glTexImage2D") L(TexParameteri, "glTexParameteri")
   L(CopyTexSubImage2D, "glCopyTexSubImage2D") L(Viewport, "glViewport") L(BlendFunc, "glBlendFunc")
-  L(ClearColor, "glClearColor") L(Clear, "glClear") L(Begin, "glBegin") L(End, "glEnd") L(Vertex2f, "glVertex2f")
+  L(ClearColor, "glClearColor") L(Clear, "glClear") L(Begin, "glBegin") L(End, "glEnd") L(Vertex2f, "glVertex2f") L(Color4f, "glColor4f") L(TexCoord2f, "glTexCoord2f")
   L(ReadPixels, "glReadPixels") L(PixelStorei, "glPixelStorei") L(ColorMask, "glColorMask")
   L(GetString, "glGetString") L(GetError, "glGetError")
   L(ActiveTexture, "glActiveTexture") L(UseProgram, "glUseProgram") L(CreateShader, "glCreateShader")
@@ -583,15 +599,60 @@ float AreaTintLuma(uint64_t area, int x, int y) {
 
 uint16_t AreaTypeFlags(uint64_t area) { return PlausiblePtr(area) ? R<uint16_t>(area + sym::kOffAreaType) : 0; }
 
-bool InstallWorldComposite(CompositeFn fn) {
-  if (g_fn) return true;
+bool InstallCompositeSites();
+
+bool InstallWorldComposite(CompositeFn fn, int order) {
+  if (!fn || g_cb_n >= 6) return false;
+  if (!g_sites_installed && !InstallCompositeSites()) return false;
+  int at = g_cb_n;
+  while (at > 0 && g_cbs[at - 1].order > order) {
+    g_cbs[at] = g_cbs[at - 1];
+    --at;
+  }
+  g_cbs[at] = {fn, order, false};
+  ++g_cb_n;
+  return true;
+}
+
+namespace {
+using TileFn = uint64_t(__fastcall*)(uint64_t, uint64_t, uint64_t, uint64_t);
+TileFn g_tile_render = nullptr;
+uint64_t __fastcall TileRenderDetour(uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
+  const uint64_t r = g_tile_render(a, b, c, d);
+  if (g_floor_armed && WorldPassArea()) {
+    g_floor_armed = false;
+    RunList(g_floor, g_floor_n, "floor");
+  }
+  return r;
+}
+}  // namespace
+
+bool InstallWorldFloor(CompositeFn fn) {
+  if (!fn || g_floor_n >= 4) return false;
+  if (!g_floor_installed) {
+    if (!GlWorldAvailable()) return false;
+    const sym::Symbol* s = Find(sym::kRvaTileRenderCall);
+    if (!s || !CheckSymbol(*s)) return false;
+    const uint64_t orig = RedirectCall(*s, reinterpret_cast<void*>(&TileRenderDetour));
+    if (orig != sym::kVaInfinityRender) {
+      Log("gl_world: tile render call not patched (target %llX)", static_cast<unsigned long long>(orig));
+      if (!orig) return false;
+    }
+    g_tile_render = reinterpret_cast<TileFn>(orig);
+    g_floor_installed = true;
+  }
+  g_floor[g_floor_n++] = {fn, 0, false};
+  return true;
+}
+
+bool InstallCompositeSites() {
+  if (g_sites_installed) return true;
   if (!GlWorldAvailable()) return false;
   const sym::Symbol* s[4];
   for (int i = 0; i < 4; ++i) {
     s[i] = Find(g_sites[i].rva);
     if (!s[i] || !CheckSymbol(*s[i])) return false;
   }
-  g_fn = fn;
   for (int i = 0; i < 4; ++i) {
     const uint64_t orig = RedirectCall(*s[i], kDetours[i]);
     if (orig != g_sites[i].expect) {
@@ -601,11 +662,13 @@ bool InstallWorldComposite(CompositeFn fn) {
     }
     g_sites[i].original = reinterpret_cast<PassFn>(orig);
   }
+  g_sites_installed = true;
   return true;
 }
 
 void ArmWorldComposite() {
   g_armed = true;
+  g_floor_armed = true;
   g_glow_n = 0;
   g_glow_dropped = 0;
   g_fx_cell = 0;
