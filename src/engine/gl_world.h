@@ -72,7 +72,7 @@ std::string LoadGl(Gl* gl);
 
 // Every piece of GL state the lighting passes change.
 struct GlState {
-  int program, active_tex, tex[6], draw_fbo, read_fbo, viewport[4];
+  int program, active_tex, tex[8], draw_fbo, read_fbo, viewport[4];
   int blend_src_rgb, blend_dst_rgb, blend_src_a, blend_dst_a, blend_eq_rgb, blend_eq_a;
   int unpack_align, pack_align, unpack_row;
   float clear[4];
@@ -90,6 +90,9 @@ unsigned EngineProgram(int slot);
 // The current CGameArea's WED resref (8 chars max, upper case) and ARE area type flags.
 std::string AreaWed(uint64_t area);
 uint16_t AreaTypeFlags(uint64_t area);
+// CGameArea::GetTintColor at an area point (the LM tint a creature standing there gets), as 0..1 luma;
+// -1 when the symbol does not match. Game thread.
+float AreaTintLuma(uint64_t area, int x, int y);
 
 using CompositeFn = void (*)();
 // Installs the four call-site hooks (once). The callback runs under SEH; on a fault it is turned off.
@@ -126,6 +129,31 @@ void SetEmissiveCallbacks(EmitFn emit, CaptureBeginFn begin, CaptureEndFn end);
 // Draws gathered since the last ArmWorldComposite (cleared there). Game thread only.
 const EngineGlowDraw* GlowDraws(int* n);
 int GlowDrawsDropped();  // over the per-frame cap (256)
+// Sprite buffer (lighting phase 2): creature draws of the world pass. A creature is one FX-surface blit
+// with one cell the emit callback rejects and `want(resref)` accepts (a BAM with a depth file). Each is
+// recorded (draw space) and its blit is drawn a second time with the normal blend between cov_begin and
+// cov_end (the module's coverage buffer: alpha = the creature's pixels after wall clipping).
+struct EngineSpriteDraw {
+  char resref[9];
+  uint16_t cycle, frame;
+  int anchor_x, anchor_y;  // the feet (FXRender3d draw point), draw space
+  int x, y, w, h;          // the frame rect from the cell's header (w = 0: header not loaded), draw space
+  uint8_t mirror;          // blit flag 0x10 (FXBltToBack: x flipped inside the surface)
+};
+using SpriteWantFn = bool (*)(const char* resref);
+void SetSpriteCallbacks(SpriteWantFn want, CaptureBeginFn cov_begin, CaptureEndFn cov_end);
+const EngineSpriteDraw* SpriteDraws(int* n);  // since the last ArmWorldComposite
+// Pure: the feet and frame rect of an FX-surface cell drawn at (cell_x, cell_y) inside a surface whose
+// source rect is [f0, f2) and that is blitted at x (FXBltToBack: x = pos - ref; flag 0x10 mirrors).
+inline void FxCellRect(int x, int f0, int f2, int cell_x, int w, int cx, bool mirror, int* anchor_x, int* left) {
+  if (!mirror) {
+    *anchor_x = x + cell_x;
+    *left = *anchor_x - cx;
+  } else {  // FXBltToBack flips the surface rect: surface column u lands at x + f0 + f2 - u
+    *anchor_x = x + f0 + f2 - cell_x;
+    *left = *anchor_x - (w - cx);
+  }
+}
 // Probe: FX-surface blits this session (all / pure effect / softened draws) and cells seen in them.
 void FxSurfaceStats(uint64_t* blits, uint64_t* pure, uint64_t* softened, uint64_t* cells);
 // Probe: RenderTexture calls (all / in the armed world pass), Render3d calls, OR of world-pass flags.

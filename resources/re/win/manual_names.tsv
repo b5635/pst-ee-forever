@@ -35,3 +35,5 @@
 140484330	CString::CString(char const*)
 1404842C0	CString::CString(CString const&)
 14043A780	CGameSprite::FloatingHP(void)
+140196F90	CGameArea::GetTintColor(CPoint const&,uchar)
+1404AD630	CVidCell::FXRender3d(int,int,CRect const&,CRect const&,uint,int)

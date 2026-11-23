@@ -491,3 +491,31 @@ TEST_CASE("lighting: effect light saturation") {
   const Rgb same = Saturate(pale, 1.0f);
   CHECK(Near(same.g, 0.85));
 }
+
+TEST_CASE("lighting: sprite buffer packing, sprite light, key shadow projection") {
+  float lm = 0, d = 0;
+  UnpackSpriteG(PackSpriteG(0.6f, 12.25f), &lm, &d);
+  CHECK(Near(lm, 9 / 15.0) && Near(d, 12.25));           // 0.6 * 15 = 9 levels
+  UnpackSpriteG(PackSpriteG(1.0f, 80.0f), &lm, &d);       // depth capped at 63
+  CHECK(Near(lm, 1.0) && Near(d, 63.0));
+  UnpackSpriteG(PackSpriteG(0.0f, 0.5f), &lm, &d);
+  CHECK(lm == 0.0f && Near(d, 0.5));
+  // sprite light: no light above ambient = the scene's darkening; a torch adds relative to the LM
+  CHECK(Near(SpriteLight(0.66f, 0.66f, 0.5f, 1.0f), 0.66));
+  CHECK(Near(SpriteLight(0.96f, 0.66f, 0.5f, 1.0f), 1.26));
+  CHECK(Near(SpriteLight(0.96f, 0.66f, 0.1f, 1.0f), 1.66));  // LM floor 0.3: dark nooks do not explode
+  CHECK(Near(SpriteLight(0.5f, 0.66f, 0.5f, 1.0f), 0.66));   // occluded floor value: never below ambient
+  // key shadow (GemRB project): dir (0.6, 0.8), k 0.85 -> sx 0.51, sy 0.85*0.8*0.72 - 0.15*0.2 = 0.4596
+  float ax = 0, ay = 0;
+  KeyShadowAxes(0.6f, 0.8f, 0.85f, &ax, &ay);
+  CHECK(Near(ax, 0.51) && Near(ay, 0.4596));
+  float sx = 0, sy = 0, z = 0;
+  CHECK(KeyShadowSource(100.0f + 40 * ax, 500.0f + 40 * ay, 500.0f, ax, ay, 90.0f, &sx, &sy, &z));
+  CHECK(Near(z, 40.0, 1e-3) && Near(sx, 100.0, 1e-3) && Near(sy, 460.0, 1e-3));
+  CHECK(!KeyShadowSource(112.0f, 499.0f, 500.0f, ax, ay, 90.0f, &sx, &sy, &z));  // up-screen of the feet
+  CHECK(!KeyShadowSource(112.0f, 560.0f, 500.0f, ax, ay, 90.0f, &sx, &sy, &z));  // past the head (130 px)
+  KeyShadowAxes(1.0f, 0.0f, 0.85f, &ax, &ay);  // sideways: GemRB -0.15 up-screen, at least 0.22
+  CHECK(Near(ax, 0.85) && Near(ay, -0.22));
+  KeyShadowAxes(0.9f, 0.2f, 0.85f, &ax, &ay);  // 0.1224 - 0.12 = 0.0024: clamped to 0.22
+  CHECK(Near(ay, 0.22));
+}

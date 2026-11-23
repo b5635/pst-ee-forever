@@ -148,6 +148,28 @@ float EmissiveWeight(float r, float g, float b);
 // pale pink-white Magic Missile frame lights violet); channels stay >= 0, the luminance is kept.
 Rgb Saturate(const Rgb& c, float k);
 
+// --- Phase 2: sprite buffer ------------------------------------------------------------------------
+// The sprite info buffer (RGBA16F, one texel per framebuffer pixel; G < 0 = no sprite):
+//   R = z, height of the pixel above its creature's feet line (area px)
+//   G = LM level * 64 + depth, LM level = round(lm * 15) (the creature's own LM luma, its ambient), depth =
+//       height of the surface toward the camera (sprite_depth .DEP, px, capped at 63)
+//   B, A = normal x, z (y = toward the camera = sqrt(1 - x^2 - z^2))
+float PackSpriteG(float lm, float depth);
+void UnpackSpriteG(float g, float* lm, float* depth);
+// Light factor of a sprite pixel: the engine already drew it with its LM tint (the LM is its ambient), so
+// it gets the same scene-wide darkening as the floor (the area ambient, `ambient` in the ini) and gains
+// what the lights add above that ambient relative to its own LM (a torch next to a creature in a painted
+// dark nook still lights its lit side). l = light buffer value.
+float SpriteLight(float l, float ambient, float lm, float gain);
+// Key-light shadow (projected silhouette, GemRB ScenePolish::DrawShadows `project`): the key line's dir
+// is where shadows fall; a sprite pixel h px above the feet lands on the floor at (x + h*sx, feet + h*sy)
+// with sx = k*dirX, sy = k*dirY*0.72 - 0.15*(1 - |dirY|) (sideways casts keep a little depth), |sy| >= 0.22
+// so the inverse stays defined and low key lights still give a readable silhouette. KeyShadowSource inverts it for a floor point: the source pixel and h;
+// false when no pixel of a sprite up to max_h lands there.
+void KeyShadowAxes(float dir_x, float dir_y, float k, float* sx, float* sy);
+bool KeyShadowSource(float mx, float my, float feet, float sx, float sy, float max_h, float* src_x, float* src_y,
+                     float* h);
+
 // Hand glow overrides (assets/vfx/vfxglow.tsv, shipped from data/vfxglow.tsv): BAMs matching `pattern`
 // ('?' = any char) glow or not, and are softened (screen blend) or not, whatever the scan says.
 // Line: pattern glow soften   (0/1 each; '#' comments)
@@ -206,6 +228,7 @@ enum class DebugMode : int {
   Falloff = 3,    // GemRB debug: red = vertical surface, green = falloff, blue = normal x
   Off = 4,        // no pass at all (the hooks just call through)
   Emissive = 5,   // the emissive mask (red) and the bloom (green) of the glow draws
+  Sprites = 6,    // creatures violet, coverage-only (engine shadow blobs) green, buffer-only red, key shadows yellow
 };
 const char* DebugName(DebugMode m);
 

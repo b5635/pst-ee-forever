@@ -21,6 +21,8 @@ add_library(pstf_logic STATIC
   src/modules/tbc/tbc_sim.cpp
   src/modules/tbc/hud.cpp
   src/modules/lighting/lighting_logic.cpp
+  src/modules/lighting/sprite_depth.cpp
+  src/core/inflate.cpp
 )
 target_include_directories(pstf_logic PUBLIC src)
 
@@ -67,7 +69,8 @@ target_link_options(pst_forever PRIVATE /MAP /DEBUG /OPT:REF /OPT:ICF)
 target_compile_options(pst_forever PRIVATE /Zi)
 
 # L0 unit tests
-add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp tests/unit/test_lighting.cpp)
+add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp tests/unit/test_lighting.cpp
+  tests/unit/test_sprite_depth.cpp)
 target_link_libraries(pstf_tests PRIVATE pstf_logic)
 target_include_directories(pstf_tests PRIVATE tests/unit)
 

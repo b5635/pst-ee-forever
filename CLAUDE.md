@@ -174,5 +174,9 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   blit whose cell is an emitter is the effect's exact pixels (captured per pixel, softened with the screen blend,
   `[lighting] fx_soften`). Probe `PSTF_LightFxCells()` -> blits, pure, softened, cells, "RES cyc/frame anchor x,y rect
   wxh pure;..." (area px; the cell's anchor = the owner's feet). Hand glow overrides: `data/vfxglow.tsv`.
+  Phase 2 (sprite buffer, `tests\ingame\lighting_sprites.lua`, same env as lighting_fx): `PSTF_LightSprites()` (creature
+  draws seen / with depth / drawn, frames, mean LM, depth files), `PSTF_LightSpriteCheck()` (buffer px, coverage px,
+  both; measured on the next frame), debug mode 6 (creatures violet, engine shadow blobs green, key shadows yellow).
+  `src/core/inflate.*` = our zlib decoder (for .DEP); `src/modules/lighting/sprite_depth.*` = SPD1 reader.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

@@ -500,6 +500,13 @@ constexpr uint32_t kOffCellRes = 0x108, kOffCellResRef = 0x110, kOffCellFrame = 
 // Current frame header pointer at +0x128 (u16 width, u16 height, i16 centre x, i16 centre y): FXRender3d
 // (lin 6889E0 `v10 = this[37]; v12 = a2 - v10[2]`, win 1404AD691 `mov rcx,[r14+128h]`, then
 // `movsx eax, word [rcx+4]` / `[rcx+6]`) draws the frame at (x - centre x, y - centre y) in the FX surface.
+// CGameArea::GetTintColor(CPoint const&, uchar list) (lin 1AD040 / win 140196F90, confirmed: list 2 =
+// LIST_FLIGHT returns white, else the LM bitmap at area+872 sampled bilinearly): the creature tint at a
+// point. Read only; the lighting module calls it once per drawn creature (its LM ambient).
+inline constexpr uint8_t kGetTintColorBytes[] = {0x40, 0x55, 0x56, 0x57, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+                                                 0x48, 0x8B, 0xEC, 0x48, 0x83, 0xEC, 0x48, 0x44, 0x8B, 0x12,
+                                                 0x4C, 0x8B, 0xF2, 0x41};
+constexpr uint32_t kRvaGetTintColor = 0x196F90;
 inline constexpr uint8_t kCellFrameHdrLoadBytes[] = {0x49, 0x8B, 0x8E, 0x28, 0x01, 0x00, 0x00};
 constexpr uint32_t kRvaCellFrameHdrLoad = 0x4AD691, kOffCellFrameHdr = 0x128;
 // CGameArea: CGameArea::Unmarshal (lin 1BEB10 L179: `*(m128*)this = header + 8`; win 1401A1AE1
@@ -853,6 +860,7 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("sub_6873C0 (world sprite draw)", kRvaSpriteDraw, kSpriteDrawBytes, "lin 6873C0 / win 1404AE640"),
     PSTF_SYM("DrawCreateProgram_GL.table", kRvaProgramTableLea, kProgramTableLeaBytes, "lin 63C990 / win 1404B4A89"),
     PSTF_SYM("CVidCell::FrameSet", kRvaCellFrameStore, kCellFrameStoreBytes, "lin 68B710 / win 140499B90"),
+    PSTF_SYM("CGameArea::GetTintColor", kRvaGetTintColor, kGetTintColorBytes, "lin 1AD040 / win 140196F90"),
     PSTF_SYM("CVidCell::FXRender3d frame header load", kRvaCellFrameHdrLoad, kCellFrameHdrLoadBytes,
              "lin 6889E0 / win 1404AD691"),
     PSTF_SYM("CVidCell::SequenceSet", kRvaCellSeqStore, kCellSeqStoreBytes, "lin 68B920 / win 14049B340"),

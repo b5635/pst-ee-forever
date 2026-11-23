@@ -1,7 +1,8 @@
 # Lighting, depth and visual effects for PST:EE: investigation and plan
 
-Status: phases 0, 1, 4 and 5 done 2026-11-22 (`src/modules/lighting/`, `src/engine/gl_world.*`, ini `[lighting]`).
-Sprite depth maps for character BAMs are being generated offline (separate task, `tools/sprite_depth/`).
+Status: phases 0, 1, 2, 4 and 5 done 2026-11-22 (`src/modules/lighting/`, `src/engine/gl_world.*`, ini `[lighting]`).
+Sprite depth maps: all 1,154 character BAMs (`tools/sprite_depth/`, 338 MB in `<game>\pst_foreverssets\sprites\depth`),
+used by phase 2 (they replace the phase-3 normal maps: normals come from the depth gradient).
 Module name: `lighting` (ARCHITECTURE.md §3.3).
 Rule from CLAUDE.md applies everywhere: loose on presentation, exact on anything a script can observe.
 Every effect here is presentation only, behind an ini toggle, and all toggles off = vanilla.
@@ -235,6 +236,25 @@ Done (phase 4/5 results, 2026-11-22):
   Share of hazed view: AR1400 8.4 % (mean t 0.30), AR0700 13.6 % (t 0.014), AR0400 0.3 %. Subtle by design; the
   signed depth re-export (§5.4) is still undecided.
 
+Done (phase 2 + effect follow-ups, 2026-11-22):
+- FX surface: every object draws `CInfinity::FXRender` (one cell) then one `FXBltToBack`; measured blits = cells
+  (8,044 / 8,044). Cell draw point from the `FXRender3d` x/y, frame size/centre from cell +0x128 (often unloaded
+  for still frames: the .DEP frame table has the same numbers), blit flag 0x10 mirrors (`FxCellRect`). Casting
+  glow anchor = the caster's feet to the pixel (lighting_fx asserts it).
+- So the "per-frame offline emissive masks" are not needed: a blit of an emitter is exactly the effect's pixels,
+  captured per pixel; the mask is computed from them (`EmissiveWeight`: brightness x saturation), hand overrides in
+  `data/vfxglow.tsv`. Normal-alpha effects are softened to the screen blend (`fx_soften`); look on top: boost,
+  colour fringe, wider bloom (`fx_boost`, `fx_fringe`, `bloom_passes`).
+- Sprite buffer: creature blits (one non-emitting cell with a .DEP) record feet anchor + mirror and re-draw into
+  a coverage buffer (alpha; the engine writes with alpha masked, so the mask is forced on); at the composite one
+  quad per creature writes z above feet, depth, LM level (`CGameArea::GetTintColor` at the feet) and the normal
+  from the depth gradient (RGBA16F, `PackSpriteG`). Hive: 20 creatures, 103,263 buffer px, 99.7 % covered.
+- Light pass: sprite pixels are lit as billboards with depth (P = x, feet + depth, z), Lambert on the depth
+  normal; creatures occlude lights in the same ray march (a sample whose screen point is a creature pixel with
+  feet on the sample's ground line). Composite: sprite = ambient + lights above ambient / LM (`SpriteLight`).
+- Key shadows: GemRB `project` (k 0.85, y x 0.72, sideways bias), |sy| >= 0.22, blend MAX, no shadow where the
+  height map rises; floor pixels only. The engine's contact blob (palette index 1) stays and is not in the
+  depth maps (it is lit as floor).
 
 0. **Probes and plumbing.** Confirm on both sides and add to the manifest: `sub_6873C0`, `DrawInit_GL`, `DrawCreateProgram_GL`,
    `DrawBeginScaled_GL`/`DrawEndScaled_GL`, the batch flush, the program table, `CVidCell` resref/sequence/frame offsets.

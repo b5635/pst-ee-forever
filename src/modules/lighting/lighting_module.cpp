@@ -24,6 +24,7 @@
 #include "engine/sprites.h"
 #include "modules/dev/lua_bridge.h"
 #include "modules/lighting/lighting_logic.h"
+#include "modules/lighting/sprite_depth.h"
 
 namespace pstf::lighting {
 namespace {
@@ -55,6 +56,10 @@ struct Settings {
   float atmosphere_strength = 1.0f;
   // hand lights (vfxlight.tsv) and buff colour lights
   bool hand_lights = true, buff_lights = true;
+  // phase 2: sprite buffer (depth maps), LM as the sprites' ambient, sprite occlusion, key-light shadows
+  bool sprite_lighting = true, sprite_occlusion = true, key_shadows = true;
+  float sprite_normal_strength = 0.6f, sprite_light_gain = 1.0f, key_shadow_strength = 0.5f,
+        key_shadow_length = 0.55f;
   float weapon_glow_radius = 70.0f, weapon_glow_gain = 0.3f;
   float hand_light_gain = 1.5f, buff_light_gain = 0.7f;
 };
@@ -70,11 +75,13 @@ int g_scene_w = 0, g_scene_h = 0, g_light_w = 0, g_light_h = 0;
 
 struct LightUni {
   int target, scene, height, normal, map, to_phys, light_pos, light_color, has_height, has_normals, occl_steps,
-      occl_bias, occl_thick, texel, bump, normal_strength, debug;
+      occl_bias, occl_thick, texel, bump, normal_strength, debug, info, cov, sprites, sprite_occl, vp_origin,
+      sprite_gain;
 } g_lu = {};
 struct CompUni {
   int scene, light, vp_origin, vp_size, mode, keep, max_light, emis, bloom, height, map, texel, has_height,
-      emis_keep, bloom_strength, atmo, haze_colour, fx_boost, fringe;
+      emis_keep, bloom_strength, atmo, haze_colour, fx_boost, fringe, info, cov, shadow, sprites, ambient,
+      shadow_strength;
 } g_cu = {};
 struct FillUni {
   int target;
@@ -106,9 +113,44 @@ uint64_t g_fx_frames_with_light = 0;
 std::vector<BakedLight> g_last_fx;  // probe: this frame's effect lights
 ViewMap g_last_vm;                  // probe: last frame's mapping
 float g_last_ox = 0, g_last_oy = 0;  // probe: last composite's draw -> area offset
-int g_last_vw = 0, g_last_vh = 0;
+int g_last_vw = 0, g_last_vh = 0, g_last_vx = 0, g_last_vy = 0;
 float g_bloom_max = 0;              // probe: brightest bloom texel of the last frame with glow draws
 bool g_bloom_req = false;
+
+// Phase 2: sprite buffer.
+unsigned g_info_prog = 0, g_shadow_prog = 0;
+unsigned g_info_tex = 0, g_info_fbo = 0, g_cov_tex = 0, g_cov_fbo = 0, g_shadow_tex = 0, g_shadow_fbo = 0;
+int g_info_w = 0, g_info_h = 0, g_cov_w = 0, g_cov_h = 0, g_cov_prev_fbo = 0;
+bool g_cov_used = false;     // a creature's coverage was captured this frame
+int g_cov_mask[4] = {1, 1, 1, 1};  // the engine's colour write mask around a coverage draw
+bool g_sprites_valid = false;  // the info buffer holds this frame's creatures
+struct InfoUni {
+  int target, depth, map, rect, feet, mirror, lm, strength;
+} g_iu = {};
+struct ShadowUni {
+  int target, cov, map, vp_origin, to_phys, src, feet, dir, k, height, texel, has_height;
+} g_su = {};
+std::vector<uint64_t> g_dep_names;  // sorted packed names of the .DEP files in assets\sprites\depth
+struct DepEntry {
+  uint64_t name = 0;
+  DepFile file;
+  bool ok = false;
+  uint64_t used = 0;
+};
+std::vector<DepEntry> g_deps;  // loaded depth files (LRU, 48)
+struct DepTex {
+  uint64_t name = 0;
+  int index = -1;
+  unsigned tex = 0;
+  int w = 0, h = 0;
+  uint64_t used = 0;
+};
+std::vector<DepTex> g_dep_tex;  // uploaded frames (LRU, 384)
+int g_spr_drawn = 0, g_spr_depth = 0, g_spr_seen = 0;  // probe: this frame
+float g_spr_lm_sum = 0;
+uint64_t g_spr_frames = 0;
+bool g_spr_check_req = false;  // probe: read the buffers back on the next frame with creatures
+long long g_spr_info_px = -1, g_spr_cov_px = -1, g_spr_both_px = -1;
 
 // Current area.
 std::string g_wed;
@@ -151,6 +193,25 @@ uniform float u_texel;
 uniform float u_bump;
 uniform float u_normalStrength;
 uniform int u_debug;
+uniform sampler2D u_info;  // sprite buffer (framebuffer px, viewport sized; G < 0 = none)
+uniform sampler2D u_cov;   // creature coverage (window px)
+uniform int u_sprites;
+uniform int u_spriteOccl;
+uniform vec2 u_vpOrigin;
+uniform float u_spriteGain;
+
+bool spriteAt(ivec2 ip, out vec4 inf) {
+  inf = vec4(0.0, -1.0, 0.0, 0.0);
+  if (u_sprites == 0) return false;
+  ivec2 sz = textureSize(u_info, 0);
+  if (ip.x < 0 || ip.y < 0 || ip.x >= sz.x || ip.y >= sz.y) return false;
+  inf = texelFetch(u_info, ip, 0);
+  if (inf.g < 0.0) return false;
+  ivec2 cp = ip + ivec2(u_vpOrigin);
+  ivec2 cs = textureSize(u_cov, 0);
+  if (cp.x >= cs.x || cp.y >= cs.y) return false;
+  return texelFetch(u_cov, cp, 0).a > 0.5;
+}
 
 float luma(ivec2 p) {
   p = clamp(p, ivec2(0), textureSize(u_scene, 0) - 1);
@@ -162,7 +223,7 @@ float heightAt(vec2 area) {
   ivec2 t = clamp(ivec2(floor(area / max(u_texel, 1.0))), ivec2(0), sz - ivec2(1));
   return texelFetch(u_height, t, 0).r;
 }
-float occlusion(vec3 P, vec3 Lp) {
+float occlusion(vec3 P, vec3 Lp, float selfFeet) {
   const float T = 1.285714;
   float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   float hits = 0.0;
@@ -172,17 +233,50 @@ float occlusion(vec3 P, vec3 Lp) {
     if (s * len < 4.0) continue;
     vec3 Q = mix(P, Lp, s);
     vec2 scr = vec2(Q.x, Q.y - Q.z);
-    float hs = heightAt(scr);
-    float dQ = -Q.y - Q.z * T;
-    float dS = -(scr.y + hs) - hs * T;
-    float diff = dQ - dS;
-    if (diff > u_occlBias && diff < u_occlThickness) hits += 1.0;
+    if (u_hasHeight == 1) {
+      float hs = heightAt(scr);
+      float dQ = -Q.y - Q.z * T;
+      float dS = -(scr.y + hs) - hs * T;
+      float diff = dQ - dS;
+      if (diff > u_occlBias && diff < u_occlThickness) hits += 1.0;
+    }
+    // Creatures block light: the screen point of Q is a sprite pixel whose feet are on Q's ground line,
+    // so that pixel stands exactly Q.z above the floor there (not the creature the ray starts from).
+    if (u_spriteOccl == 1) {
+      vec4 si;
+      if (spriteAt(ivec2(floor((scr - u_map.zw) / u_map.xy)), si)) {
+        float sf = scr.y + si.r;
+        if (abs(sf - Q.y) < 10.0 && abs(sf - selfFeet) > 4.0) hits += 1.0;
+      }
+    }
   }
   return 1.0 - clamp(hits / 2.0, 0.0, 1.0);
 }
 void main() {
   vec2 phys = gl_FragCoord.xy * u_toPhys;
   vec2 m = phys * u_map.xy + u_map.zw;
+  vec4 si;
+  if (spriteAt(ivec2(floor(phys)), si)) {
+    // Sprite pixel: stands si.r above its feet line, si.g's depth toward the camera, normal from the map.
+    float lmq = floor(si.g / 64.0);
+    float dep = si.g - lmq * 64.0;
+    float feet = m.y + si.r;
+    vec3 Ps = vec3(m.x, feet + dep, si.r);
+    vec3 Ls = u_lightPos.xyz - Ps;
+    float ds = length(vec3(Ls.x, Ls.y / 0.72, Ls.z)) / u_lightPos.w;
+    if (ds >= 1.0) discard;
+    float as = 1.0 - ds * ds;
+    as *= as;
+    if (u_occlSteps > 0) as *= occlusion(vec3(m.x, feet, si.r), u_lightPos.xyz, feet);
+    vec3 ns = vec3(si.b, sqrt(max(0.0, 1.0 - si.b * si.b - si.a * si.a)), si.a);
+    float lam = lambert(ns, normalize(Ls));
+    if (u_debug == 1) {
+      gl_FragColor = vec4(1.0, as * 0.5, (ns.x * 0.5 + 0.5) * as, 1.0);
+      return;
+    }
+    gl_FragColor = vec4(u_lightColor * as * lam * u_spriteGain, 1.0);
+    return;
+  }
   float ground = m.y;
   if (u_hasHeight == 1) ground = m.y + heightAt(m);
   float h = max(ground - m.y, 0.0);
@@ -193,7 +287,7 @@ void main() {
   if (dist >= 1.0) discard;
   float att = 1.0 - dist * dist;
   att *= att;
-  if (u_occlSteps > 0) att *= occlusion(P, u_lightPos.xyz);
+  if (u_occlSteps > 0) att *= occlusion(P, u_lightPos.xyz, -1e9);
   vec3 n;
   if (u_hasNormals == 1) {
     vec2 uv = (m / max(u_texel, 1.0) + 0.5) / vec2(textureSize(u_normalMap, 0));
@@ -241,6 +335,12 @@ uniform float u_emisKeep;
 uniform float u_bloomStrength;
 uniform vec4 u_atmo;     // haze, desat, contrast, strength (0 = off)
 uniform vec3 u_hazeColour;
+uniform sampler2D u_info;    // sprite buffer (viewport px)
+uniform sampler2D u_cov;     // creature coverage (window px)
+uniform sampler2D u_shadow;  // key-light shadows (light-buffer px)
+uniform int u_sprites;
+uniform vec3 u_ambient;
+uniform float u_shadowStrength;
 uniform float u_fxBoost;   // additive boost of glowing pixels
 uniform float u_fringe;    // bloom colour fringe, light-buffer px
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -268,6 +368,33 @@ void main() {
   vec2 fd = normalize(uv - 0.5 + 1e-5) * u_fringe / vec2(textureSize(u_bloom, 0));
   vec3 b = vec3(texture(u_bloom, uv + fd).r, texture(u_bloom, uv).g, texture(u_bloom, uv - fd).b);
   if (u_mode == 5) { gl_FragColor = vec4(e, luma(b) * 4.0, luma(c.rgb) * 0.25, c.a); return; }
+  vec4 si = texelFetch(u_info, ivec2(floor(p)), 0);
+  bool spr = false;
+  if (u_sprites == 1 && si.g >= 0.0) {
+    ivec2 cp = ivec2(floor(gl_FragCoord.xy));
+    ivec2 cs = textureSize(u_cov, 0);
+    spr = cp.x < cs.x && cp.y < cs.y && texelFetch(u_cov, cp, 0).a > 0.5;
+  }
+  if (u_mode == 6) {  // creatures violet (brighter = normal facing right), engine shadow blobs and other
+    // coverage-only pixels green, buffer-only red, key shadows yellow, the rest dimmed grey
+    float cov = texelFetch(u_cov, ivec2(floor(gl_FragCoord.xy)), 0).a;
+    float sh = texture(u_shadow, uv).r;
+    vec3 g = vec3(luma(c.rgb) * 0.3);
+    if (spr) g = vec3(0.45 + si.b * 0.3, 0.15, 0.6 + si.b * 0.3);
+    else if (si.g >= 0.0) g = vec3(0.8, 0.0, 0.0);
+    else if (cov > 0.5) g = vec3(0.0, 0.7, 0.0);
+    else g += vec3(sh, sh, 0.0) * 0.8;
+    gl_FragColor = vec4(g, c.a);
+    return;
+  }
+  if (spr) {
+    // LM as the sprite's ambient: the scene's darkening, plus what the lights add above the area ambient,
+    // relative to the creature's own LM (lighting_logic SpriteLight).
+    float lm = floor(si.g / 64.0) / 15.0;
+    l = u_ambient + max(l - u_ambient, vec3(0.0)) / max(lm, 0.3);
+  } else if (u_shadowStrength > 0.0) {
+    l *= 1.0 - texture(u_shadow, uv).r * u_shadowStrength;
+  }
   vec3 over = max(l - 1.0, vec3(0.0));
   l = min(l, vec3(1.0)) + over / (1.0 + over / max(u_maxLight - 1.0, 0.001));
   vec3 lit = c.rgb * l;
@@ -327,6 +454,76 @@ void main() {
   c += (texture(u_src, uv + d * 1.3846154).rgb + texture(u_src, uv - d * 1.3846154).rgb) * 0.3162162;
   c += (texture(u_src, uv + d * 3.2307692).rgb + texture(u_src, uv - d * 3.2307692).rgb) * 0.0702703;
   gl_FragColor = vec4(c, 1.0);
+}
+)";
+
+// Sprite info pass: one quad per creature frame, writes the sprite buffer (lighting_logic PackSpriteG).
+const char* kInfoFs = R"(#version 130
+uniform sampler2D u_depth;  // R32F heights of the frame (px)
+uniform vec4 u_map;         // area = phys * xy + zw
+uniform vec4 u_rect;        // frame left, top (area px), w, h
+uniform float u_feet;       // area y of the feet
+uniform int u_mirror;
+uniform float u_lm;
+uniform float u_strength;
+float hAt(ivec2 t) {
+  ivec2 s = textureSize(u_depth, 0);
+  if (t.x < 0 || t.y < 0 || t.x >= s.x || t.y >= s.y) return 0.0;
+  return texelFetch(u_depth, t, 0).r;
+}
+void main() {
+  vec2 m = gl_FragCoord.xy * u_map.xy + u_map.zw;
+  vec2 f = m - u_rect.xy;
+  if (f.x < 0.0 || f.y < 0.0 || f.x >= u_rect.z || f.y >= u_rect.w) discard;
+  ivec2 t = ivec2(floor(f));
+  if (u_mirror == 1) t.x = int(u_rect.z) - 1 - t.x;
+  float h = hAt(t);
+  if (h <= 0.0) discard;
+  float gx = (hAt(t + ivec2(1, 0)) - hAt(t - ivec2(1, 0))) * 0.5;
+  float gu = (hAt(t - ivec2(0, 1)) - hAt(t + ivec2(0, 1))) * 0.5;
+  if (u_mirror == 1) gx = -gx;
+  vec3 n = normalize(vec3(-gx * u_strength, 1.0, -gu * u_strength));  // sprite_depth SpriteNormal
+  if (n.y < 0.5) {  // never more than 60 degrees off the camera direction
+    vec2 xz = normalize(n.xz) * 0.8660254;
+    n = vec3(xz.x, 0.5, xz.y);
+  }
+  float g = floor(clamp(u_lm, 0.0, 1.0) * 15.0 + 0.5) * 64.0 + min(h, 63.0);
+  gl_FragColor = vec4(max(u_feet - m.y, 0.0), g, n.x, n.z);
+}
+)";
+
+// Key-light shadow of one creature (lighting_logic KeyShadowSource): for each floor point, the sprite pixel
+// whose projection lands there; its coverage darkens (blend MAX into the shadow buffer).
+const char* kShadowFs = R"(#version 130
+uniform sampler2D u_cov;
+uniform sampler2D u_height;
+uniform vec4 u_map;
+uniform vec2 u_vpOrigin;
+uniform float u_toPhys;
+uniform vec4 u_src;   // frame left, top, w, h (area px)
+uniform float u_feet;
+uniform vec2 u_dir;   // KeyShadowAxes sx, sy
+uniform float u_k;
+uniform float u_texel;
+uniform int u_hasHeight;
+void main() {
+  vec2 phys = gl_FragCoord.xy * u_toPhys;
+  vec2 m = phys * u_map.xy + u_map.zw;
+  float z = (m.y - u_feet) / u_dir.y;
+  float top = u_feet - u_src.y;
+  if (z <= 0.0 || z > top) discard;
+  vec2 s = vec2(m.x - u_dir.x * z, u_feet - z);
+  if (s.x < u_src.x || s.x >= u_src.x + u_src.z) discard;
+  if (u_hasHeight == 1) {
+    ivec2 sz = textureSize(u_height, 0);
+    ivec2 t = clamp(ivec2(floor(m / max(u_texel, 1.0))), ivec2(0), sz - ivec2(1));
+    if (texelFetch(u_height, t, 0).r > 6.0) discard;  // a wall rises here: no shadow pasted on it
+  }
+  ivec2 cp = ivec2(floor((s - u_map.zw) / u_map.xy + u_vpOrigin));
+  ivec2 cs = textureSize(u_cov, 0);
+  if (cp.x < 0 || cp.y < 0 || cp.x >= cs.x || cp.y >= cs.y) discard;
+  float a = texelFetch(u_cov, cp, 0).a;
+  gl_FragColor = vec4(a * (1.0 - 0.5 * z / max(top, 1.0)));  // GemRB: the tip at half
 }
 )";
 
@@ -394,7 +591,9 @@ bool SetUp() {
   g_comp_prog = Link(kCompVs, kCompFs, "composite");
   g_fill_prog = Link(kLightVs, kFillFs, "fill");
   g_post_prog = Link(kLightVs, kPostFs, "bloom");
-  if (!g_light_prog || !g_comp_prog || !g_fill_prog || !g_post_prog) {
+  g_info_prog = Link(kLightVs, kInfoFs, "sprite info");
+  g_shadow_prog = Link(kLightVs, kShadowFs, "key shadow");
+  if (!g_light_prog || !g_comp_prog || !g_fill_prog || !g_post_prog || !g_info_prog || !g_shadow_prog) {
     Log("lighting: off, shaders did not build (GL %s)", ver ? ver : "?");
     return false;
   }
@@ -408,7 +607,10 @@ bool SetUp() {
           gl.GetUniformLocation(lp, "u_occlSteps"),    gl.GetUniformLocation(lp, "u_occlBias"),
           gl.GetUniformLocation(lp, "u_occlThickness"), gl.GetUniformLocation(lp, "u_texel"),
           gl.GetUniformLocation(lp, "u_bump"),         gl.GetUniformLocation(lp, "u_normalStrength"),
-          gl.GetUniformLocation(lp, "u_debug")};
+          gl.GetUniformLocation(lp, "u_debug"),        gl.GetUniformLocation(lp, "u_info"),
+          gl.GetUniformLocation(lp, "u_cov"),          gl.GetUniformLocation(lp, "u_sprites"),
+          gl.GetUniformLocation(lp, "u_spriteOccl"),   gl.GetUniformLocation(lp, "u_vpOrigin"),
+          gl.GetUniformLocation(lp, "u_spriteGain")};
   g_cu = {gl.GetUniformLocation(cp, "u_scene"),  gl.GetUniformLocation(cp, "u_light"),
           gl.GetUniformLocation(cp, "u_vpOrigin"), gl.GetUniformLocation(cp, "u_vpSize"),
           gl.GetUniformLocation(cp, "u_mode"),   gl.GetUniformLocation(cp, "u_keep"),
@@ -418,7 +620,10 @@ bool SetUp() {
           gl.GetUniformLocation(cp, "u_hasHeight"), gl.GetUniformLocation(cp, "u_emisKeep"),
           gl.GetUniformLocation(cp, "u_bloomStrength"), gl.GetUniformLocation(cp, "u_atmo"),
           gl.GetUniformLocation(cp, "u_hazeColour"), gl.GetUniformLocation(cp, "u_fxBoost"),
-          gl.GetUniformLocation(cp, "u_fringe")};
+          gl.GetUniformLocation(cp, "u_fringe"), gl.GetUniformLocation(cp, "u_info"),
+          gl.GetUniformLocation(cp, "u_cov"), gl.GetUniformLocation(cp, "u_shadow"),
+          gl.GetUniformLocation(cp, "u_sprites"), gl.GetUniformLocation(cp, "u_ambient"),
+          gl.GetUniformLocation(cp, "u_shadowStrength")};
   g_fu = {gl.GetUniformLocation(g_fill_prog, "u_target")};
   const unsigned pp = g_post_prog;
   g_pu = {gl.GetUniformLocation(pp, "u_mode"),    gl.GetUniformLocation(pp, "u_src"),
@@ -426,6 +631,17 @@ bool SetUp() {
           gl.GetUniformLocation(pp, "u_dir"),     gl.GetUniformLocation(pp, "u_threshold"),
           gl.GetUniformLocation(pp, "u_toPhys"),  gl.GetUniformLocation(pp, "u_target"),
           gl.GetUniformLocation(pp, "u_vpOrigin")};
+  const unsigned ip = g_info_prog, sp = g_shadow_prog;
+  g_iu = {gl.GetUniformLocation(ip, "u_target"), gl.GetUniformLocation(ip, "u_depth"),
+          gl.GetUniformLocation(ip, "u_map"),    gl.GetUniformLocation(ip, "u_rect"),
+          gl.GetUniformLocation(ip, "u_feet"),   gl.GetUniformLocation(ip, "u_mirror"),
+          gl.GetUniformLocation(ip, "u_lm"),     gl.GetUniformLocation(ip, "u_strength")};
+  g_su = {gl.GetUniformLocation(sp, "u_target"), gl.GetUniformLocation(sp, "u_cov"),
+          gl.GetUniformLocation(sp, "u_map"),    gl.GetUniformLocation(sp, "u_vpOrigin"),
+          gl.GetUniformLocation(sp, "u_toPhys"), gl.GetUniformLocation(sp, "u_src"),
+          gl.GetUniformLocation(sp, "u_feet"),   gl.GetUniformLocation(sp, "u_dir"),
+          gl.GetUniformLocation(sp, "u_k"),      gl.GetUniformLocation(sp, "u_height"),
+          gl.GetUniformLocation(sp, "u_texel"),  gl.GetUniformLocation(sp, "u_hasHeight")};
   gl.ActiveTexture(kTexture0);
   g_scene_tex = NewTexture(kNearest);
   g_light_tex = NewTexture(kLinear);
@@ -435,6 +651,12 @@ bool SetUp() {
   gl.GenFramebuffers(1, &g_light_fbo);
   gl.GenFramebuffers(1, &g_emis_fbo);
   gl.GenFramebuffers(2, g_bloom_fbo);
+  g_info_tex = NewTexture(kNearest);
+  g_cov_tex = NewTexture(kNearest);
+  g_shadow_tex = NewTexture(kLinear);
+  gl.GenFramebuffers(1, &g_info_fbo);
+  gl.GenFramebuffers(1, &g_cov_fbo);
+  gl.GenFramebuffers(1, &g_shadow_fbo);
   g_off = false;
   g_ready = true;
   Log("lighting: GL ready (%s), programs %u/%u, engine draw program %u", ver ? ver : "?", g_light_prog, g_comp_prog,
@@ -499,6 +721,13 @@ void EnsureTargets(int w, int h) {
     gl.TexImage2D(kTex2D, 0, kRgba8, w, h, 0, kRgba, kUByte, nullptr);
     g_scene_w = w;
     g_scene_h = h;
+    gl.BindTexture(kTex2D, g_info_tex);
+    gl.TexImage2D(kTex2D, 0, kRgba16F, w, h, 0, kRgba, kFloat, nullptr);
+    gl.BindFramebuffer(kFramebuffer, g_info_fbo);
+    gl.FramebufferTexture2D(kFramebuffer, kColorAttach0, kTex2D, g_info_tex, 0);
+    if (gl.CheckFramebufferStatus(kFramebuffer) != kFbComplete) Log("lighting: sprite buffer %dx%d incomplete", w, h);
+    g_info_w = w;
+    g_info_h = h;
   }
   const int lw = std::max(1, (w + 1) / 2), lh = std::max(1, (h + 1) / 2);
   if (lw != g_light_w || lh != g_light_h) {
@@ -518,6 +747,7 @@ void EnsureTargets(int w, int h) {
     };
     attach(g_bloom_tex[0], g_bloom_fbo[0], kRgba16F, kFloat, "bloom 0");
     attach(g_bloom_tex[1], g_bloom_fbo[1], kRgba16F, kFloat, "bloom 1");
+    attach(g_shadow_tex, g_shadow_fbo, kRgba8, kUByte, "shadow");
     g_light_w = lw;
     g_light_h = lh;
   }
@@ -704,6 +934,214 @@ void Compare(const ViewMap& vm, float to_phys, bool has_h) {
       g_cmp_bad, g_cmp_max);
 }
 
+// --- Phase 2: sprite buffer ---------------------------------------------------------------------------
+bool HasDepth(const char* res) {
+  if (!res || !res[0]) return false;
+  return std::binary_search(g_dep_names.begin(), g_dep_names.end(), PackResRef(res));
+}
+
+const DepFile* LoadDep(const char* res) {
+  const uint64_t name = PackResRef(res);
+  for (DepEntry& e : g_deps)
+    if (e.name == name) {
+      e.used = g_frames;
+      return e.ok ? &e.file : nullptr;
+    }
+  if (g_deps.size() >= 48) {  // evict the least recently used
+    size_t old = 0;
+    for (size_t i = 1; i < g_deps.size(); ++i)
+      if (g_deps[i].used < g_deps[old].used) old = i;
+    g_deps.erase(g_deps.begin() + std::ptrdiff_t(old));
+  }
+  DepEntry e;
+  e.name = name;
+  e.used = g_frames;
+  std::vector<uint8_t> buf;
+  std::string r(res);
+  const std::string path = std::string(DataDir()) + "\\assets\\sprites\\depth\\" + r + ".DEP";
+  e.ok = ReadFile(path, &buf) && ParseDep(std::move(buf), &e.file);
+  if (!e.ok) Log("lighting: depth file %s unreadable", path.c_str());
+  g_deps.push_back(std::move(e));
+  return g_deps.back().ok ? &g_deps.back().file : nullptr;
+}
+
+// The depth texture of a creature draw's frame (R32F, frame px) and the frame's size and centre; 0 when
+// there is none.
+unsigned DepthTexture(const char* res, int cycle, int frame, int* w, int* h, int* cx, int* cy) {
+  const DepFile* dep = LoadDep(res);
+  if (!dep) return 0;
+  const int index = dep->FrameIndex(cycle, frame);
+  if (index < 0) return 0;
+  const uint64_t name = PackResRef(res);
+  for (DepTex& t : g_dep_tex)
+    if (t.name == name && t.index == index) {
+      t.used = g_frames;
+      *w = t.w;
+      *h = t.h;
+      *cx = dep->frames[size_t(index)].cx;
+      *cy = dep->frames[size_t(index)].cy;
+      return t.tex;
+    }
+  std::vector<float> heights;
+  if (!dep->Heights(index, &heights)) return 0;
+  const DepFrame& f = dep->frames[size_t(index)];
+  if (!f.w || !f.h) return 0;
+  DepTex* slot = nullptr;
+  if (g_dep_tex.size() >= 384) {
+    slot = &g_dep_tex[0];
+    for (DepTex& t : g_dep_tex)
+      if (t.used < slot->used) slot = &t;
+  } else {
+    g_dep_tex.push_back(DepTex());
+    slot = &g_dep_tex.back();
+    slot->tex = NewTexture(kNearest);
+  }
+  slot->name = name;
+  slot->index = index;
+  slot->w = f.w;
+  slot->h = f.h;
+  slot->used = g_frames;
+  auto& gl = g_gl;
+  gl.ActiveTexture(kTexture0);
+  gl.BindTexture(kTex2D, slot->tex);
+  gl.PixelStorei(kUnpackAlign, 4);
+  gl.PixelStorei(kUnpackRow, 0);
+  gl.TexImage2D(kTex2D, 0, kR32F, f.w, f.h, 0, kRed, kFloat, heights.data());
+  *w = f.w;
+  *h = f.h;
+  *cx = f.cx;
+  *cy = f.cy;
+  return slot->tex;
+}
+
+// Builds the sprite buffer (one quad per creature frame drawn this frame) and the key-light shadows.
+void SpritePass(const ViewMap& vm, float ox, float oy, float to_phys, int vx, int vy, int vw, int vh, bool has_h) {
+  auto& gl = g_gl;
+  g_sprites_valid = false;
+  g_spr_drawn = g_spr_depth = 0;
+  g_spr_lm_sum = 0;
+  int n = 0;
+  const engine::EngineSpriteDraw* d = engine::SpriteDraws(&n);
+  g_spr_seen = n;
+  gl.BindFramebuffer(kFramebuffer, g_info_fbo);
+  gl.Viewport(0, 0, vw, vh);
+  gl.ClearColor(0, -1, 0, 0);
+  gl.Clear(kColorBit);
+  gl.BindFramebuffer(kFramebuffer, g_shadow_fbo);
+  gl.Viewport(0, 0, g_light_w, g_light_h);
+  gl.ClearColor(0, 0, 0, 0);
+  gl.Clear(kColorBit);
+  if (!g_set.sprite_lighting || n == 0 || !g_cov_used) return;
+  const uint64_t area = engine::WorldPassArea();
+  gl.BindFramebuffer(kFramebuffer, g_info_fbo);
+  gl.Viewport(0, 0, vw, vh);
+  gl.UseProgram(g_info_prog);
+  gl.Uniform2f(g_iu.target, float(vw), float(vh));
+  gl.Uniform4f(g_iu.map, vm.ax, vm.ay, vm.bx, vm.by);
+  gl.Uniform1f(g_iu.strength, g_set.sprite_normal_strength);
+  gl.Uniform1i(g_iu.depth, 0);
+  struct Drawn {
+    float left, top, w, h, feet;
+  };
+  std::vector<Drawn> drawn;
+  for (int i = 0; i < n; ++i) {
+    int tw = 0, th = 0, tcx = 0, tcy = 0;
+    const unsigned tex = DepthTexture(d[i].resref, d[i].cycle, d[i].frame, &tw, &th, &tcx, &tcy);
+    if (!tex) continue;
+    // frame rect from the depth file (FxCellRect with the BAM frame's own size and centre)
+    const float left = float(d[i].mirror ? d[i].anchor_x - (tw - tcx) : d[i].anchor_x - tcx);
+    const float top = float(d[i].anchor_y - tcy);
+    ++g_spr_depth;
+    float lm = engine::AreaTintLuma(area, int(float(d[i].anchor_x) + ox), int(float(d[i].anchor_y) + oy));
+    if (lm < 0) lm = 1.0f;
+    g_spr_lm_sum += lm;
+    const Drawn r{left + ox, top + oy, float(tw), float(th), float(d[i].anchor_y) + oy};
+    gl.UseProgram(g_info_prog);
+    gl.ActiveTexture(kTexture0);
+    gl.BindTexture(kTex2D, tex);
+    gl.Uniform4f(g_iu.rect, r.left, r.top, r.w, r.h);
+    gl.Uniform1f(g_iu.feet, r.feet);
+    gl.Uniform1i(g_iu.mirror, d[i].mirror ? 1 : 0);
+    gl.Uniform1f(g_iu.lm, lm);
+    float x0, y0, x1, y1;
+    ToPhys(vm, r.left, r.top, &x0, &y0);
+    ToPhys(vm, r.left + r.w, r.top + r.h, &x1, &y1);
+    Quad(std::min(x0, x1) - 1, std::min(y0, y1) - 1, std::max(x0, x1) + 1, std::max(y0, y1) + 1);
+    drawn.push_back(r);
+    ++g_spr_drawn;
+  }
+  g_sprites_valid = g_spr_drawn > 0;
+  if (g_sprites_valid) ++g_spr_frames;
+  // Key-light shadows (areas with a key line): each creature's coverage projected along the key direction.
+  if (!g_sprites_valid || !g_set.key_shadows || !g_scene.has_key || g_set.key_shadow_strength <= 0) return;
+  float sx = 0, sy = 0;
+  KeyShadowAxes(g_scene.key_dir[0], g_scene.key_dir[1], g_set.key_shadow_length, &sx, &sy);
+  gl.BindFramebuffer(kFramebuffer, g_shadow_fbo);
+  gl.Viewport(0, 0, g_light_w, g_light_h);
+  gl.UseProgram(g_shadow_prog);
+  gl.Uniform2f(g_su.target, float(g_light_w), float(g_light_h));
+  gl.Uniform4f(g_su.map, vm.ax, vm.ay, vm.bx, vm.by);
+  gl.Uniform2f(g_su.vp_origin, float(vx), float(vy));
+  gl.Uniform1f(g_su.to_phys, to_phys);
+  gl.Uniform2f(g_su.dir, sx, sy);
+  gl.Uniform1f(g_su.texel, float(g_scene.height.texel > 0 ? g_scene.height.texel : 2));
+  gl.Uniform1i(g_su.has_height, has_h ? 1 : 0);
+  gl.Uniform1i(g_su.cov, 7);
+  gl.Uniform1i(g_su.height, 2);
+  gl.ActiveTexture(kTexture0 + 7);
+  gl.BindTexture(kTex2D, g_cov_tex);
+  gl.ActiveTexture(kTexture0 + 2);
+  gl.BindTexture(kTex2D, has_h ? g_height_tex : 0);
+  gl.ActiveTexture(kTexture0);
+  gl.Enable(kBlend);
+  gl.BlendEquationSeparate(0x8008 /*MAX*/, 0x8008);
+  gl.BlendFuncSeparate(kOne, kOne, kOne, kOne);
+  for (const Drawn& r : drawn) {
+    const float top_h = r.feet - r.top;  // tallest pixel above the feet
+    gl.Uniform4f(g_su.src, r.left, r.top, r.w, r.h);
+    gl.Uniform1f(g_su.feet, r.feet);
+    // bounds of the projection of the frame rect (area), then light-buffer px
+    const float xa = r.left + std::min(0.0f, sx * top_h), xb = r.left + r.w + std::max(0.0f, sx * top_h);
+    const float ya = r.feet + std::min(0.0f, sy * top_h), yb = r.feet + std::max(0.0f, sy * top_h);
+    float x0, y0, x1, y1;
+    ToPhys(vm, xa, ya, &x0, &y0);
+    ToPhys(vm, xb, yb, &x1, &y1);
+    Quad(std::min(x0, x1) / to_phys - 1, std::min(y0, y1) / to_phys - 1, std::max(x0, x1) / to_phys + 1,
+         std::max(y0, y1) / to_phys + 1);
+  }
+  gl.BlendEquationSeparate(kFuncAdd, kFuncAdd);
+  gl.Disable(kBlend);
+}
+
+// Probe: pixels of the sprite buffer with a sprite (G >= 0), of the coverage buffer (alpha > 0.5), and both.
+void SpriteCheck(int vx, int vy, int vw, int vh) {
+  auto& gl = g_gl;
+  std::vector<float> info(size_t(vw) * vh * 4);
+  gl.BindFramebuffer(0x8CA8 /*read*/, g_info_fbo);
+  gl.PixelStorei(kPackAlign, 4);
+  gl.ReadPixels(0, 0, vw, vh, kRgba, kFloat, info.data());
+  std::vector<uint8_t> cov(size_t(g_cov_w) * g_cov_h * 4);
+  gl.BindFramebuffer(0x8CA8 /*read*/, g_cov_fbo);
+  gl.PixelStorei(kPackAlign, 1);
+  gl.ReadPixels(0, 0, g_cov_w, g_cov_h, kRgba, kUByte, cov.data());
+  long long ni = 0, nc = 0, nb = 0;
+  for (int y = 0; y < vh; ++y)
+    for (int x = 0; x < vw; ++x) {
+      const bool i = info[(size_t(y) * vw + x) * 4 + 1] >= 0.0f;
+      const int cx = x + vx, cy = y + vy;
+      const bool c = cx < g_cov_w && cy < g_cov_h && cov[(size_t(cy) * g_cov_w + cx) * 4 + 3] > 127;
+      ni += i;
+      nc += c;
+      nb += i && c;
+    }
+  g_spr_info_px = ni;
+  g_spr_cov_px = nc;
+  g_spr_both_px = nb;
+  g_spr_check_req = false;
+  Log("lighting: sprite check: %lld px in the sprite buffer, %lld covered, %lld both (%d creatures)", ni, nc, nb,
+      g_spr_drawn);
+}
+
 void LightPass(const ViewMap& vm, float to_phys, const std::vector<BakedLight>& fx) {
   auto& gl = g_gl;
   gl.BindFramebuffer(kFramebuffer, g_light_fbo);
@@ -718,6 +1156,8 @@ void LightPass(const ViewMap& vm, float to_phys, const std::vector<BakedLight>& 
   if (!baked && !with_fx) return;
 
   const bool has_h = g_set.height_map && g_height_tex && !g_scene.height.empty();
+  const bool sprites = g_sprites_valid && !g_cmp_req;  // the GPU/CPU compare covers the floor model only
+  const bool spr_occl = sprites && g_set.sprite_occlusion;
   const bool has_n = g_set.area_normals && g_normal_tex && !g_scene.normal.empty();
   gl.UseProgram(g_light_prog);
   gl.Uniform2f(g_lu.target, float(g_light_w), float(g_light_h));
@@ -728,7 +1168,13 @@ void LightPass(const ViewMap& vm, float to_phys, const std::vector<BakedLight>& 
   gl.Uniform1f(g_lu.to_phys, to_phys);
   gl.Uniform1i(g_lu.has_height, has_h ? 1 : 0);
   gl.Uniform1i(g_lu.has_normals, has_n ? 1 : 0);
-  gl.Uniform1i(g_lu.occl_steps, has_h && g_set.occlusion ? g_set.occlusion_steps : 0);
+  gl.Uniform1i(g_lu.occl_steps, (has_h && g_set.occlusion) || spr_occl ? g_set.occlusion_steps : 0);
+  gl.Uniform1i(g_lu.sprites, sprites ? 1 : 0);
+  gl.Uniform1i(g_lu.sprite_occl, spr_occl ? 1 : 0);
+  gl.Uniform1f(g_lu.sprite_gain, g_set.sprite_light_gain);
+  gl.Uniform1i(g_lu.info, 6);
+  gl.Uniform1i(g_lu.cov, 7);
+  gl.Uniform2f(g_lu.vp_origin, float(g_last_vx), float(g_last_vy));
   gl.Uniform1f(g_lu.occl_bias, 2.0f);
   gl.Uniform1f(g_lu.occl_thick, 48.0f);
   gl.Uniform1f(g_lu.texel, float(g_scene.height.texel > 0 ? g_scene.height.texel : 2));
@@ -741,6 +1187,10 @@ void LightPass(const ViewMap& vm, float to_phys, const std::vector<BakedLight>& 
   gl.BindTexture(kTex2D, has_h ? g_height_tex : 0);
   gl.ActiveTexture(kTexture0 + 3);
   gl.BindTexture(kTex2D, has_n ? g_normal_tex : 0);
+  gl.ActiveTexture(kTexture0 + 6);
+  gl.BindTexture(kTex2D, g_info_tex);
+  gl.ActiveTexture(kTexture0 + 7);
+  gl.BindTexture(kTex2D, g_cov_tex);
   gl.ActiveTexture(kTexture0);
   gl.Enable(kBlend);
   gl.BlendEquationSeparate(kFuncAdd, kFuncAdd);
@@ -824,6 +1274,8 @@ void Composite() {
   g_last_oy = oy;
   g_last_vw = vw;
   g_last_vh = vh;
+  g_last_vx = vx;
+  g_last_vy = vy;
   const bool check = g_check_req;
   if (check) {
     gl.BindFramebuffer(0x8CA8 /*read*/, static_cast<unsigned>(saved.draw_fbo));
@@ -843,6 +1295,7 @@ void Composite() {
   const bool has_h = g_height_tex && !g_scene.height.empty();
   if (g_mode != DebugMode::RoundTrip) {
     const std::vector<BakedLight> fx = GatherFx(ox, oy, vm, vw, vh);
+    SpritePass(vm, ox, oy, to_phys, vx, vy, vw, vh, has_h);
     LightPass(vm, to_phys, fx);
     BloomPass(to_phys, vx, vy);
   }
@@ -887,6 +1340,21 @@ void Composite() {
   gl.Uniform3f(g_cu.haze_colour, hz.r, hz.g, hz.b);
   gl.Uniform1f(g_cu.fx_boost, g_set.emissive && g_cap_used ? g_set.fx_boost : 0.0f);
   gl.Uniform1f(g_cu.fringe, g_set.fx_fringe);
+  const bool spr_on = g_sprites_valid && g_mode != DebugMode::RoundTrip;
+  gl.Uniform1i(g_cu.sprites, spr_on ? 1 : 0);
+  gl.Uniform1i(g_cu.info, 6);
+  gl.Uniform1i(g_cu.cov, 7);
+  gl.Uniform1i(g_cu.shadow, 3);
+  gl.Uniform3f(g_cu.ambient, g_ambient.r, g_ambient.g, g_ambient.b);
+  gl.Uniform1f(g_cu.shadow_strength, spr_on && g_set.key_shadows && g_scene.has_key
+                                         ? g_set.key_shadow_strength * std::max(0.4f, std::min(1.0f, g_scene.key_strength))
+                                         : 0.0f);
+  gl.ActiveTexture(kTexture0 + 7);
+  gl.BindTexture(kTex2D, g_cov_tex);
+  gl.ActiveTexture(kTexture0 + 6);
+  gl.BindTexture(kTex2D, g_info_tex);
+  gl.ActiveTexture(kTexture0 + 3);
+  gl.BindTexture(kTex2D, g_shadow_tex);
   gl.ActiveTexture(kTexture0 + 5);
   gl.BindTexture(kTex2D, g_bloom_tex[0]);
   gl.ActiveTexture(kTexture0 + 4);
@@ -897,6 +1365,10 @@ void Composite() {
   gl.BindTexture(kTex2D, g_light_tex);
   gl.ActiveTexture(kTexture0);
   gl.BindTexture(kTex2D, g_scene_tex);
+  if (g_spr_check_req && g_sprites_valid) {
+    SpriteCheck(vx, vy, vw, vh);
+    gl.BindFramebuffer(kFramebuffer, static_cast<unsigned>(saved.draw_fbo));
+  }
   Quad(-1, -1, 1, 1);
 
   if (check) {
@@ -931,6 +1403,7 @@ void Composite() {
 void PreDraw() {
   engine::ArmWorldComposite();
   g_cap_used = false;
+  g_cov_used = false;
 }
 
 int EmitDecision(const char* res, uint16_t cycle, uint16_t frame, uint32_t flags) {
@@ -1000,11 +1473,69 @@ bool CaptureBegin() {
 
 void CaptureEnd() { g_gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_cap_prev_fbo)); }
 
+// Creature coverage (sprite buffer): same as the emissive capture, own buffer.
+bool SpriteWant(const char* res) {
+  if (!g_ready || !g_set.sprite_lighting || g_mode == DebugMode::Off || g_mode == DebugMode::RoundTrip) return false;
+  return HasDepth(res);
+}
+
+bool CovBegin() {
+  if (!g_ready) return false;
+  auto& gl = g_gl;
+  int vp[4];
+  gl.GetIntegerv(kViewport, vp);
+  const int w = vp[0] + vp[2], h = vp[1] + vp[3];
+  if (w <= 0 || h <= 0 || w > 16384 || h > 16384) return false;
+  gl.GetIntegerv(0x8CA6 /*draw fbo*/, &g_cov_prev_fbo);
+  if (w != g_cov_w || h != g_cov_h) {
+    int prev_read = 0, active = 0, bound = 0;
+    gl.GetIntegerv(0x8CAA /*read fbo*/, &prev_read);
+    gl.GetIntegerv(0x84E0, &active);
+    gl.ActiveTexture(kTexture0);
+    gl.GetIntegerv(0x8069, &bound);
+    gl.BindTexture(kTex2D, g_cov_tex);
+    gl.TexImage2D(kTex2D, 0, kRgba8, w, h, 0, kRgba, kUByte, nullptr);
+    gl.BindTexture(kTex2D, unsigned(bound));
+    gl.ActiveTexture(unsigned(active));
+    gl.BindFramebuffer(kFramebuffer, g_cov_fbo);
+    gl.FramebufferTexture2D(kFramebuffer, kColorAttach0, kTex2D, g_cov_tex, 0);
+    const bool complete = gl.CheckFramebufferStatus(kFramebuffer) == kFbComplete;
+    gl.BindFramebuffer(0x8CA8 /*read*/, unsigned(prev_read));
+    if (!complete) {
+      Log("lighting: coverage buffer %dx%d incomplete", w, h);
+      gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_cov_prev_fbo));
+      return false;
+    }
+    g_cov_w = w;
+    g_cov_h = h;
+  }
+  gl.BindFramebuffer(0x8CA9 /*draw*/, g_cov_fbo);
+  gl.GetIntegerv(0x0C23 /*colour writemask*/, g_cov_mask);
+  gl.ColorMask(1, 1, 1, 1);  // the engine draws with alpha writes off: coverage lives in alpha
+  if (!g_cov_used) {
+    float cc[4];
+    gl.GetFloatv(0x0C22, cc);
+    const bool sc = gl.IsEnabled(kScissor) != 0;
+    if (sc) gl.Disable(kScissor);
+    gl.ClearColor(0, 0, 0, 0);
+    gl.Clear(kColorBit);
+    gl.ClearColor(cc[0], cc[1], cc[2], cc[3]);
+    if (sc) gl.Enable(kScissor);
+    g_cov_used = true;
+  }
+  return true;
+}
+
+void CovEnd() {
+  g_gl.ColorMask(g_cov_mask[0] != 0, g_cov_mask[1] != 0, g_cov_mask[2] != 0, g_cov_mask[3] != 0);
+  g_gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_cov_prev_fbo));
+}
+
 // --- Lua probes ------------------------------------------------------------------------------------
 // PSTF_LightDebug(mode) -> mode name. 0 lit, 1 light buffer, 2 round trip, 3 falloff, 4 off, 5 emissive.
 int __cdecl LuaDebug(engine::LuaState* L) {
   const int m = static_cast<int>(engine::LuaNumberArg(L, 1, -1));
-  if (m >= 0 && m <= 5) g_mode = static_cast<DebugMode>(m);
+  if (m >= 0 && m <= 6) g_mode = static_cast<DebugMode>(m);
   Log("lua: PSTF_LightDebug(%d) -> %s", m, DebugName(g_mode));
   engine::LuaPushString(L, DebugName(g_mode));
   return 1;
@@ -1103,6 +1634,12 @@ int __cdecl LuaSet(engine::LuaState* L) {
   else if (k == "emissive") g_set.emissive = v != 0;
   else if (k == "fx_lights") g_set.fx_lights = v != 0;
   else if (k == "fx_soften") g_set.fx_soften = v != 0;
+  else if (k == "sprite_lighting") g_set.sprite_lighting = v != 0;
+  else if (k == "sprite_occlusion") g_set.sprite_occlusion = v != 0;
+  else if (k == "key_shadows") g_set.key_shadows = v != 0;
+  else if (k == "key_shadow_strength") g_set.key_shadow_strength = float(v) / 100.0f;
+  else if (k == "sprite_normal_strength") g_set.sprite_normal_strength = float(v) / 100.0f;
+  else if (k == "sprite_light_gain") g_set.sprite_light_gain = float(v) / 100.0f;
   else if (k == "fx_boost") g_set.fx_boost = float(v) / 100.0f;
   else if (k == "fx_fringe") g_set.fx_fringe = float(v);
   else if (k == "bloom_passes") g_set.bloom_passes = int(v);
@@ -1189,6 +1726,33 @@ int __cdecl LuaFxCells(engine::LuaState* L) {
   return 5;
 }
 
+// PSTF_LightSprites() -> creature draws seen, with a depth frame, drawn into the sprite buffer, frames
+// with a valid sprite buffer, mean LM luma of the drawn ones, depth files known. Logs.
+int __cdecl LuaSprites(engine::LuaState* L) {
+  const float lm = g_spr_depth ? g_spr_lm_sum / float(g_spr_depth) : -1.0f;
+  Log("lua: PSTF_LightSprites -> seen %d depth %d drawn %d frames %llu lm %.3f (depth files %zu, loaded %zu, "
+      "textures %zu, coverage %dx%d)",
+      g_spr_seen, g_spr_depth, g_spr_drawn, static_cast<unsigned long long>(g_spr_frames), lm, g_dep_names.size(),
+      g_deps.size(), g_dep_tex.size(), g_cov_w, g_cov_h);
+  engine::LuaPushNumber(L, g_spr_seen);
+  engine::LuaPushNumber(L, g_spr_depth);
+  engine::LuaPushNumber(L, g_spr_drawn);
+  engine::LuaPushNumber(L, double(g_spr_frames));
+  engine::LuaPushNumber(L, lm);
+  engine::LuaPushNumber(L, double(g_dep_names.size()));
+  return 6;
+}
+
+// PSTF_LightSpriteCheck() -> last measured sprite-buffer px, coverage px, both (-1 = none yet); asks for a
+// new measurement on the next frame with creatures.
+int __cdecl LuaSpriteCheck(engine::LuaState* L) {
+  engine::LuaPushNumber(L, double(g_spr_info_px));
+  engine::LuaPushNumber(L, double(g_spr_cov_px));
+  engine::LuaPushNumber(L, double(g_spr_both_px));
+  g_spr_check_req = true;
+  return 3;
+}
+
 // PSTF_LightShot(path) -> "" or the error: saves the last presented frame (half-size BMP).
 int __cdecl LuaShot(engine::LuaState* L) {
   const std::string path = engine::LuaStringArg(L, 1);
@@ -1227,6 +1791,13 @@ void InstallLighting(const IniMap& ini) {
   g_set.bloom_threshold = pct("lighting.bloom_threshold", 45, 0, 100);
   g_set.fx_lights = IniBool(ini, "lighting.fx_lights", true);
   g_set.fx_soften = IniBool(ini, "lighting.fx_soften", true);
+  g_set.sprite_lighting = IniBool(ini, "lighting.sprite_lighting", true);
+  g_set.sprite_occlusion = IniBool(ini, "lighting.sprite_occlusion", true);
+  g_set.key_shadows = IniBool(ini, "lighting.key_shadows", true);
+  g_set.sprite_normal_strength = pct("lighting.sprite_normal_strength", 60, 0, 200);
+  g_set.sprite_light_gain = pct("lighting.sprite_light_gain", 100, 0, 300);
+  g_set.key_shadow_strength = pct("lighting.key_shadow_strength", 50, 0, 100);
+  g_set.key_shadow_length = pct("lighting.key_shadow_length", 85, 20, 200);
   g_set.fx_boost = pct("lighting.fx_boost", 15, 0, 200);
   g_set.fx_light_saturation = pct("lighting.fx_light_saturation", 160, 0, 300);
   g_set.fx_fringe = float(std::max(0, std::min(8, IniInt(ini, "lighting.fx_fringe", 2))));
@@ -1271,6 +1842,22 @@ void InstallLighting(const IniMap& ini) {
     Log("lighting: %zu glow overrides (vfxglow.tsv)", g_glow_over.size());
   }
   engine::SetEmissiveCallbacks(&EmitDecision, &CaptureBegin, &CaptureEnd);
+  if (g_set.sprite_lighting) {
+    WIN32_FIND_DATAA fd;
+    const std::string pat = std::string(DataDir()) + "\\assets\\sprites\\depth\\*.DEP";
+    HANDLE h = FindFirstFileA(pat.c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+      do {
+        std::string n(fd.cFileName);
+        const size_t dot = n.find('.');
+        if (dot != std::string::npos && dot <= 8) g_dep_names.push_back(PackResRef(n.substr(0, dot).c_str()));
+      } while (FindNextFileA(h, &fd));
+      FindClose(h);
+    }
+    std::sort(g_dep_names.begin(), g_dep_names.end());
+    engine::SetSpriteCallbacks(&SpriteWant, &CovBegin, &CovEnd);
+    Log("lighting: sprite buffer on, %zu sprite depth files", g_dep_names.size());
+  }
   if (g_set.fx_lights) {
     std::vector<uint8_t> buf;
     const std::string path = std::string(DataDir()) + "\\assets\\vfx\\vfxauto.tsv";
@@ -1288,6 +1875,8 @@ void InstallLighting(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_LightCompareResult", &LuaCompareResult);
   dev::AddLuaFunction("PSTF_LightFx", &LuaFx);
   dev::AddLuaFunction("PSTF_LightFxCells", &LuaFxCells);
+  dev::AddLuaFunction("PSTF_LightSprites", &LuaSprites);
+  dev::AddLuaFunction("PSTF_LightSpriteCheck", &LuaSpriteCheck);
   dev::AddLuaFunction("PSTF_LightBloom", &LuaBloom);
   dev::AddLuaFunction("PSTF_LightAtmo", &LuaAtmo);
   dev::AddLuaFunction("PSTF_LightSet", &LuaSet);

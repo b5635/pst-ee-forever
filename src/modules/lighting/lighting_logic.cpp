@@ -467,6 +467,37 @@ float EmissiveWeight(float r, float g, float b) {
   return t * t * (3.0f - 2.0f * t) * (0.55f + 0.45f * sat);
 }
 
+float PackSpriteG(float lm, float depth) {
+  return std::floor(Clamp01(lm) * 15.0f + 0.5f) * 64.0f + std::max(0.0f, std::min(depth, 63.0f));
+}
+
+void UnpackSpriteG(float g, float* lm, float* depth) {
+  const float level = std::floor(g / 64.0f);
+  *lm = level / 15.0f;
+  *depth = g - level * 64.0f;
+}
+
+float SpriteLight(float l, float ambient, float lm, float gain) {
+  return ambient + std::max(0.0f, l - ambient) / std::max(lm, 0.3f) * gain;
+}
+
+void KeyShadowAxes(float dir_x, float dir_y, float k, float* sx, float* sy) {
+  *sx = k * dir_x;
+  float y = k * dir_y * 0.72f - 0.15f * (1.0f - std::fabs(dir_y));
+  if (std::fabs(y) < 0.22f) y = y < 0 ? -0.22f : 0.22f;
+  *sy = y;
+}
+
+bool KeyShadowSource(float mx, float my, float feet, float sx, float sy, float max_h, float* src_x, float* src_y,
+                     float* h) {
+  const float hh = (my - feet) / sy;
+  if (hh <= 0 || hh > max_h) return false;
+  *h = hh;
+  *src_x = mx - sx * hh;
+  *src_y = feet - hh;
+  return true;
+}
+
 Rgb Saturate(const Rgb& c, float k) {
   const float l = Luma(c);
   Rgb o{l + (c.r - l) * k, l + (c.g - l) * k, l + (c.b - l) * k};
@@ -542,6 +573,7 @@ const char* DebugName(DebugMode m) {
     case DebugMode::Falloff: return "falloff";
     case DebugMode::Off: return "off";
     case DebugMode::Emissive: return "emissive";
+    case DebugMode::Sprites: return "sprites";
   }
   return "?";
 }

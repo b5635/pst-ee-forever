@@ -114,6 +114,13 @@ constexpr int kMaxFxCells = 32;
 FxCell g_fx_cells[kMaxFxCells];
 int g_fx_n = 0;
 uint64_t g_fx_blits = 0, g_fx_pure = 0, g_fx_soft = 0, g_fx_cells_seen = 0;
+// Sprite buffer: creature draws of this frame.
+constexpr int kMaxSprites = 96;
+EngineSpriteDraw g_sprites[kMaxSprites];
+int g_sprite_n = 0;
+SpriteWantFn g_sprite_want = nullptr;
+CaptureBeginFn g_cov_begin = nullptr;
+CaptureEndFn g_cov_end = nullptr;
 
 void ReadFrameHeader(uint64_t cell, FxCell* f) {
   const uint64_t hdr = R<uint64_t>(cell + sym::kOffCellFrameHdr);
@@ -198,12 +205,11 @@ void Trace(char path, uint64_t cell, uint32_t flags, int w, int h) {
       h, (g_armed && WorldPassArea()) ? 1 : 0);
 }
 
-void GatherFxCell(int x, int y, const FxCell& c, uint32_t flags, bool pure) {
+void GatherFxCell(int x, int y, const int* frame, const FxCell& c, uint32_t flags, bool pure) {
   EngineGlowDraw* d = NewGlow();
   if (!d) return;
-  d->anchor_x = x + c.x;
+  FxCellRect(x, frame[0], frame[2], c.x, c.w, c.cx, (flags & 0x10u) != 0, &d->anchor_x, &d->x);
   d->anchor_y = y + c.y;
-  d->x = d->anchor_x - c.cx;
   d->y = d->anchor_y - c.cy;
   d->w = c.w;
   d->h = c.h;
@@ -252,7 +258,7 @@ uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t
             c.cx = c.x - frame[0];
             c.cy = c.y - frame[1];
           }
-          GatherFxCell(x, y, c, flags, pure);
+          GatherFxCell(x, y, frame, c, flags, pure);
         }
       if (pure) {
         emit = 1;
@@ -268,6 +274,27 @@ uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t
       const uint16_t frm = res[0] ? R<uint16_t>(cell + sym::kOffCellFrame) : 0;
       emit = g_emit_fn(res, cyc, frm, flags);
       if (emit) Gather(x, y, frame, flags);
+    }
+  }
+  // Sprite buffer: a creature (one cell, not an effect, with a depth file).
+  bool sprite = false;
+  if (world && frame && fx_blit && g_fx_n == 1 && !(emit & 1) && g_sprite_want && g_fx_cells[0].res[0] &&
+      g_sprite_want(g_fx_cells[0].res)) {
+    if (g_sprite_n < kMaxSprites) {
+      const FxCell& c = g_fx_cells[0];
+      EngineSpriteDraw& sd = g_sprites[g_sprite_n++];
+      memcpy(sd.resref, c.res, 9);
+      sd.cycle = c.cyc;
+      sd.frame = c.frm;
+      sd.mirror = (flags & 0x10u) ? 1 : 0;
+      // The frame header can be unloaded for still frames (+0x128 null): the module takes the frame size
+      // and centre from the depth file, the anchor is enough here.
+      FxCellRect(x, frame[0], frame[2], c.x, c.w, c.cx, sd.mirror != 0, &sd.anchor_x, &sd.x);
+      sd.anchor_y = y + c.y;
+      sd.y = sd.anchor_y - c.cy;
+      sd.w = c.w;
+      sd.h = c.h;
+      sprite = true;
     }
   }
   if (fx_blit) g_fx_n = 0;  // the surface has been blitted; the next FXRender3d starts a new one
@@ -287,6 +314,14 @@ uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t
   // FXBltToBack) are composites: re-drawing one would capture the creature too. Those give lights per
   // emitting cell (gathered above) but no pixels; additive blits, pure-effect blits and draws with
   // their own cell (Render3d) are effect pixels only.
+  if (sprite && g_cov_begin) {  // coverage: the creature's pixels as drawn (wall clipping included)
+    EngineFlushBatch();
+    if (g_cov_begin()) {
+      g_render_texture(x, y, frame, size, clip, clip2, flags & ~(0x208u | 0x20000000u));
+      EngineFlushBatch();
+      g_cov_end();
+    }
+  }
   if ((emit & 1) && g_cap_begin && (additive || g_cell || pure)) {
     EngineFlushBatch();
     if (g_cap_begin()) {
@@ -367,6 +402,17 @@ const EngineGlowDraw* GlowDraws(int* n) {
 
 int GlowDrawsDropped() { return g_glow_dropped; }
 
+void SetSpriteCallbacks(SpriteWantFn want, CaptureBeginFn cov_begin, CaptureEndFn cov_end) {
+  g_sprite_want = want;
+  g_cov_begin = cov_begin;
+  g_cov_end = cov_end;
+}
+
+const EngineSpriteDraw* SpriteDraws(int* n) {
+  *n = g_sprite_n;
+  return g_sprites;
+}
+
 void FxSurfaceStats(uint64_t* blits, uint64_t* pure, uint64_t* softened, uint64_t* cells) {
   *blits = g_fx_blits;
   *pure = g_fx_pure;
@@ -424,7 +470,7 @@ std::string LoadGl(Gl* g) {
 void SaveGlState(const Gl& gl, GlState* s) {
   gl.GetIntegerv(kCurrentProgram, &s->program);
   gl.GetIntegerv(kActiveTexture, &s->active_tex);
-  for (int i = 0; i < 6; ++i) {
+  for (int i = 0; i < 8; ++i) {
     gl.ActiveTexture(kTexture0 + i);
     gl.GetIntegerv(kTexBinding2D, &s->tex[i]);
   }
@@ -456,7 +502,7 @@ void SaveGlState(const Gl& gl, GlState* s) {
 void RestoreGlState(const Gl& gl, const GlState& s) {
   auto set = [&](unsigned cap, unsigned char on) { on ? gl.Enable(cap) : gl.Disable(cap); };
   gl.UseProgram(static_cast<unsigned>(s.program));
-  for (int i = 5; i >= 0; --i) {
+  for (int i = 7; i >= 0; --i) {
     gl.ActiveTexture(kTexture0 + i);
     gl.BindTexture(kTex2D, static_cast<unsigned>(s.tex[i]));
   }
@@ -522,6 +568,19 @@ std::string AreaWed(uint64_t area) {
   return s;
 }
 
+float AreaTintLuma(uint64_t area, int x, int y) {
+  static const int ok = [] {
+    const sym::Symbol* s = Find(sym::kRvaGetTintColor);
+    return (s && CheckSymbol(*s)) ? 1 : 0;
+  }();
+  if (!ok || !PlausiblePtr(area)) return -1.0f;
+  const int pt[2] = {x, y};
+  using TintFn = uint32_t(__fastcall*)(uint64_t, const int*, uint8_t);
+  const uint32_t c = reinterpret_cast<TintFn>(Va(sym::kRvaGetTintColor))(area, pt, 0);
+  const float r = float(c & 0xFF) / 255.0f, g = float((c >> 8) & 0xFF) / 255.0f, b = float((c >> 16) & 0xFF) / 255.0f;
+  return 0.299f * r + 0.587f * g + 0.114f * b;
+}
+
 uint16_t AreaTypeFlags(uint64_t area) { return PlausiblePtr(area) ? R<uint16_t>(area + sym::kOffAreaType) : 0; }
 
 bool InstallWorldComposite(CompositeFn fn) {
@@ -551,6 +610,7 @@ void ArmWorldComposite() {
   g_glow_dropped = 0;
   g_fx_cell = 0;
   g_fx_n = 0;
+  g_sprite_n = 0;
 }
 
 }  // namespace pstf::engine
