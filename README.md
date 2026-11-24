@@ -79,7 +79,6 @@ after installing it.
 - **8-member party**: the Nameless One and all seven companions at once. Joining, leaving, saves and scripts all go through the engine's own code.
 - **Smooth motion**: creatures and projectiles glide between the engine's steps instead of hopping. Game timing doesn't change.
 - **Examine voice-over**: with PST Revoiced installed, the "examine" (?) text you click in the world is read aloud too, and a new line or a dialogue cuts the old one off.
-- **Camera follow** in fights, battle music, selection voices, no more "bored" chatter mid-fight.
 
 <p align="center"><img src="docs/media/gore.png" alt="Blood from a melee hit in the Hive" width="520"></p>
 
