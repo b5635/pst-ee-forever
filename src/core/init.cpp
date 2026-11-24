@@ -8,6 +8,7 @@
 #include "core/version_guard.h"
 #include "modules/dev/autoload.h"
 #include "modules/dlgroll/dlgroll_module.h"
+#include "modules/locks/locks_module.h"
 #include "modules/lighting/lighting_module.h"
 #include "modules/gore/gore_module.h"
 #include "modules/party/party_module.h"
@@ -44,6 +45,7 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   pstf::lighting::InstallLighting(ini);
   pstf::gore::InstallGore(ini);
   pstf::dlgroll::InstallDialogueRolls(ini);
+  pstf::locks::InstallLockRolls(ini);
   return 0;
 }
 

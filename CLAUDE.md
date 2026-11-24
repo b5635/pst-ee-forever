@@ -293,9 +293,20 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   tests\ingame\dlgroll.lua -Env @{PSTF_DLG_TEST='1'; PSTF_TBC_NOFIGHT='1'} -Until 'dlgroll: ok|TEST FAIL' -Close -Timeout 200`
   (DSKELW's STR-gated "pry out the joint bolts": fail, leave, re-enter, win, pick; shots `logs\dlg_*.bmp`). Env
   `PSTF_DLG_TEST=1` runs Lua `pstfDlgTest()` every main-loop iteration (dialogue holds the world still). Probes:
-  `PSTF_DlgState()` (rolls, overrides, engine reply numbers, conditions, abilities), `PSTF_DlgNode()`, `PSTF_DlgForce(n)`
-  (next natural d20), Lua `pstfDlg.rows`, `pstfDr` (panel), `pstfDlgFakeMouse`. Engine facts: reply flags +0 (1 text, 2 cond,
+  `PSTF_DlgState()` (rolls, overrides, engine reply numbers, conditions, abilities), `PSTF_DlgNode()`, `PSTF_RollForce(n)`
+  (next natural d20 of any roll panel), Lua `pstfDlg.rows`, `pstfDr` (panel), `pstfDlgFakeMouse`. Engine facts: reply flags +0 (1 text, 2 cond,
   8 end), number byte +0xA4 (-1 hidden), condition text +0xA8; CGameDialogSprite +0x54 = dialogue running.
+- Roll panel (`src/modules/rolls/`): the d20 rule + timeline (`d20.h`) and the PSTF_ROLL menu (`roll_panel.cpp`) shared by
+  the dialogue and lock rolls; a module opens it with Lua `pstfDrOpen{title, ab, card, mod, dc, roll, done, alive, back,
+  note, pause}` (see roll_panel.h). Lock rolls (`[locks] rolls`, `src/modules/locks/`, rules `lock_rules.h`, adapter
+  `engine/locks.*`): the ExecuteAction calls of PickLock/BashDoor are redirected; at the lock a party member waits
+  (ACTION_NORMAL) while the panel is up (world paused), then the engine's own action runs with its UtilRandInt call site
+  forced, so triggers/sounds/XP stay the engine's. Difficulty 100 = key only (vanilla, no panel). Test:
+  `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\locks.lua -Env @{PSTF_DLG_TEST='1'; PSTF_TBC_NOFIGHT='1'} -Until
+  'locks: ok|TEST FAIL' -Close -Timeout 240` (the Hive door ar0400d1: fail, blocked retry, bash, key-only; shots
+  `logs\lock_*.bmp`). Probes: `PSTF_Locks(actor, radius)` (id:door|box:locked:difficulty:x,y:name), `PSTF_SetLock(id,
+  locked, difficulty)`, `PSTF_LockState()`, `PSTF_LockForget()`; log `locks: ...` per approach/roll. The saves on disk
+  have no containers in view (Hive outdoor = doors only); a door's script name is +0x5E8, a container's +0x478.
 - Hotbar with long lists + right-click + hidden maneuvers: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\tbc_bar2.lua
   -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_bar2: ok|TEST FAIL' -Close` (shot `logs\bar2_desc.bmp`). The engine shows 10 of a
   list longer than 12 (scroll arrows in slots 0/11, `CInfButtonArray::pList` + scroll index +0x2264): probes `PSTF_BarCount()`,

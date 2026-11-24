@@ -90,7 +90,7 @@ function pstfDlgTest()
 	elseif phase == 'panel' then
 		if ms < 700 then return end
 		shot('panel_' .. pass)
-		PSTF_DlgForce(pass == 1 and 2 or 15)
+		PSTF_RollForce(pass == 1 and 2 or 15)
 		pstfDrRollClick()
 		if not pstfDr.t0 then return fail('roll did not start') end
 		note(string.format('dlgroll: rolled natural %d total %d outcome %d', pstfDr.nat, pstfDr.total, pstfDr.out))

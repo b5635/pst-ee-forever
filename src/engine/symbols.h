@@ -964,6 +964,39 @@ constexpr uint32_t kOffDlgActive = 0x54;
 constexpr uint32_t kOffStatStr = 0x4E, kOffStatInt = 0x52, kOffStatWis = 0x54, kOffStatDex = 0x56, kOffStatCon = 0x58,
                    kOffStatChr = 0x5A;
 
+// Lock rolls (src/engine/locks.*). CGameSprite::ExecuteAction (lin 4FDCC0 / win 14040BCD0) runs action 145
+// PickLock (lin 4DC5D0 / win 14041EA30) at 14040D53D and 148 BashDoor (lin 4DD980 / win 1403FE480) at
+// 14040D70C, both `call rel32`; each is called again every AI tick until it returns ACTION_DONE (-1).
+// ACTION_NORMAL 0 / INTERRUPTABLE 1 / DONE -1 / ERROR -2 / STOPPED -3 (Linux .data BF1D82..BF1D8C).
+inline constexpr uint8_t kPickLockCallBytes[] = {0xE8, 0xEE, 0x14, 0x01, 0x00};
+inline constexpr uint8_t kBashDoorCallBytes[] = {0xE8, 0x6F, 0x0D, 0xFF, 0xFF};
+constexpr uint32_t kRvaPickLockCall = 0x40D53D, kRvaBashDoorCall = 0x40D70C;
+constexpr uint64_t kVaPickLock = 0x14041EA30ull, kVaBashDoor = 0x1403FE480ull;
+// Their one random number: CUtil::UtilRandInt(10, LUCK) (lin 674E80 / win 140486D80: clamp(rand()%10 + luck,
+// 0, 9)). PickLock 14041EC9C: total = it + LOCKPICKING (stats +0x36), luck stats +0x42; opens when total >
+// difficulty and difficulty != 100 (win L110-158). BashDoor 1403FE7CB: total (i16) = it + STRMOD[STR
+// +0x4E].BEND_BARS + STRMODEX[STREXTRA +0x50].BEND_BARS; same test (win L140-174).
+inline constexpr uint8_t kPickLockRandBytes[] = {0xE8, 0xDF, 0x80, 0x06, 0x00};
+inline constexpr uint8_t kBashRandBytes[] = {0xE8, 0xB0, 0x85, 0x08, 0x00};
+constexpr uint32_t kRvaPickLockRand = 0x41EC9C, kRvaBashRand = 0x3FE7CB;
+constexpr uint64_t kVaUtilRandInt = 0x140486D80ull;
+constexpr uint32_t kOffStatLockpicking = 0x36, kOffStatLuck = 0x42, kOffStatStrExtra = 0x50;
+// Both start with `vtbl+8` GetObjectType: 33 door, 17 container (else ACTION_ERROR). Door: flags u32 +0x564 (bit
+// 2 locked), difficulty u32 +0x660, the two places to stand +0x5A4 / +0x5AC (x, y i32; CGameDoor::GetMoveDest
+// win 1401B2730 picks the nearer by dx^2 + 16*dy^2/9). Container: difficulty u16 +0x952, flags u32 +0x954 (bit 1
+// locked), stand at its position +0x0C. Range: (x/16, y/12) cells, dx^2+dy^2 <= 16 (pick, win L71/L80) / 9 (bash,
+// win L77), else MoveToPoint.
+constexpr uint8_t kObjTypeDoor = 33, kObjTypeContainer = 17;
+constexpr uint32_t kOffDoorFlags = 0x564, kOffDoorLock = 0x660, kOffDoorStand1 = 0x5A4, kOffDoorStand2 = 0x5AC;
+constexpr uint32_t kOffContainerLock = 0x952, kOffContainerFlags = 0x954;
+constexpr uint32_t kDoorLocked = 2, kContainerLocked = 1;
+constexpr int kPickRange2 = 16, kBashRange2 = 9;
+// Script name char[32] (the ARE entry's name, what scripts' object names match): container +0x478 (ctor win
+// 1401A6052 `lea rcx,[r13+478h]` strncpy from the ARE entry), the same field as a creature's (party.h).
+constexpr uint32_t kOffObjScriptName = 0x478;
+// A door's name char[32] +0x5E8 (CGameDoor ctor win 1401B06AE `lea rcx,[rsi+5E8h]` strncpy from the ARE door entry).
+constexpr uint32_t kOffDoorName = 0x5E8;
+
 inline constexpr Symbol kAll[] = {
     PSTF_SYM("entry", kEntryRva, kEntryBytes, "PE AddressOfEntryPoint"),
     PSTF_SYM("CTlkTable::Fetch", kRvaTlkFetch, kTlkFetchBytes, "lin 673C70 / win 1404A0840"),
@@ -1191,6 +1224,10 @@ inline constexpr Symbol kAll[] = {
              "lin 68D9D0 / win 140498E8E"),
     PSTF_SYM("CGameDialogEntry::Display", kRvaDialogDisplay, kDialogDisplayBytes, "lin 6302B0 / win 1401AC580"),
     PSTF_SYM("CGameDialogReply::Hold", kRvaDialogHold, kDialogHoldBytes, "lin 62F530 / win 1401AE070"),
+    PSTF_SYM("CGameSprite::ExecuteAction.PickLock", kRvaPickLockCall, kPickLockCallBytes, "lin 4FDCC0 / win 14040D53D"),
+    PSTF_SYM("CGameSprite::ExecuteAction.BashDoor", kRvaBashDoorCall, kBashDoorCallBytes, "lin 4FDCC0 / win 14040D70C"),
+    PSTF_SYM("CGameSprite::PickLock.UtilRandInt", kRvaPickLockRand, kPickLockRandBytes, "lin 4DC5D0 / win 14041EC9C"),
+    PSTF_SYM("CGameSprite::BashDoor.UtilRandInt", kRvaBashRand, kBashRandBytes, "lin 4DD980 / win 1403FE7CB"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.
