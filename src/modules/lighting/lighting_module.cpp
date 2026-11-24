@@ -59,12 +59,12 @@ struct Settings {
   bool hand_lights = true, buff_lights = true;
   // phase 2: sprite buffer (depth maps), LM as the sprites' ambient, sprite occlusion, key-light shadows
   bool sprite_lighting = true, sprite_occlusion = true, key_shadows = true;
-  float sprite_normal_strength = 0.6f, sprite_light_gain = 1.0f, key_shadow_strength = 0.5f,
+  float sprite_normal_strength = 0.6f, sprite_light_gain = 1.0f, key_shadow_strength = 0.8f,
         key_shadow_length = 0.55f;
   float weapon_glow_radius = 70.0f, weapon_glow_gain = 0.3f;
   // our own contact shadow under every creature (replaces the BAM blob when bam_shadows = false)
   bool contact_shadows = true, bam_shadows = false;
-  float contact_shadow_strength = 0.45f, contact_shadow_size = 22.0f, contact_shadow_flat = 0.5f;
+  float contact_shadow_strength = 0.7f, contact_shadow_size = 22.0f, contact_shadow_flat = 0.5f;
   float sprite_shadow_strength = 1.0f;  // how much a creature blocks a dynamic light (sprite occlusion)
   // day / night: undo the engine's time-of-day tint, our own ambient for the time of day
   bool day_night = true;
@@ -1340,7 +1340,7 @@ void SpritePass(const ViewMap& vm, float ox, float oy, float to_phys, int vx, in
   gl.Viewport(0, 0, g_light_w, g_light_h);
   gl.UseProgram(g_shadow_prog);
   gl.Uniform1i(g_su.mode, 0);
-  gl.Uniform1f(g_su.k, g_set.key_shadow_strength * std::max(0.4f, std::min(1.0f, g_scene.key_strength)));
+  gl.Uniform1f(g_su.k, KeyShadowK(g_set.key_shadow_strength, g_scene.key_strength));
   gl.Uniform2f(g_su.target, float(g_light_w), float(g_light_h));
   gl.Uniform4f(g_su.map, vm.ax, vm.ay, vm.bx, vm.by);
   gl.Uniform2f(g_su.vp_origin, float(vx), float(vy));
@@ -1379,7 +1379,7 @@ void SpritePass(const ViewMap& vm, float ox, float oy, float to_phys, int vx, in
     }
     g_shadow_drawn = g_contact_drawn > 0;
     gl.Uniform1i(g_su.mode, 0);
-    gl.Uniform1f(g_su.k, g_set.key_shadow_strength * std::max(0.4f, std::min(1.0f, g_scene.key_strength)));
+    gl.Uniform1f(g_su.k, KeyShadowK(g_set.key_shadow_strength, g_scene.key_strength));
     gl.Uniform2f(g_su.dir, sx, sy);
   }
   if (key) g_shadow_drawn = g_shadow_drawn || !drawn.empty();
@@ -2395,10 +2395,10 @@ void InstallLighting(const IniMap& ini) {
   g_set.key_shadows = IniBool(ini, "lighting.key_shadows", true);
   g_set.sprite_normal_strength = pct("lighting.sprite_normal_strength", 60, 0, 200);
   g_set.sprite_light_gain = pct("lighting.sprite_light_gain", 100, 0, 300);
-  g_set.key_shadow_strength = pct("lighting.key_shadow_strength", 50, 0, 100);
+  g_set.key_shadow_strength = pct("lighting.key_shadow_strength", 80, 0, 100);
   g_set.key_shadow_length = pct("lighting.key_shadow_length", 85, 20, 200);
   g_set.contact_shadows = IniBool(ini, "lighting.contact_shadows", true);
-  g_set.contact_shadow_strength = pct("lighting.contact_shadow_strength", 45, 0, 100);
+  g_set.contact_shadow_strength = pct("lighting.contact_shadow_strength", 70, 0, 100);
   g_set.contact_shadow_size = float(std::max(0, std::min(120, IniInt(ini, "lighting.contact_shadow_size", 22))));
   g_set.contact_shadow_flat = pct("lighting.contact_shadow_flat", 50, 20, 100);
   g_set.sprite_shadow_strength = pct("lighting.sprite_shadow_strength", 100, 0, 100);

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Copies version.dll, pst_forever.dll and pst_forever\ (ini) into the game folder. Closes the game first.
-# -Remove takes them out again (back to vanilla). An existing pst_forever.ini is kept unless -ResetIni.
+# Copies version.dll, pst_forever.dll, pst_forever_config.exe (options window) and pst_forever\ (ini) into the game folder. Closes the game first.
+# -Remove takes them out again (back to vanilla). An existing pst_forever.ini keeps its values (new keys added) unless -ResetIni.
 param(
   [string]$Game = 'C:\GOG Games\Planescape Torment - Enhanced Edition',
   [switch]$Remove,
@@ -17,7 +17,7 @@ Get-Process -Name Torment -ErrorAction SilentlyContinue | ForEach-Object {
 }
 
 if ($Remove) {
-  foreach ($f in 'version.dll', 'pst_forever.dll') {
+  foreach ($f in 'version.dll', 'pst_forever.dll', 'pst_forever_config.exe') {
     $p = Join-Path $Game $f
     if (Test-Path $p) { Remove-Item $p -Confirm:$false; Write-Host "removed $f" }
   }
@@ -29,7 +29,7 @@ if ($Remove) {
   exit 0
 }
 
-foreach ($f in 'version.dll', 'pst_forever.dll') {
+foreach ($f in 'version.dll', 'pst_forever.dll', 'pst_forever_config.exe') {
   if (-not (Test-Path (Join-Path $bin $f))) { Write-Host "missing $bin\${f}: run tools\check.ps1"; exit 1 }
   Copy-Item (Join-Path $bin $f) $Game -Force
 }
@@ -56,4 +56,10 @@ Copy-Item (Join-Path $root 'data\hitarmor.tsv') $gore -Force  # animation -> arm
 Get-ChildItem (Join-Path $root 'data\override') -File -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $Game 'override') -Force }
 $ini = Join-Path $data 'pst_forever.ini'
 if ($ResetIni -or -not (Test-Path $ini)) { Copy-Item (Join-Path $root 'data\pst_forever.ini') $ini -Force }
+else {
+  # An existing ini keeps its values but gets this build's layout: new keys/sections with their defaults
+  # (pst_forever_config.exe --upgrade; the old file is kept as pst_forever.ini.bak).
+  $p = Start-Process -FilePath (Join-Path $Game 'pst_forever_config.exe') -ArgumentList '--upgrade', '--game', "`"$Game`"" -Wait -PassThru -NoNewWindow
+  if ($p.ExitCode -ne 0) { Write-Host "deploy: ini upgrade failed (exit $($p.ExitCode))"; exit 1 }
+}
 Write-Host "deploy: ok -> $Game"

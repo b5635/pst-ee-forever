@@ -51,7 +51,18 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   quote (Nsight entry) that breaks `vcvars64.bat`: build scripts must set a clean PATH before calling it.
 - **Default loop: `tools\check.ps1`**: build, L0 unit tests, static hook verification against the on-disk
   `Torment.exe`. Prints only errors and the summary.
-- `tools\deploy.ps1` copies `version.dll`, `pst_forever.dll` and `pst_forever\` into the game folder (closes the game first).
+- Release zip: `tools\package.ps1 [-Version V] [-Assets '<game>\pst_forever\assets']` -> `build\package\pst_forever-V.zip`
+  (layout = the game folder: players unzip it next to Torment.exe; same files as deploy). `-Assets` also writes
+  `-lighting.zip` (GemRB maps + sprite depth, ~1.4 GB, not in git). `.github/workflows/release.yml`: a pushed `v*` tag
+  builds (VS 2022 runner), runs unit tests, packages and makes the GitHub release; the lighting zip is uploaded by hand.
+- `tools\deploy.ps1` copies `version.dll`, `pst_forever.dll`, `pst_forever_config.exe` and `pst_forever\` into the game folder (closes the game first).
+- Options window `pst_forever_config.exe` (`src/config_tool/`, logic `src/core/ini_doc.*`, tests `test_ini_doc.cpp`): the shipped
+  `data/pst_forever.ini` is embedded as its schema (sections, defaults, the comment above a key = its help; 0/1 defaults are
+  switches except the `kNotBool` keys in ini_doc.cpp: add a new numeric key with a 0/1 default there). Section "Game (Baldur.lua)"
+  = engine options we recommend (`kLuaOptions` in main.cpp: Disable Cosmetic Attacks = 1; refuses to save it while the game
+  runs, the engine rewrites Baldur.lua on exit). CLI: `--upgrade` (deploy runs it: an existing ini gets this build's layout and
+  new keys with defaults, values kept, old file `.bak`), `--set S.K=V`, `--lua S/K=V`, `--shot FILE.bmp [--section N]`
+  (picture of the window), `--game DIR`. GUI subsystem: run it with `Start-Process -Wait -PassThru` for the exit code.
 - **`tools\launch.ps1 [-Save PREFIX] [-Lua FILE] [-Close]`**: starts the game straight into a save (newest by default)
   and runs FILE in the engine's Lua state once the world is up; prints our log lines; exit 0 = loaded and the
   script raised no error. ~3 s to a loaded save. Smoke test: `tools\launch.ps1 -Lua tests\ingame\smoke.lua -Close`.
@@ -208,7 +219,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   exaggerated spray. Stains draw at the floor point (after `CInfinity::Render`, before objects: under the actors,
   lit by the lighting pass). Test: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\gore.lua -Env @{PSTF_TEST_TICK='1';
   PSTF_TBC_AUTOPARTY='1'} -Until 'gore: ok|TEST FAIL' -Close -Timeout 300`. Probes: `PSTF_GoreState()`,
-  `PSTF_GoreHit(id, severity[, crit[, anim]])`. Deploy keeps an existing ini: add new sections to the game's ini by hand.
+  `PSTF_GoreHit(id, severity[, crit[, anim]])`. Deploy upgrades an existing ini (new keys get their defaults).
 - Turn-based APR + menu screens: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\tbc_apr.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'tbc_apr: ok|TEST FAIL' -Close -Timeout 400`
   (TNO 1 1/2 APR swings 2,1,2,1; the inventory mid-fight keeps fight and order). Probe `PSTF_TbcAttacks()` -> wanted,
   swung, APR x2 of the active creature; combat.log `APR` lines. Path preview vs engine walk: `tests\ingame\tbc_path.lua`
@@ -347,5 +358,11 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   rings, dust, smoke drawn soft at the floor point (`engine/soft_draw.h`), under the creatures.
 - All-spells save: `tools\make_spell_save.ps1 -Keep` re-teaches from the save as it is (Nameless One, Ignus, Dak'kon all
   mage spells; Grace priest), rests and puts the hour back (`DayNight`). The save is at night (hour 1).
+- Voice cuts (`[voice] cut`): a new examine or a dialogue opening clears NARRATIO (channel 0), a dialogue closing
+  clears channel 7 (dialogue voice), via `CSoundMixer::ClearChannel` (win 140495FD0). Test: `tools\launch.ps1 -Save
+  000000126 -Lua tests\ingame\voice_cut.lua -Env @{PSTF_DLG_TEST='1'; PSTF_TBC_NOFIGHT='1'} -Until 'voice_cut: ok|TEST FAIL'
+  -Close` (`cut=0` fails with 2 voices on NARRATIO: the toggle check). Probes `PSTF_VoiceCount(channel)`,
+  `PSTF_Examine(strref)` (plays through the examine path; 828/856 = voiced Mortuary lines). Log `voice: dialogue ...`.
+  Engine fact: channels 0 and 7..13 are "clear on play" yet a fire-and-forget examine line still stacks on channel 0.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

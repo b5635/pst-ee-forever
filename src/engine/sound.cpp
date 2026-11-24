@@ -2,8 +2,10 @@
 #include "engine/sound.h"
 
 #include <cstring>
+#include <initializer_list>
 
 #include "core/patch.h"
+#include "engine/sprite_ptr.h"
 #include "engine/symbols.h"
 
 namespace pstf::engine {
@@ -26,7 +28,24 @@ using SetFireForgetFn = int(__fastcall*)(void* snd, int on);
 using PlayFn = int(__fastcall*)(void* snd, int replay);
 using GetPlayTimeFn = uint32_t(__fastcall*)(void* snd);
 
-constexpr int kChannelNarration = 0;  // SNDCHANN.2DA row 0: NARRATIO, VOLUME 100, 3D_SOUND 0
+// SNDCHANN.2DA row 0: NARRATIO, VOLUME 100, 3D_SOUND 0 (sym::kChannelNarration).
+using ClearChannelFn = void(__fastcall*)(void* mixer, int channel);
+using VoiceChannelFn = int(__fastcall*)(void* voice);
+using SoundCtorFn = void*(__fastcall*)(void* snd);
+using SoundDtorFn = void(__fastcall*)(void* snd);
+using CStringDtorFn = void(__fastcall*)(void* str);
+
+bool Checked(std::initializer_list<uint32_t> rvas) {
+  for (uint32_t rva : rvas)
+    for (const auto& s : sym::kAll)
+      if (s.rva == rva && !CheckSymbol(s)) return false;
+  return true;
+}
+
+void* Mixer() {
+  void* m = *reinterpret_cast<void* const*>(sym::kVaSoundMixer);
+  return PlausiblePtr(reinterpret_cast<uint64_t>(m)) ? m : nullptr;
+}
 
 uint8_t* Sound(StrRes* r) { return reinterpret_cast<uint8_t*>(r) + kStrResSound; }
 
@@ -62,9 +81,54 @@ uint32_t PlayTimeMs(StrRes* r) {
 
 bool PlayNarration(StrRes* r) {
   void* snd = Sound(r);
-  reinterpret_cast<SetChannelFn>(Va(sym::kRvaSetChannel))(snd, kChannelNarration, nullptr);
+  reinterpret_cast<SetChannelFn>(Va(sym::kRvaSetChannel))(snd, sym::kChannelNarration, nullptr);
   reinterpret_cast<SetFireForgetFn>(Va(sym::kRvaSetFireForget))(snd, 1);
   return reinterpret_cast<PlayFn>(Va(sym::kRvaPlay))(snd, 0) != 0;
+}
+
+bool ClearChannelAvailable() {
+  static const bool ok = Checked({sym::kRvaClearChannel, sym::kRvaPlayMixerLoad});
+  return ok;
+}
+
+bool ClearChannel(int channel) {
+  if (!ClearChannelAvailable()) return false;
+  void* m = Mixer();
+  if (!m) return false;
+  reinterpret_cast<ClearChannelFn>(Va(sym::kRvaClearChannel))(m, channel);
+  return true;
+}
+
+int VoicesOn(int channel) {
+  static const bool ok = Checked({sym::kRvaVoiceGetChannel, sym::kRvaPlayMixerLoad});
+  void* m = Mixer();
+  if (!ok || !m) return -1;
+  const uint64_t imp = *reinterpret_cast<const uint64_t*>(m);
+  if (!PlausiblePtr(imp)) return -1;
+  auto get = reinterpret_cast<VoiceChannelFn>(Va(sym::kRvaVoiceGetChannel));
+  int n = 0, guard = 0;
+  // CPtrList node: next +0, prev +8, data +0x10 (win 140496000..140496007).
+  for (uint64_t node = *reinterpret_cast<const uint64_t*>(imp + sym::kOffMixerVoiceHead);
+       node && guard < 4096; node = *reinterpret_cast<const uint64_t*>(node), ++guard) {
+    if (!PlausiblePtr(node)) return -1;
+    void* v = *reinterpret_cast<void* const*>(node + 0x10);
+    if (v && get(v) == channel) ++n;
+  }
+  return n;
+}
+
+bool WithFetchedStrref(uint32_t strref, TlkFetchFn fetch) {
+  static const bool ok = Checked({sym::kRvaPchNilLoad, sym::kRvaSoundCtor, sym::kRvaSoundDtor,
+                                  sym::kRvaCStringDtor, sym::kRvaTlkFetch});
+  const uint64_t chitin = *reinterpret_cast<const uint64_t*>(sym::kVaBaldurChitin);
+  if (!ok || !fetch || !PlausiblePtr(chitin)) return false;
+  alignas(16) uint8_t res[0x100] = {};  // CString +0, CSound +8 (the engine's frame gives it 8+)
+  std::memcpy(res, reinterpret_cast<const void*>(sym::kVaPchNil), 8);
+  reinterpret_cast<SoundCtorFn>(Va(sym::kRvaSoundCtor))(res + kStrResSound);
+  fetch(reinterpret_cast<void*>(chitin + sym::kOffChitinTlk), strref, reinterpret_cast<StrRes*>(res), 0);
+  reinterpret_cast<SoundDtorFn>(Va(sym::kRvaSoundDtor))(res + kStrResSound);
+  reinterpret_cast<CStringDtorFn>(Va(sym::kRvaCStringDtor))(res);
+  return true;
 }
 
 }  // namespace pstf::engine

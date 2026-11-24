@@ -8,10 +8,10 @@
 //   Run       spends the action; remaining movement += max movement (31/31 -> 62/31, 0/31 -> 31/31).
 //   Withdraw  the party side only (enemies never withdraw); spends the action; a third of the remaining movement is left (2/3 go); walks (walk animation and speed); no attacks
 //             of opportunity until its next turn. Refused with no movement left (a wasted action).
-//   Block     fighters (not the Nameless One, not Morte); spends the action; the attacks left this round
+//   Block     fighters (the Nameless One while a fighter; not Morte); spends the action; the attacks left this round
 //             become block stacks until its next turn. Each melee hit on it uses one stack: a d20 with its
 //             own THAC0 vs AC 4 (1 fails, 20 succeeds) that also comes up at least the attack's d20 stops it.
-//   Trip      fighters (not the Nameless One): the first melee swing of the attack round gets -2 to hit
+//   Trip      fighters (the Nameless One while a fighter): the first melee swing of the attack round gets -2 to hit
 //             (THAC0 + 2); a hit does no damage, the target saves vs death or is knocked down until its
 //             next turn (AC -4 = +4 to hit it, opcode 0; it falls with its die cycle and gets up with it
 //             played backwards), when it stands up and loses that turn's action. Armed by the button,
@@ -62,9 +62,11 @@ inline bool FighterClass(uint8_t cls) {
       return false;
   }
 }
-// SPECIFIC.IDS: NAMELESS_ONE 2 (always counts fighter levels: GemRB keeps him out), MORTE 9.
+// SPECIFIC.IDS: NAMELESS_ONE 2, MORTE 9. The Nameless One's CLASS byte is his current class (FIGHTER 2,
+// MAGE 1, THIEF 4: the trainers' replies test Class(Protagonist,FIGHTER), DDAKKON/DANNAH/DGRACE), so he
+// trips and blocks while he is a fighter, like anyone else.
 constexpr uint8_t kSpecificNameless = 2, kSpecificMorte = 9;
-inline bool MayTrip(uint8_t cls, uint8_t specific) { return FighterClass(cls) && specific != kSpecificNameless; }
+inline bool MayTrip(uint8_t cls, uint8_t /*specific*/) { return FighterClass(cls); }
 inline bool MayBlock(uint8_t cls, uint8_t specific) { return MayTrip(cls, specific) && specific != kSpecificMorte; }
 constexpr int kKnockdownThac0 = 15;
 inline bool MayKnockdown(bool party, int thac0) { return !party && thac0 <= kKnockdownThac0; }

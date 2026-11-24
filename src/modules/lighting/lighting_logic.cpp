@@ -652,6 +652,10 @@ float ContactShadow(float dx, float dy, float rx, float ry, float k) {
   return k * (1.0f - t * t * (3.0f - 2.0f * t));
 }
 
+float KeyShadowK(float strength, float key_strength) {
+  return strength * std::max(0.7f, std::min(1.0f, key_strength));
+}
+
 void KeyShadowAxes(float dir_x, float dir_y, float k, float* sx, float* sy) {
   *sx = k * dir_x;
   float y = k * dir_y * 0.72f - 0.15f * (1.0f - std::fabs(dir_y));

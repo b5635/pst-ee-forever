@@ -191,3 +191,16 @@ TEST_CASE("replay guard: same line while playing is skipped, others play") {
   CHECK(!voice::ShouldPlay(g, 828, 7599, 4000));
   CHECK(voice::ShouldPlay(g, 828, 7600, 4000));    // finished
 }
+
+TEST_CASE("voice cut-offs: dialogue open cuts examine, dialogue close cuts dialogue voice") {
+  using voice::DialogEdge;
+  voice::DialogWatch w;
+  CHECK(voice::StepDialogWatch(w, true) == DialogEdge::kNone);   // already up when we start: no cut
+  CHECK(voice::StepDialogWatch(w, true) == DialogEdge::kNone);
+  CHECK(voice::StepDialogWatch(w, false) == DialogEdge::kEnded);
+  CHECK(voice::StepDialogWatch(w, false) == DialogEdge::kNone);
+  CHECK(voice::StepDialogWatch(w, true) == DialogEdge::kStarted);
+  voice::DialogWatch w2;
+  CHECK(voice::StepDialogWatch(w2, false) == DialogEdge::kNone);
+  CHECK(voice::StepDialogWatch(w2, true) == DialogEdge::kStarted);
+}

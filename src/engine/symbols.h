@@ -61,6 +61,36 @@ constexpr uint32_t kRvaPlay = 0x494BD0;
 constexpr uint32_t kRvaGetPlayTime = 0x4949D0;
 constexpr uint32_t kRvaExamineFetchCall = 0x2196FC;
 
+// --- voice cut-offs (examine voice on NARRATIO 0, dialogue voice on channel 7) ---------------------
+// CSoundMixer::ClearChannel(int)  lin 66E390, win 140495FD0 (ported name ClearMusicPositions is wrong):
+//   both walk the mixer's voice list (*this +0x27A8 CPtrList, head +0x27B0), CVoice::GetChannel == ch ->
+//   RemoveAt + virtual delete. Called by CSound::Play for channel type 3 (win 140494D91, lin 66C620).
+inline constexpr uint8_t kClearChannelBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C,
+                                                 0x24, 0x20, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x20};
+// CVoice::GetChannel(void)  lin 693C30, win 1404B1190 (sound ? sound->GetChannel : [this+18h]).
+inline constexpr uint8_t kVoiceGetChannelBytes[] = {0x48, 0x8B, 0x41, 0x08, 0x48, 0x85, 0xC0, 0x74,
+                                                    0x08, 0x48, 0x8B, 0xC8};
+// CSoundImp::m_pMixer (CSoundMixer*) at 1407CAE88: CSound::Play body 140494D8A "mov rcx,[1407CAE88]"
+// before the ClearChannel call.
+inline constexpr uint8_t kPlayMixerLoadBytes[] = {0x48, 0x8B, 0x0D, 0xF7, 0x60, 0x33, 0x00};
+// STR_RES as OnActionButton builds it (win 1402196CC..140219822): CString = afxPchNil (loaded from
+// 1407210B0), CSound::CSound(void) 140493FE0 at +8; TLK = chitin +0x1180; after use
+// CSound::~CSound 1404941A0 and CString::~CString 1404843C0 (refcount at data-12, afxPchNil data-12 skipped).
+inline constexpr uint8_t kPchNilLoadBytes[] = {0x48, 0x8B, 0x05, 0xDD, 0x79, 0x50, 0x00};
+inline constexpr uint8_t kSoundCtorBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C,
+                                              0x24, 0x18, 0x56, 0x57, 0x41, 0x56, 0x48, 0x83};
+inline constexpr uint8_t kSoundDtorBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8D,
+                                              0x05, 0x3B, 0x88, 0x1C, 0x00, 0x48, 0x8B, 0xD9};
+inline constexpr uint8_t kCStringDtorBytes[] = {0x48, 0x8B, 0x11, 0x48, 0x83, 0xC2, 0xF4, 0x48,
+                                                0x3B, 0x15, 0xFA, 0xCC};
+constexpr uint32_t kRvaClearChannel = 0x495FD0, kRvaVoiceGetChannel = 0x4B1190,
+                   kRvaPlayMixerLoad = 0x494D8A, kRvaPchNilLoad = 0x2196CC, kRvaSoundCtor = 0x493FE0,
+                   kRvaSoundDtor = 0x4941A0, kRvaCStringDtor = 0x4843C0;
+constexpr uint64_t kVaSoundMixer = 0x1407CAE88ull, kVaPchNil = 0x1407210B0ull;
+constexpr uint32_t kOffChitinTlk = 0x1180;          // win 1402196F2 "add rcx,1180h"
+constexpr uint32_t kOffMixerVoiceHead = 0x27B0;     // win 140495FE6
+constexpr int kChannelNarration = 0, kChannelDialog = 7;  // lin CGameDialogEntry::Display SetChannel(7)
+
 
 // --- Lua 5.2 API (engine's own state; console + .menu UI) --------------------------------------
 // Confirmed against Linux bodies (lin 6A1A10, 6A2240, 6A1760, 6A1850, 6A1AC0, 6A0BF0, 69FE20).
@@ -1008,6 +1038,13 @@ inline constexpr Symbol kAll[] = {
              "lin 669BD0 / win 1404949D0"),
     PSTF_SYM("OnActionButton.examine.Fetch", kRvaExamineFetchCall, kExamineFetchCallBytes,
              "lin 26A680+L533 / win 1402196FC"),
+    PSTF_SYM("CSoundMixer::ClearChannel", kRvaClearChannel, kClearChannelBytes, "lin 66E390 / win 140495FD0"),
+    PSTF_SYM("CVoice::GetChannel", kRvaVoiceGetChannel, kVoiceGetChannelBytes, "lin 693C30 / win 1404B1190"),
+    PSTF_SYM("CSound::Play.mixer", kRvaPlayMixerLoad, kPlayMixerLoadBytes, "win 140494D8A -> 1407CAE88"),
+    PSTF_SYM("OnActionButton.afxPchNil", kRvaPchNilLoad, kPchNilLoadBytes, "win 1402196CC -> 1407210B0"),
+    PSTF_SYM("CSound::CSound", kRvaSoundCtor, kSoundCtorBytes, "lin 66D500 / win 140493FE0"),
+    PSTF_SYM("CSound::~CSound", kRvaSoundDtor, kSoundDtorBytes, "lin 669810 / win 1404941A0"),
+    PSTF_SYM("CString::~CString", kRvaCStringDtor, kCStringDtorBytes, "lin 69BE30 / win 1404843C0"),
     PSTF_SYM("lua_pushcclosure", kRvaLuaPushCClosure, kLuaPushCClosureBytes, "lin 6A1A10 / win 1400E44C0"),
     PSTF_SYM("lua_setglobal", kRvaLuaSetGlobal, kLuaSetGlobalBytes, "lin 6A2240 / win 1400E4920"),
     PSTF_SYM("lua_pushnumber", kRvaLuaPushNumber, kLuaPushNumberBytes, "lin 6A1760 / win 1400E4290"),

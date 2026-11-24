@@ -21,4 +21,22 @@ inline bool ShouldPlay(ReplayGuard& g, uint32_t strref, uint64_t now_ms, uint32_
   return true;
 }
 
+// Voice cut-offs, one call per frame with "a dialogue is up". A dialogue opening cuts the examine
+// voice (NARRATIO); a dialogue closing cuts the dialogue voice (its channel). The first frame only
+// records the state: no cut for a dialogue that was already up (or not) when we started watching.
+enum class DialogEdge { kNone, kStarted, kEnded };
+
+struct DialogWatch {
+  bool known = false;
+  bool active = false;
+};
+
+inline DialogEdge StepDialogWatch(DialogWatch& w, bool active) {
+  const bool was_known = w.known, was = w.active;
+  w.known = true;
+  w.active = active;
+  if (!was_known || was == active) return DialogEdge::kNone;
+  return active ? DialogEdge::kStarted : DialogEdge::kEnded;
+}
+
 }  // namespace pstf::voice

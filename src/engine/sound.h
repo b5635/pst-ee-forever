@@ -23,4 +23,14 @@ uint32_t PlayTimeMs(StrRes* r);        // CSound::GetPlayTime
 // SetFireForget(1), Play(0). Fire-and-forget: survives the STR_RES destructor.
 bool PlayNarration(StrRes* r);
 
+// Cut-offs. CSoundMixer::ClearChannel: every voice on the channel stops (what CSound::Play itself does
+// for a type-3 channel before a new sound). False if the manifest bytes differ or there is no mixer.
+bool ClearChannelAvailable();
+bool ClearChannel(int channel);
+// Voices the mixer has on `channel` now (probe; -1 unreadable).
+int VoicesOn(int channel);
+// Builds a STR_RES as CGameTrigger::OnActionButton does, calls `fetch` on it with the engine's TLK,
+// destroys it. Probe for tests (plays nothing by itself). False if the manifest bytes differ.
+bool WithFetchedStrref(uint32_t strref, TlkFetchFn fetch);
+
 }  // namespace pstf::engine

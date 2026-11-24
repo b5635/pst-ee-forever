@@ -42,14 +42,17 @@ TEST_CASE("tbc withdraw: a third of the movement left, spends the action, refuse
   CHECK(!CanWithdraw(used));
 }
 
-TEST_CASE("tbc block: fighters but the Nameless One and Morte; attacks become stacks") {
+TEST_CASE("tbc block: fighters but Morte (the Nameless One while a fighter); attacks become stacks") {
   CHECK(MayBlock(2, 3));    // Vhailor, fighter
   CHECK(MayBlock(7, 7));    // Dak'kon, fighter/mage
   CHECK(!MayBlock(2, 9));   // Morte
-  CHECK(!MayBlock(2, 2));   // the Nameless One
+  CHECK(MayBlock(2, 2));    // the Nameless One as a fighter
+  CHECK(!MayBlock(1, 2));   // ... as a mage
+  CHECK(!MayBlock(4, 2));   // ... as a thief
   CHECK(!MayBlock(4, 8));   // Annah, thief
   CHECK(MayTrip(2, 9));     // Morte trips
-  CHECK(!MayTrip(2, 2));
+  CHECK(MayTrip(2, 2));     // the Nameless One as a fighter
+  CHECK(!MayTrip(1, 2));    // ... as a mage
   CHECK(!MayTrip(1, 5));    // Ignus, mage
   Economy e(31.0, 51, true);
   Stance s;

@@ -201,6 +201,9 @@ bool KeyShadowSource(float mx, float my, float feet, float sx, float sy, float m
 // Contact shadow (our replacement for the BAM blob, shadow shader mode 1): darkening at (dx, dy) area px
 // from a creature's feet, ellipse radii rx, ry: k at the centre, flat to r = 0.3, smooth to 0 at the rim.
 float ContactShadow(float dx, float dy, float rx, float ry, float k);
+// Key shadow darkness written at the feet: the ini strength scaled by the area's key-light strength,
+// which is floored at 0.7 so a weak key light still casts a readable shadow (was 0.4: too faint).
+float KeyShadowK(float strength, float key_strength);
 
 // Hand glow overrides (assets/vfx/vfxglow.tsv, shipped from data/vfxglow.tsv): BAMs matching `pattern`
 // ('?' = any char) glow or not, and are softened (screen blend) or not, whatever the scan says.

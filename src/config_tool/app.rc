@@ -1,0 +1,3 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// The shipped ini is the options schema (keys, defaults, help).
+101 RCDATA "../../data/pst_forever.ini"

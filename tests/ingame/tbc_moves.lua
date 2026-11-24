@@ -6,7 +6,7 @@
 --   AoO       a party member in the thug's reach walks away without Withdraw: "Attack of Opportunity!",
 --             the thug swings once, the walk goes on;
 --   Block     on the thug's second turn (if it is a fighter): block stacks; party swings at it try them;
---   Trip      a party member who may trip (fighter, not the Nameless One) arms it and attacks: the first
+--   Trip      a party member who may trip (fighter, the Nameless One too while a fighter) arms it and attacks: the first
 --             swing is a takedown (hit: save or prone, no damage).
 -- PSTF_MoveStats() counters are the evidence; the combat log (MOVE/AOO lines) has the rolls.
 --   tools\launch.ps1 -Save 000000126 -Lua tests\ingame\tbc_moves.lua -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_moves: ok|TEST FAIL' -Close -Timeout 400
@@ -79,7 +79,7 @@ local function partyTurn(id)
 	end
 	if not done.trip then
 		local c, sp = PSTF_Class(id)
-		local fighter = (c == 2 or c == 6 or c == 7 or c == 8 or c == 9 or c == 10 or c == 12 or c == 16 or c == 17) and sp ~= 2
+		local fighter = (c == 2 or c == 6 or c == 7 or c == 8 or c == 9 or c == 10 or c == 12 or c == 16 or c == 17)
 		if fighter then
 			if not PSTF_Maneuver('trip') then return fail('Trip refused for a fighter (class ' .. c .. ')') end
 			if not PSTF_Stance(id):match('^%d+ %d+ %d+ 1') then return fail('Trip not armed') end

@@ -466,6 +466,8 @@ TEST_CASE("lighting: contact shadow (replaces the BAM blob)") {
   CHECK(Near(ContactShadow(0, 7.15f, 22, 11, 0.45f), 0.225, 1e-3));  // r = 0.65: halfway down the smooth rim
   CHECK(ContactShadow(22, 0, 22, 11, 0.45f) == 0.0f && ContactShadow(0, 11.5f, 22, 11, 0.45f) == 0.0f);
   CHECK(ContactShadow(15, 0, 22, 11, 0.45f) > ContactShadow(15, 5, 22, 11, 0.45f));  // flatter than wide
+  // key shadow darkness: a weak key light (0.5, the test lights.txt) is floored at 0.7, a strong one passes
+  CHECK(Near(KeyShadowK(0.8f, 0.5f), 0.56) && Near(KeyShadowK(0.8f, 0.9f), 0.72) && Near(KeyShadowK(0.8f, 2.0f), 0.8));
   CHECK(ContactShadow(0, 0, 0, 11, 1.0f) == 0.0f);
 }
 

@@ -2,7 +2,7 @@
 -- Hotbar with many spells (all-spells save 000000990), in a turn-based fight:
 --   Pages      the Nameless One's memorised spells are all on the bar: the engine shows 10 of a list longer than 12
 --              (scroll arrows), the bar scrolls the engine's list (PSTF_BarScroll) and takes every entry, once;
---   Maneuvers  Trip and Block are not on the bar of someone who may not use them (the Nameless One), and are on a
+--   Maneuvers  Trip and Block are not on the bar of someone who may not use them (the Nameless One unless he is a fighter), and are on a
 --              warrior's bar (Dak'kon);
 --   Right-click a spell (a later page) opens the game's SPELL_DESCRIPTION, an item ITEM_DESCRIPTION, a maneuver
 --              our PSTF_DESC with its name; a left click on a later-page spell starts that cast.
@@ -53,7 +53,9 @@ local function tnoTurn(t)
 		if spells ~= n then return fail(string.format('the bar shows %d of %d spells', spells, n)) end
 		if dup > 0 then return fail('a spell is on the bar twice') end
 		if pstfBarPages() <= 2 then return fail('still only ' .. pstfBarPages() .. ' pages') end
-		if hasMove('trip') or hasMove('block') then return fail('Trip / Block on the Nameless One\'s bar') end
+		local tc = PSTF_Class(tno)
+		if tc ~= 2 and (hasMove('trip') or hasMove('block')) then return fail('Trip / Block on the bar of a Nameless One who is no fighter (class ' .. tc .. ')') end
+		if tc == 2 and not (hasMove('trip') and hasMove('block')) then return fail('Trip / Block missing for the Nameless One as a fighter') end
 		if not hasMove('run') or not hasMove('withdraw') then return fail('Run / Withdraw missing') end
 	elseif t == 40 then
 		-- right-click the last spell (a later scroll of the engine's list)

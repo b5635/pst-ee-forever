@@ -55,7 +55,7 @@ end
 local function ac(id) local _, a = PSTF_Stats(id) return a end
 local function isFighter(id)
 	local c, sp = PSTF_Class(id)
-	return (c == 2 or c == 6 or c == 7 or c == 8 or c == 9 or c == 10 or c == 12 or c == 16 or c == 17) and sp ~= 2
+	return (c == 2 or c == 6 or c == 7 or c == 8 or c == 9 or c == 10 or c == 12 or c == 16 or c == 17)
 end
 
 local function partyTurn(id)
