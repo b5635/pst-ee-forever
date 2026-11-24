@@ -7,7 +7,9 @@ All are BAMC (zlib) around BAM V1 with a per-BAM palette; palette alpha is used 
 01..FF = alpha), index 0 is transparent.
 
   PFD20.BAM    the green d20, 150x150 frames: 0..23 tumbling (motion blurred), then 24 + s*50 + (n+9)
-               resting with n (-9..40) on the front face at scale s (0 = 1.0, 1 = 1.12, 2 = 1.25)
+               resting with n (-9..40) on the front face at scale s (0 = 1.0, 1 = 1.12, 2 = 1.25), 174 blank
+               (the BAM is the fallback of the real-time die, src/modules/rolls/die3d*)
+  data/d20_numbers.bin  the real-time die's number atlas (--only D20NUM)
   PFDICON.BAM  36x36 list icon: frames 0..7 glow pulse, 8 = dim
   PFDRPNL.BAM  the roll panel (arch frame, gold lines, dark/purple fill, bronze bar): 300x440, 1 frame
   PFDSPRK.BAM  gold spark burst, 220x220, 12 frames
@@ -321,7 +323,45 @@ def make_d20():
       R = tilt(0.12, -0.08) @ rot_to_front(face)
       img = render_die(R, radius=52 * sc, front_text=str(n))
       frames.append(rgba(img))
+  frames.append(np.zeros((150, 150, 4), np.uint8))  # 174: blank (the real-time die is drawn instead)
   return frames
+
+
+def number_cell(text, big, T=128):
+  """Two coverage planes (fill, outline) of one face's number, face_texture's layout at T px."""
+  fill = Image.new("L", (T, T), 0)
+  line = Image.new("L", (T, T), 0)
+  df, dl = ImageDraw.Draw(fill), ImageDraw.Draw(line)
+  fs = int(T * (0.46 if len(text) < 2 else 0.38)) if big else int(T * 0.26)
+  font = ImageFont.truetype(SERIF_B, fs)
+  cy = T * 0.866 * 2 / 3
+  bb = df.textbbox((0, 0), text, font=font)
+  tx = T / 2 - (bb[0] + bb[2]) / 2
+  ty = cy - (bb[1] + bb[3]) / 2 + T * 0.02
+  o = max(1, round(T / 128))
+  for dx, dy in ((-o, 0), (o, 0), (0, -o), (0, o), (-o, -o), (o, o), (-o, o), (o, -o)):
+    dl.text((tx + dx, ty + dy), text, font=font, fill=255)
+  df.text((tx, ty), text, font=font, fill=255)
+  if text in ("6", "9"):
+    w = (bb[2] - bb[0]) * 0.8
+    df.line([(T / 2 - w / 2, ty + bb[3] + 3 * o), (T / 2 + w / 2, ty + bb[3] + 3 * o)], fill=255, width=3 * o)
+  return np.array(fill, np.uint8), np.array(line, np.uint8)
+
+
+def make_numbers(path):
+  """data/d20_numbers.bin for the real-time die (src/modules/rolls/die3d.h AtlasCell): "PFDN", u16 width,
+  height, cell, columns, then zlib of width*height*2 bytes (fill, outline coverage per pixel)."""
+  T, cols, rows = 128, 10, 7
+  W, H = T * cols, T * rows
+  px = np.zeros((H, W, 2), np.uint8)
+  cells = [(str(n), True) for n in range(-9, 41)] + [(str(n), False) for n in range(1, 21)]
+  for i, (text, big) in enumerate(cells):
+    f, l = number_cell(text, big, T)
+    y, x = (i // cols) * T, (i % cols) * T
+    px[y:y + T, x:x + T, 0] = f
+    px[y:y + T, x:x + T, 1] = l
+  path.write_bytes(b"PFDN" + struct.pack("<HHHH", W, H, T, cols) + zlib.compress(px.tobytes(), 9))
+  return px
 
 
 def make_icon():
@@ -613,6 +653,10 @@ def main():
           "PFDSMOK": lambda: make_burst([(70, 20, 18), (40, 30, 30), (96, 30, 24)], n=40, smoke=True, seed=5),
           "PFDBANR": make_banner, "PFDCARD": make_cards, "PFDBTN": make_button}
   made = {}
+  if not a.only or "D20NUM" in a.only.split(","):
+    p = ROOT / "data" / "d20_numbers.bin"
+    make_numbers(p)
+    print(f"{p.name} {p.stat().st_size} bytes")
   for name, fn in jobs.items():
     if a.only and name not in a.only.split(","): continue
     frames = fn()

@@ -307,6 +307,13 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `logs\lock_*.bmp`). Probes: `PSTF_Locks(actor, radius)` (id:door|box:locked:difficulty:x,y:name), `PSTF_SetLock(id,
   locked, difficulty)`, `PSTF_LockState()`, `PSTF_LockForget()`; log `locks: ...` per approach/roll. The saves on disk
   have no containers in view (Hive outdoor = doors only); a door's script name is +0x5E8, a container's +0x478.
+- Real-time 3D d20 (`[rolls] die_3d`, default 1): motion/geometry pure in `src/modules/rolls/die3d.h` (faces, numbers
+  and rest poses equal `make_dice_bams.py`'s; unit `test_die3d.cpp`), GL in `src/engine/die_draw.cpp`, drawn from the
+  die item's `frame lua` (drawItem evaluates it mid-UI-pass: flush, draw, restore, so later items stay on top), frame 174
+  of PFD20 = blank; the BAM is the fallback. Number atlas `data/d20_numbers.bin` (`make_dice_bams.py --only D20NUM`,
+  deployed to `pst_foreverssets\dice\`). Test: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\die3d.lua -Env
+  @{PSTF_DLG_TEST='1'; PSTF_TBC_NOFIGHT='1'} -Until 'die3d: ok|TEST FAIL' -Close` (shots `logs\die3d_*.bmp`; Lua
+  `PSTF_DIE3D = false` = the toggle check). Probe `PSTF_DieState([1])` -> on/off, draws, failures, centre pixel, why.
 - Hotbar with long lists + right-click + hidden maneuvers: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\tbc_bar2.lua
   -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_bar2: ok|TEST FAIL' -Close` (shot `logs\bar2_desc.bmp`). The engine shows 10 of a
   list longer than 12 (scroll arrows in slots 0/11, `CInfButtonArray::pList` + scroll index +0x2264): probes `PSTF_BarCount()`,

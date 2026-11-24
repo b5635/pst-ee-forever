@@ -64,6 +64,7 @@ add_library(pst_forever SHARED
   src/modules/tbc/tbc_module.cpp
   src/engine/gl_world.cpp
   src/engine/soft_draw.cpp
+  src/engine/die_draw.cpp
   src/modules/lighting/lighting_module.cpp
   src/engine/blood.cpp
   src/modules/gore/gore_module.cpp
@@ -84,7 +85,7 @@ target_compile_options(pst_forever PRIVATE /Zi)
 add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp tests/unit/test_lighting.cpp
   tests/unit/test_sprite_depth.cpp tests/unit/test_gore.cpp tests/unit/test_gameres.cpp
   tests/unit/test_party.cpp tests/unit/test_maneuvers.cpp tests/unit/test_spells.cpp tests/unit/test_dlgroll.cpp
-  tests/unit/test_locks.cpp)
+  tests/unit/test_locks.cpp tests/unit/test_die3d.cpp)
 target_link_libraries(pstf_tests PRIVATE pstf_logic)
 target_include_directories(pstf_tests PRIVATE tests/unit)
 

@@ -45,6 +45,9 @@ Copy-Item (Join-Path $root 'data\vfxglow.tsv') $vfx -Force   # hand glow overrid
 $lightdir = Join-Path $data 'assets\lighting'
 New-Item -ItemType Directory -Force $lightdir | Out-Null
 Copy-Item (Join-Path $root 'data\arealights.tsv') $lightdir -Force  # hand area lights (lighting module)
+$dice = Join-Path $data 'assets\dice'
+New-Item -ItemType Directory -Force $dice | Out-Null
+Copy-Item (Join-Path $root 'data\d20_numbers.bin') $dice -Force  # real-time d20 number atlas (tools/make_dice_bams.py)
 $gore = Join-Path $data 'assets\gore'
 New-Item -ItemType Directory -Force $gore | Out-Null
 Copy-Item (Join-Path $root 'data\hitmat.2da') $gore -Force    # material rows (gore module; GemRB unhardcoded/pst)

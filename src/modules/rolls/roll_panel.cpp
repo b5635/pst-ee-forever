@@ -8,17 +8,23 @@
 #include <random>
 #include <string>
 
+#include "core/config.h"
+#include "core/ini.h"
 #include "core/log.h"
+#include "engine/die_draw.h"
 #include "engine/lua.h"
 #include "engine/menu.h"
 #include "modules/dev/lua_bridge.h"
+#include "modules/rolls/die3d.h"
 
 namespace pstf::rolls {
 namespace {
 
 struct G {
-  bool installed = false, ok = false;
+  bool installed = false, ok = false, use3d = false;
   int force = 0;  // test: next natural roll (0 = random)
+  double throw_t0 = -1;
+  die3d::Throw th = die3d::MakeThrow(1);
   std::wstring sound_dir;
   std::mt19937 rng{std::random_device{}()};
 } g;
@@ -28,6 +34,39 @@ int __cdecl LuaForce(engine::LuaState* L) {
   g.force = static_cast<int>(engine::LuaNumberArg(L, 1, 0));
   Log("lua: PSTF_RollForce(%d)", g.force);
   return 0;
+}
+
+// PSTF_DieDraw(cx, cy, box, ms, now, nat, total, ok, ui_w, ui_h, t0) -> 1 drawn, 0 (show the BAM).
+// Called from the die item's frame expression, so it draws in the menu's own draw order.
+int __cdecl LuaDieDraw(engine::LuaState* L) {
+  auto n = [L](int i) { return engine::LuaNumberArg(L, i, 0); };
+  const double ms = n(4), t0 = n(11);
+  if (t0 != g.throw_t0) {  // a new throw: its own spin axes
+    g.throw_t0 = t0;
+    g.th = die3d::MakeThrow(static_cast<uint32_t>(static_cast<int64_t>(t0) * 2654435761u + 0x51ED));
+  }
+  const die3d::Frame fr = die3d::At(ms, n(5), static_cast<int>(n(6)), static_cast<int>(n(7)), n(8) != 0, g.th);
+  const bool drawn = g.use3d && engine::DrawDie(fr, float(n(1)), float(n(2)), float(n(3)), float(n(9)), float(n(10)));
+  engine::LuaPushNumber(L, drawn ? 1 : 0);
+  return 1;
+}
+
+// Probe: PSTF_DieState([arm]) -> "on|off drawn failed r,g,b why" (r,g,b = the die's centre pixel read
+// back by the last armed draw, -1,-1,-1 before one; arm = 1 arms the next draw).
+int __cdecl LuaDieState(engine::LuaState* L) {
+  if (engine::LuaNumberArg(L, 1, 0) != 0) engine::ArmDieProbe();
+  int drawn = 0, failed = 0;
+  std::string why;
+  engine::DieDrawStats(&drawn, &failed, &why);
+  uint8_t rgb[3];
+  int c[3] = {-1, -1, -1};
+  if (engine::DieProbePixel(rgb)) c[0] = rgb[0], c[1] = rgb[1], c[2] = rgb[2];
+  char buf[256];
+  std::snprintf(buf, sizeof buf, "%s %d %d %d,%d,%d %s", g.use3d ? "on" : "off", drawn, failed, c[0], c[1], c[2],
+                why.c_str());
+  Log("lua: PSTF_DieState -> %s", buf);
+  engine::LuaPushString(L, buf);
+  return 1;
 }
 
 const char* kLua = R"LUA(
@@ -100,6 +139,12 @@ function pstfDrPopAt() return pstfDr.ok and PSTF_DR.popOk or PSTF_DR.popFail end
 function pstfDrBannerAt() return pstfDr.ok and PSTF_DR.bannerOk or PSTF_DR.bannerFail end
 function pstfDrDieFrame()
 	local ms = pstfDrMs()
+	if PSTF_DIE3D and pstfDr.dx then
+		local sw, sh = Infinity_GetScreenSize()
+		local nat, total = pstfDr.nat or 20, pstfDr.total or 20
+		if PSTF_DieDraw(pstfDr.dx, pstfDr.dy, 150, ms, Infinity_GetClockTicks(), nat, total, pstfDr.ok and 1 or 0,
+			sw, sh, pstfDr.t0 or -1) == 1 then return 174 end
+	end
 	if ms < 0 then return rest(20, 0) end
 	if ms < PSTF_DR.land then
 		local u = ms / PSTF_DR.land
@@ -161,6 +206,7 @@ function pstfDrTick()
 	local ms = pstfDrMs()
 	local ox, oy = diePos(ms)
 	local dx, dy = cx + ox, barY + oy
+	pstfDr.dx, pstfDr.dy = dx, dy
 	area('pstfDrDie', dx - 75, dy - 75, 150, 150)
 	area('pstfDrSpark', dx - 110, dy - 110, 220, 220)
 	area('pstfDrSmoke', dx - 110, dy - 110, 220, 220)
@@ -200,7 +246,8 @@ std::string BuildMenu() {
                 RollTiming::kLand, RollTiming::kNatural, RollTiming::kBonusLit, RollTiming::kBonusFly, RollTiming::kTotal,
                 RollTiming::kBonusFade, RollTiming::kPopOk, RollTiming::kPopFail, RollTiming::kBannerOk,
                 RollTiming::kBannerFail, RollTiming::Continue(true), RollTiming::Continue(false), RollTiming::kPop);
-  std::string m = "`\n" + std::string(consts) + kLua + "\n`\n";
+  std::string m = "`\n" + std::string(consts) + (g.use3d ? "PSTF_DIE3D = true\n" : "PSTF_DIE3D = false\n") + kLua +
+                  "\n`\n";
   m += "menu\n{\n\tname 'PSTF_ROLL'\n\talign left top\n\tignoreEsc\n\tmodal\n";
   const std::string ign = "\t\tignoreEvents\n";
   m += Item("label", "pstfDrDim", "pstfDrTick()", "\t\tfill 0 0 0 175\n");
@@ -256,11 +303,16 @@ bool InstallRollPanel() {
   wchar_t exe[MAX_PATH] = {};
   GetModuleFileNameW(nullptr, exe, MAX_PATH);
   const std::wstring dir(exe);
-  g.sound_dir = dir.substr(0, dir.find_last_of(L"\\/") + 1) + L"pst_forever\\sounds\\";
+  const std::wstring game = dir.substr(0, dir.find_last_of(L"\\/") + 1);
+  g.sound_dir = game + L"pst_forever\\sounds\\";
+  g.use3d = IniBool(Config(), "rolls.die_3d", true);
+  engine::SetDieAtlasPath(game + L"pst_forever\\assets\\dice\\d20_numbers.bin");
   engine::AddMenuText(BuildMenu());
   dev::AddLuaFunction("PSTF_RollForce", &LuaForce);
+  dev::AddLuaFunction("PSTF_DieDraw", &LuaDieDraw);
+  dev::AddLuaFunction("PSTF_DieState", &LuaDieState);
   g.ok = true;
-  Log("rolls: roll panel installed");
+  Log("rolls: roll panel installed (die %s)", g.use3d ? "3D" : "BAM");
   return true;
 }
 
