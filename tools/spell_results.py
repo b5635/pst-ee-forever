@@ -2,7 +2,7 @@
 r"""Turns the all-spells suite's log lines into tests/unit/spell_results.h (one result per spell).
 
   python -I tools/spell_results.py [LOG]     LOG = the game's pst_forever.log after tools\spell_suite.ps1
-Lines: "tbc_spells_all: SPWI119 ok used=1 ticks=37 fx=+6 hp=0 name=Submerge the Will" (the last run's).
+Lines: "tbc_spells_all: SPWI119 ok used=1 cast=1 ticks=37 fx=+6 hp=0 name=Submerge the Will" (the last run's).
 """
 import os, re, sys
 
@@ -13,7 +13,7 @@ LOG = r"C:\GOG Games\Planescape Torment - Enhanced Edition\pst_forever\logs\pst_
 def main(a):
   log = a[0] if a else LOG
   rows = {}
-  pat = re.compile(r"tbc_spells_all: (SP(?:WI|PR)\d{3}) (ok|fizzle|stall) used=(\d) ticks=(\d+) fx=([+-]\d+) hp=(-?\d+) name=(.*)$")
+  pat = re.compile(r"tbc_spells_all: (SP(?:WI|PR)\d{3}) (ok|fizzle|stall) used=(\d) cast=(-?\d+) ticks=(\d+) fx=([+-]\d+) hp=(-?\d+) name=(.*)$")
   for line in open(log, encoding="latin1"):
     m = pat.search(line.rstrip())
     if m:
@@ -27,7 +27,7 @@ def main(a):
        "  int fx;               // timed effects added on the target", "  int hp;               // HP change of the target", "};",
        "inline constexpr Result kResults[] = {"]
   for r in sorted(rows):
-    res, verdict, _used, ticks, fx, hp, _name = rows[r]
+    res, verdict, _used, _cast, ticks, fx, hp, _name = rows[r]
     h.append('    {"%s", "%s", %s, %d, %s},' % (res, verdict, ticks, int(fx), hp))
   h += ["};", "}  // namespace pstf::spellresults"]
   open(os.path.join(ROOT, "tests", "unit", "spell_results.h"), "w", newline="\n").write("\n".join(h) + "\n")

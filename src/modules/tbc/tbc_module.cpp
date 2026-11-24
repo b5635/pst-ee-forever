@@ -103,6 +103,8 @@ struct State {
   // Effects advance one round at their owner's turn start ([tbc] round_effects, round_seconds).
   bool round_effects = true;
   uint32_t effect_round_ticks = 75;  // 5 s x 15 ticks
+  bool cast_feedback = false;          // FeedBack hook on: casts counted (engine::SpellCasts)
+  int turn_casts = 0;                  // the current creature's cast count seen so far this turn
   bool run = true;                   // [tbc] run: everyone runs in a fight
   uint8_t run_scale_other = 11;      // move scale for animations without a run sequence
   bool music = true;                 // [tbc] battle_music: keep the battle song for the whole fight
@@ -525,6 +527,15 @@ void OnTurnChange(int32_t prev, int32_t next) {
     engine::SpriteInfo before;
     const bool had = engine::GetSprite(next, &before);
     engine::StepEffectClock(next, g.effect_round_ticks);
+    // The casting aura counts the caster's own AI ticks, which run on its turns only: step it by the same round
+    // (round_rules.h StepCastAura), or a caster could cast only every few turns.
+    int16_t aura = -1;
+    bool casting = false;
+    if (engine::CastState(next, nullptr, &aura, &casting) && aura >= 0) {
+      const int16_t after = StepCastAura(aura, g.effect_round_ticks, engine::RoundLengthTicks(), casting);
+      engine::SetCastAura(next, after);
+      Log("tbc: %s turn start: casting aura %d -> %d%s", Who(next).c_str(), aura, after, casting ? " (still casting)" : "");
+    }
     Log("tbc: %s turn start: effects step %u ticks (hp %d, %d timed, %d persistent)", Who(next).c_str(),
         g.effect_round_ticks, had ? before.hp : -1, static_cast<int>(engine::TimedEffects(next).size()),
         engine::PersistentCount(next));
@@ -556,6 +567,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
   const int slot = PartySlot(next);
   g.clock = TurnClock(g.round_ticks, slot >= 0 && !g.auto_party);
   g.econ = Economy(g.move_feet, g.round_ticks, slot >= 0 && !g.auto_party);
+  g.turn_casts = g.cast_feedback ? engine::SpellCasts(next) : 0;
   g.hold_current = false;
   g.preview_goal = {-1, -1};
   if (slot >= 0 && !g.auto_party) engine::ClearAI(next);  // nothing queued while it waited: player orders only
@@ -1743,6 +1755,14 @@ void OnTick(uint64_t frame) {
   // A quick item used between two frames still takes the action (UseItem = 34).
   const uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
   EconomyStep st = g.econ.Feed(dt, moved, s.has_path, fed);
+  if (g.cast_feedback) {
+    const int casts = engine::SpellCasts(cur);
+    if (casts > g.turn_casts && g.econ.SawCast()) {
+      Log("tbc: %s: a cast the action economy did not see (no casting time) takes the action", Who(cur).c_str());
+      CLog("ACTION", Name(cur) + " casts at once: the action is used");
+    }
+    g.turn_casts = casts;
+  }
   if (st.stop == Stop::OutOfMove && g.maneuvers && AiRunsWhenShort(g.econ, IsAttackAction(s.action), true) &&
       UseManeuver(cur, AiMove::Run)) {
     // Stopped short of its target with the action free: it runs the rest of the way (the action goes).
@@ -2305,6 +2325,41 @@ int __cdecl LuaAnimProbe(engine::LuaState* L) {
   engine::LuaPushString(L, s.c_str());
   return 1;
 }
+// PSTF_Action(id) -> current action id (ACTION.IDS), 1 when it has a current or queued action, 1 with a walk path
+// (the log line adds SpellPST's cast-in-progress flag and counter; a second argument 1 = no log line).
+int __cdecl LuaAction(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  engine::SpriteInfo o;
+  const bool ok = engine::GetSprite(id, &o);
+  int32_t cast = -1;
+  int16_t counter = -1;
+  engine::CastState(id, &cast, &counter);  // counter = the casting aura (-1: may cast)
+  if (engine::LuaNumberArg(L, 2, 0) == 0)  // PSTF_Action(id, 1): quiet (a per-frame poll)
+    Log("lua: PSTF_Action(%X) -> %d busy %d path %d cast %d counter %d", static_cast<unsigned>(id), ok ? o.action : -1, ok && o.busy,
+        ok && o.has_path, cast, counter);
+  engine::LuaPushNumber(L, ok ? o.action : -1);
+  engine::LuaPushNumber(L, ok && o.busy ? 1 : 0);
+  engine::LuaPushNumber(L, ok && o.has_path ? 1 : 0);
+  return 3;
+}
+// PSTF_Casts(id) -> spells the engine really cast for it (its "casts <spell>" feedback; env PSTF_FEEDBACK_LOG=1, else -1).
+int __cdecl LuaCasts(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  engine::LuaPushNumber(L, engine::SpellCasts(id));
+  return 1;
+}
+// PSTF_Unapply(id, res) -> effects of spell `res` removed from it (engine UnapplySpell), then its attached spell
+// objects end (-> also their count): the all-spells suite gives every spell a clean caster.
+int __cdecl LuaUnapply(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const std::string res = engine::LuaStringArg(L, 2);
+  const int n = engine::UnapplySpell(id, res.c_str());
+  const int a = engine::EndAttached(id);
+  Log("lua: PSTF_Unapply(%X, %s) -> %d effects, %d attached", static_cast<unsigned>(id), res.c_str(), n, a);
+  engine::LuaPushNumber(L, n);
+  engine::LuaPushNumber(L, a);
+  return 2;
+}
 // PSTF_Attached(id) -> number of PST attached spell objects; logs ticks to each one's end.
 int __cdecl LuaAttached(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
@@ -2561,8 +2616,10 @@ bool InstallTbc(const IniMap& ini) {
   {
     char* v = nullptr;
     size_t n = 0;
-    if (_dupenv_s(&v, &n, "PSTF_FEEDBACK_LOG") == 0 && v && v[0] == '1') engine::InstallFeedbackLog();
+    const bool log = _dupenv_s(&v, &n, "PSTF_FEEDBACK_LOG") == 0 && v && v[0] == '1';
     free(v);
+    // casts the economy cannot see (no casting time) still spend the action: count the engine's cast feedback
+    g.cast_feedback = engine::InstallFeedbackHook(log);
   }
   if (IniBool(ini, "tbc.hud", true)) {
     if (engine::HudAvailable() && engine::InstallMenuHook()) {
@@ -2593,6 +2650,9 @@ bool InstallTbc(const IniMap& ini) {
   if (g.no_push && !engine::InstallBumpGuard(&BumpGuard)) Log("tbc: bump calls differ from the manifest; pushing stays on");
   dev::AddLuaFunction("PSTF_Maneuver", &LuaManeuver);
   dev::AddLuaFunction("PSTF_AnimProbe", &LuaAnimProbe);
+  dev::AddLuaFunction("PSTF_Action", &LuaAction);
+  dev::AddLuaFunction("PSTF_Casts", &LuaCasts);
+  dev::AddLuaFunction("PSTF_Unapply", &LuaUnapply);
   dev::AddLuaFunction("PSTF_Attached", &LuaAttached);
   dev::AddLuaFunction("PSTF_Pose", &LuaPose);
   dev::AddLuaFunction("PSTF_Stance", &LuaStance);

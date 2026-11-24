@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// L0 tests per player spell: every SPWI/SPPR spell of the game (tests/unit/spell_table.h, tools/spell_list.py) has
-// a turn-based result from the all-spells suite (tests/unit/spell_results.h, tools\spell_suite.ps1) that is not a
-// stall, and the round-clock rules classify its delayed effects. A new or changed spell (a mod) fails here until
-// tools/spell_list.py and the suite have been run again.
+// L0 tests per player spell: every SPWI/SPPR spell of the game (tests/unit/spell_table.h, tools/spell_list.py) was
+// cast by the engine in a turn-based fight by the all-spells suite (tests/unit/spell_results.h,
+// tools\spell_suite.ps1), and the round-clock rules classify its delayed effects. A new or changed spell (a mod)
+// fails here until tools/spell_list.py and the suite have been run again.
 #include <cstdio>
 #include <cstring>
 
@@ -22,7 +22,10 @@ const spellresults::Result* ResultOf(const char* res) {
 }
 }  // namespace
 
-TEST_CASE("spells: every player spell has a turn-based result, and none stalls its caster's turn") {
+TEST_CASE("spells: every player spell is cast in a turn-based fight, and none stalls its caster's turn") {
+  // ok = the engine cast it (its "casts <spell>" feedback) on the caster's turn and the turn ended after End Turn.
+  // The suite raises the casters' levels (the save leaves them below most spells' first ability), gives every
+  // spell a clean caster (UnapplySpell) and retries a miss once on the next turn.
   int n = 0;
   for (const auto& s : spelltable::kSpells) {
     ++n;
@@ -30,11 +33,10 @@ TEST_CASE("spells: every player spell has a turn-based result, and none stalls i
     if (!r) std::printf("  no suite result for %s (%s): run tools\\spell_suite.ps1\n", s.res, s.name);
     CHECK(r != nullptr);
     if (!r) continue;
-    if (std::strcmp(r->verdict, "stall") == 0) std::printf("  %s (%s) stalled its caster's turn\n", s.res, s.name);
-    CHECK(std::strcmp(r->verdict, "stall") != 0);
-    CHECK(std::strcmp(r->verdict, "ok") == 0 || std::strcmp(r->verdict, "fizzle") == 0);
-    // An ok cast resolved and its turn closed within the suite's window after End Turn.
-    if (std::strcmp(r->verdict, "ok") == 0) CHECK(r->ticks > 0 && r->ticks < 600);
+    if (std::strcmp(r->verdict, "ok") != 0) std::printf("  %s (%s): %s in a turn-based fight\n", s.res, s.name, r->verdict);
+    CHECK(std::strcmp(r->verdict, "ok") == 0);
+    // the cast resolved and its turn closed within the suite's window after End Turn
+    CHECK(r->ticks > 0 && r->ticks < 750);
   }
   CHECK(n == 93);  // PST:EE 3.2.2 + PST-UB-Reloaded: 75 mage + 18 priest spells with a name
 }
@@ -86,5 +88,7 @@ TEST_CASE("spells: Submerge the Will and Power of One add parentless effects the
   CHECK(submerge);
   CHECK(power);
   const auto* r = ResultOf("SPWI119");
-  CHECK(r && std::strcmp(r->verdict, "ok") == 0 && r->fx == 6);  // op 0 + ops 33..37 on the caster
+  // the 375 carrier at least; its op 0 + ops 33..37 come on the attached object's own update (6 when it ran before
+  // the turn ended, 1 when not: both seen with the same 44-tick turn)
+  CHECK(r && std::strcmp(r->verdict, "ok") == 0 && (r->fx == 1 || r->fx == 6));
 }

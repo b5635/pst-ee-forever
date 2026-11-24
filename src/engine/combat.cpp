@@ -210,6 +210,33 @@ int AttachedLeft(int32_t id, std::vector<int32_t>* out) {
   return n;
 }
 
+int UnapplySpell(int32_t id, const char* res) {
+  const uint64_t p = LookupSprite(id);
+  if (!p || !res || !AllOk({sym::kRvaUnapplySpell})) return -1;
+  char ref[8] = {};  // CResRef: 8 bytes, upper case, compared as one qword (effect +0x94)
+  for (int i = 0; i < 8 && res[i]; ++i) ref[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(res[i])));
+  const size_t before = TimedEffects(id).size();
+  reinterpret_cast<void(__fastcall*)(uint64_t, const char*)>(Va(sym::kRvaUnapplySpell))(p, ref);
+  const size_t after = TimedEffects(id).size();
+  return static_cast<int>(before - after);
+}
+
+int EndAttached(int32_t id) {
+  const uint64_t p = LookupSprite(id);
+  const uint64_t g = GameObject();
+  if (!p || !g || !AllOk({sym::kRvaAttachedCount, sym::kRvaAttachedList, sym::kRvaAttachedEnd})) return 0;
+  const uint32_t now = R<uint32_t>(g + 0x7820);
+  const int n = std::min<int>(R<uint8_t>(p + sym::kOffSpriteAttachedCount), sym::kMaxAttached);
+  int ended = 0;
+  for (int i = 0; i < n; ++i) {
+    const uint64_t o = R<uint64_t>(p + sym::kOffSpriteAttached + 8ull * i);
+    if (!PlausiblePtr(o)) continue;
+    W<uint32_t>(o + sym::kOffAttachedEnd, now + 1);  // the object ends itself on its stamp
+    ++ended;
+  }
+  return ended;
+}
+
 void StepEffectClock(int32_t id, uint32_t ticks) {
   const uint64_t p = g_clock ? LookupSprite(id) : 0;
   if (!p) return;
@@ -685,22 +712,37 @@ int64_t __fastcall HookCheckSave(void* eff, void* sprite, uint8_t* poly, uint8_t
   return r;
 }
 FeedBackFn g_feedback_all = nullptr;
+std::map<int32_t, int> g_casts;  // feedback 5 per sprite: the engine's "casts <spell>" line, sent when a cast fires
+bool g_feedback_log = false;     // env PSTF_FEEDBACK_LOG: also log every FeedBack
 void __fastcall HookFeedBackAll(void* self, uint32_t type, int a, int b, uint32_t c, int d, int e, void* str) {
-  Log("combat: feedback %u (%d, %d, %u) from %X", type, a, b, c, static_cast<unsigned>(IdOf(self)));
+  if (g_feedback_log) Log("combat: feedback %u (%d, %d, %u) from %X", type, a, b, c, static_cast<unsigned>(IdOf(self)));
+  // FeedBack(5, 0|1, ...) comes from CGameSprite::Spell/SpellPoint/SpellPST/SpellPointPST when the spell goes off
+  // (lin 4CDDC0 l.821/823, 4CF7E0 l.560/562); a cast the engine refuses (no ability for the caster level) sends none.
+  if (type == 5) ++g_casts[IdOf(self)];
   g_feedback_all(self, type, a, b, c, d, e, str);
 }
 }  // namespace
 
-bool InstallFeedbackLog() {
+int SpellCasts(int32_t id) {
+  if (!g_feedback_all) return -1;
+  const auto it = g_casts.find(id);
+  return it == g_casts.end() ? 0 : it->second;
+}
+
+bool InstallFeedbackHook(bool log) {
+  if (log && !g_feedback_log) {
+    g_feedback_log = true;
+    Log("combat: feedback log on");
+  }
   if (g_feedback_all) return true;
   const sym::Symbol* s = Find(sym::kRvaFeedBack);
   if (!s) return false;
   const uint64_t t = InlineHook(*s, 5, reinterpret_cast<void*>(&HookFeedBackAll));
   if (!t) return false;
   g_feedback_all = reinterpret_cast<FeedBackFn>(t);
-  Log("combat: feedback log on");
   return true;
 }
+bool InstallFeedbackLog() { return InstallFeedbackHook(true); }
 
 bool InstallRollHooks() {
   if (g_feedback) return true;

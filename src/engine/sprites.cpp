@@ -501,6 +501,26 @@ void ClearAI(int32_t id) {
     reinterpret_cast<void(__fastcall*)(uint64_t, uint8_t)>(Va(sym::kRvaClearAI))(p, 0);
 }
 
+// The engine's spell-cast state (CGameSprite::SpellPST lin 4CDDC0 l.196-310: this+0x4694 "cast in progress",
+// the WORD aura counter this+0x4690 (-1 = may cast) and this+0x4698 "cast running"; win 14042E3F0
+// cmp [rbx+46ACh], esi / cmp word ptr [rbx+46A8h], 0FFFFh; CGameSprite::DoAction win 1404079D0 counts it:
+// movzx r8d, word ptr [rcx+46A8h] ... cmp [rdi+46B0h], r15d ... mov [rdi+46A8h], r12w).
+bool CastState(int32_t id, int32_t* in_progress, int16_t* counter, bool* running) {
+  const uint64_t p = Lookup(id);
+  if (!p) return false;
+  if (in_progress) *in_progress = R<int32_t>(p + 0x46AC);
+  if (counter) *counter = R<int16_t>(p + 0x46A8);
+  if (running) *running = R<int32_t>(p + 0x46B0) != 0;
+  return true;
+}
+
+bool SetCastAura(int32_t id, int16_t counter) {
+  const uint64_t p = Lookup(id);
+  if (!p) return false;
+  *reinterpret_cast<volatile int16_t*>(p + 0x46A8) = counter;
+  return true;
+}
+
 void DropPath(int32_t id) {
   const uint64_t p = Lookup(id);
   if (!p) return;

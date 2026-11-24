@@ -143,7 +143,10 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   grep the log with `Select-String -Path '<game>\pst_forever\logs\pst_forever.log' -Pattern 'smooth|tbc:'`.
 - Spells in tests as in a real game: `AddXPObject(Myself,3000000)` (real level-ups), then
   `SpellNoDec(target, 2xxx)` (PST:EE: needs the caster's own level, not memorised); items with
-  `GiveItemCreate("RES",Myself,1,0,0)` + `UseItem("RES",Myself)`. No forced caster levels.
+  `GiveItemCreate("RES",Myself,1,0,0)` + `UseItem("RES",Myself)`. No forced caster levels (ReallyForceSpellLevel).
+  PST level-ups wait for the Level Up button, so AddXP alone leaves the level low: raise it with
+  `ChangeStat(Myself,LEVEL|LEVEL2|LEVEL3,N,SET)` (TNO's class levels are kept apart). The engine picks the SPL
+  ability for the caster level and refuses a spell whose first ability needs more, without a word (SpellPST).
 - Test save: the Hive, `-Save 000000126` (many Hive thugs to turn hostile; `tbc_rules`, `tbc_sim`, `tbc_hive`).
   `tbc_hive.lua`: Swarm Curse pacing, Adder's Kiss, Whispering Flask/Embalming take the action, save sound.
 - Game resources: `python -I tools/ieres.py spl|itm NAME` (effects per header), `named REGEX` (SPL/ITM by TLK
@@ -249,8 +252,18 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - All spells: `tools\make_spell_save.ps1` builds `tests\saves\000000990-PSTF-AllSpells` (Grace joins, 3M XP, TNO knows
   every mage spell, Grace every priest spell; `C:AddSpell`) and copies it to the save folder; `tools\install_test_saves.ps1`
   copies `tests\saves\*` there on a new machine. `tools\spell_suite.ps1 [-Only SPWI119,...]` casts every spell in a fight
-  (`tests\ingame\tbc_spells_all.lua`, ~15 min) and writes `tests\unit\spell_results.h`; `test_spells.cpp` needs a non-stall
-  result for every spell in `tests\unit\spell_table.h` (`python -I tools/spell_list.py`, also `tests\ingame\spell_list.lua`).
-  A new spell (mod) = re-run both. Grace's level 5+ priest spells fizzle (her caster level).
+  (`tests\ingame\tbc_spells_all.lua`, ~17 min, `-Trace` logs the caster's action/aura/attached objects) and writes
+  `tests\unit\spell_results.h` (only when the run passed); `test_spells.cpp` needs `ok` = a real engine cast for every
+  spell in `tests\unit\spell_table.h` (`python -I tools/spell_list.py`, also `tests\ingame\spell_list.lua`). A new spell
+  (mod) = re-run both. The suite raises levels (TNO 20, Grace 14), casts area spells at the creature (a scripted
+  `SpellPointNoDec` at [x.y] is dropped by the engine for most), removes each spell's effects after it (Fist of Iron's
+  op 60 spell failure fails every later cast), jumps the caster beside a foe > 20 ft off, retries a miss once.
+  Probes: `PSTF_Casts(id)` (the engine's "casts" feedback count; the FeedBack hook is on with tbc, env
+  PSTF_FEEDBACK_LOG also logs every FeedBack), `PSTF_Action(id[, quiet])` (action, busy, path; the log line adds
+  SpellPST's cast flag and aura counter), `PSTF_Unapply(id, RES)` (CGameSprite::UnapplySpell + attached objects end).
+  Engine facts: the casting aura (sprite word +0x46A8, -1 = may cast) counts the caster's own AI ticks up to
+  ROUND_LENGTH (DoAction); the round clock steps it at turn start (`StepCastAura`), else a caster casts every few turns.
+  A cast with no casting time (Identify) never shows its action to the economy: its cast feedback spends the action.
+  Long casts (Rune of Torment, speed 9) are not cut by the one-round attack limit (`IsCastAction`, 4-round cap).
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

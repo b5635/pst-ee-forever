@@ -810,3 +810,45 @@ TEST_CASE("tbc status: parentless spell effects take the spell seen on its way (
   AttributeOrphans(0x870087, &reused, 6000, &m);
   CHECK(reused[0].parent.empty());
 }
+
+TEST_CASE("tbc round clock: the casting aura clears between a caster's turns, as DoAction clears it after a round") {
+  // Values from the all-spells suite (tbc_spells_all.lua -Trace): after a cast the counter sat at 25..33 at the
+  // next turn (the caster's AI ran only during its own turn) and SpellPST refused every spell (no cast feedback).
+  CHECK(StepCastAura(-1, 75, 51, false) == -1);  // clean stays clean
+  CHECK(StepCastAura(31, 75, 51, false) == -1);  // 31 + one round (75) >= ROUND_LENGTH 51: may cast again
+  CHECK(StepCastAura(0, 51, 51, false) == -1);   // exactly a round
+  CHECK(StepCastAura(0, 50, 51, false) == 50);   // a tick short
+  CHECK(StepCastAura(31, 75, 51, true) == 106);  // a cast still running keeps it (DoAction checks +0x46B0)
+  CHECK(StepCastAura(0x7FF0, 75, 51, true) == 0x7FFF);  // no wrap
+}
+
+TEST_CASE("tbc economy: a long cast is not cut by the attack-round limit") {
+  // All-spells suite: Rune of Torment (SPWI914, casting speed 9) was stopped "Attack round done" at 51 ticks with
+  // its casting glow on, so it never went off. A cast runs until the engine ends it; an attack still stops.
+  Economy e(31, 51, true);
+  EconomyStep st;
+  for (int i = 0; i < 80; ++i) st = e.Feed(1, 0, false, 191);  // SpellNoDec, still casting after 80 ticks
+  CHECK(st.stop == Stop::None && e.acting && e.action_used);
+  st = e.Feed(1, 0, false, 0);  // the engine finished the cast
+  CHECK(st.stop == Stop::None && !e.acting);
+  Economy hung(31, 51, true);
+  for (uint32_t i = 0; i < 4 * 51; ++i) st = hung.Feed(1, 0, false, 31);  // Spell: a hung cast, 4 rounds
+  CHECK(st.stop == Stop::RoundDone && !hung.acting);
+  Economy atk(31, 51, true);
+  for (int i = 0; i < 51; ++i) st = atk.Feed(1, 0, false, 3);  // Attack: one round
+  CHECK(st.stop == Stop::RoundDone);
+  CHECK(IsCastAction(191) && IsCastAction(192) && IsCastAction(95) && !IsCastAction(3) && !IsCastAction(34));
+}
+
+TEST_CASE("tbc economy: a cast with no casting time still spends the action") {
+  // All-spells suite: Identify (SPWI105, speed 0) went off with the engine's cast feedback while every frame showed
+  // no action, so the turn's action stayed free. The cast feedback takes it.
+  Economy e(31, 51, true);
+  auto st = e.Feed(1, 0, false, 0);
+  CHECK(!e.action_used);
+  CHECK(e.SawCast());
+  CHECK(e.action_used && e.act_action == 191 && !e.acting);
+  CHECK(!e.SawCast());  // once
+  st = e.Feed(1, 0, false, 3);  // a later attack: no action left
+  CHECK(st.stop == Stop::NoAction);
+}

@@ -14,7 +14,8 @@
 //     walk may run. A path that still needs movement it does not have is cancelled ("can't reach").
 //   - a non-move action that runs while the creature is not walking IS the action of the turn. It
 //     ends when the engine finishes it, or after one round of ticks (an attack action repeats rounds
-//     forever otherwise). Any later non-move action is cancelled ("no action left").
+//     forever otherwise; a cast is left to finish, kCastCapRounds at most). Any later non-move action
+//     is cancelled ("no action left").
 //   - party turns end when the action is used and movement is gone (or on End Turn); AI turns also end
 //     once they idle, or at a hard cap.
 #pragma once
@@ -76,6 +77,19 @@ inline bool IsIdleAction(uint16_t id) {
 // ReallyForceSpell, ReallyForceSpellPoint.
 inline bool IsForcedCast(uint16_t id) { return id == 113 || id == 114 || id == 181 || id == 337; }
 
+// Spell casts (PST:EE ACTION.IDS): Spell, SpellPoint, ForceSpell(Point), ReallyForceSpell(Point), SpellNoDec,
+// SpellPointNoDec, ReallyForceSpellDead, ForceSpellRange, ForceSpellPointRange, ForceSpellRESNoFeedback. The
+// engine ends them itself once the spell went off; a long casting time (Rune of Torment, speed 9) outlasts a round.
+inline bool IsCastAction(uint16_t id) {
+  switch (id) {
+    case 31: case 95: case 113: case 114: case 181: case 191: case 192: case 240: case 318: case 319: case 337:
+    case 466:
+      return true;
+    default:
+      return false;
+  }
+}
+
 inline bool IsWaitAction(uint16_t id) {
   switch (id) {
     case 63: case 83: case 368: case 85: case 130: case 200: case 410: case 411:  // waits, random walks/turns
@@ -127,6 +141,7 @@ struct Economy {
   // swings it may run up to two rounds (the engine's next round brings the missing swing).
   static constexpr uint32_t kSwingTailTicks = 8;
   static constexpr uint32_t kAiSettleTicks = 4;  // AI: after its action, this long and the turn is over
+  static constexpr uint32_t kCastCapRounds = 4;  // a cast is never cut by the round; this long only if it hangs
   int want_swings = 0;
   uint16_t act_action = 0;  // the action that took the turn's action (3 = Attack)
   int swings = 0;
@@ -142,6 +157,17 @@ struct Economy {
       : max_ft(feet), move_ft(feet), round_ticks(round), party(is_party) {}
 
   bool MoveLeft() const { return move_ft > 0.05; }
+
+  // The engine cast a spell for it this turn (its "casts" feedback). A cast with no casting time (Identify,
+  // speed 0) starts and ends inside one engine update, so Feed never sees its action: it still spends the action.
+  // -> true when this took the action.
+  bool SawCast() {
+    if (action_used) return false;
+    action_used = true;
+    act_action = 191;  // SpellNoDec: a cast
+    did_something = true;
+    return true;
+  }
 
   EconomyStep Feed(uint32_t dt, double moved_ft, bool has_path, uint16_t action) {
     EconomyStep out;
@@ -198,9 +224,9 @@ struct Economy {
           acting = false;
           out.stop = Stop::RoundDone;  // this round's swings are done
         }
-      } else if (act_ticks >= round_ticks) {
+      } else if (act_ticks >= (IsCastAction(action) ? kCastCapRounds * round_ticks : round_ticks)) {
         acting = false;
-        out.stop = Stop::RoundDone;  // one attack round, then stop repeating
+        out.stop = Stop::RoundDone;  // one attack round, then stop repeating (a cast: only if it hangs)
       }
     }
     since_act = acting ? 0 : since_act + dt;

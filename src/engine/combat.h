@@ -137,7 +137,15 @@ struct RollEvent {
   uint8_t site = 0;     // attack: which of Swing's Hit calls rolled it (1..3, symbols.h Swing.hitN)
 };
 bool InstallRollHooks();
-bool InstallFeedbackLog();  // debug: log every CGameSprite::FeedBack (env PSTF_FEEDBACK_LOG=1)
+// Test helpers (all-spells suite): remove a spell's effects from a creature (CGameSprite::UnapplySpell; -> effects
+// removed, -1 unavailable) and end its PST attached spell objects (shields, mantles) on the next tick.
+int UnapplySpell(int32_t id, const char* res);
+int EndAttached(int32_t id);
+// CGameSprite::FeedBack hook: counts each creature's casts (feedback 5, sent by Spell/SpellPoint/SpellPST/
+// SpellPointPST when the spell goes off); `log` = also log every FeedBack (debug, env PSTF_FEEDBACK_LOG=1).
+bool InstallFeedbackHook(bool log);
+bool InstallFeedbackLog();   // InstallFeedbackHook(true)
+int SpellCasts(int32_t id);  // spells the engine cast for it since the hook went on; -1 without the hook
 std::vector<RollEvent> TakeRollEvents();
 
 // Melee swings (Swing's first Hit call, the melee branch): `thac0_add(attacker, target)` is added to the

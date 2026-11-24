@@ -280,6 +280,12 @@ inline constexpr uint8_t kDropPathBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20,
 inline constexpr uint8_t kEnemyBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83,
                                           0xEC, 0x40, 0x0F, 0xB6, 0x05, 0x57, 0x67, 0x21};
 constexpr uint32_t kRvaClearAI = 0x404B90, kRvaDropPath = 0x3C4280, kRvaEnemy = 0x408B00;
+// CGameSprite::UnapplySpell(CResRef const&) lin 523AC0, win 1403ED230: removes every effect whose parent resref is
+// the spell from both effect lists (CGameEffectList::RemoveAllEffectsFromSourceRes on +0x4718 and +0x46C8, each
+// effect's own OnRemove). Test helper: the all-spells suite resets its caster between spells.
+inline constexpr uint8_t kUnapplySpellBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83,
+                                                 0xEC, 0x20, 0x48, 0x8B, 0xF9, 0x48, 0x8B, 0xDA};
+constexpr uint32_t kRvaUnapplySpell = 0x3ED230;
 // luaL_loadstring lin 6A58A0, win 1400E7380 (LuaInit calls it at 140226240 for "C = CLUAConsole:new()").
 inline constexpr uint8_t kLuaLoadStringBytes[] = {0x48, 0x83, 0xEC, 0x58, 0x48, 0x8B, 0x05, 0x4D,
                                                   0x1C, 0x64, 0x00, 0x48, 0x33, 0xC4, 0x48, 0x89};
@@ -945,6 +951,7 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CGameSprite::ClearAI", kRvaClearAI, kClearAIBytes, "lin 4A5320 / win 140404B90"),
     PSTF_SYM("CGameSprite::DropPath", kRvaDropPath, kDropPathBytes, "lin 505F80 / win 1403C4280"),
     PSTF_SYM("CGameSprite::Enemy", kRvaEnemy, kEnemyBytes, "lin 4AEA80 / win 140408B00"),
+    PSTF_SYM("CGameSprite::UnapplySpell", kRvaUnapplySpell, kUnapplySpellBytes, "lin 523AC0 / win 1403ED230"),
     PSTF_SYM("FloatingHP.hp", kRvaHp, kHpBytes, "lin 571E90 / win 14043A900"),
     PSTF_SYM("luaL_loadstring", kRvaLuaLoadString, kLuaLoadStringBytes, "lin 6A58A0 / win 1400E7380"),
     PSTF_SYM("uiLoadMenu.copyText", kRvaMenuCopyCall, kMenuCopyCallBytes, "lin 581790 / win 140459EC3"),

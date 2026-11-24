@@ -34,6 +34,9 @@ int32_t SpriteIdOf(const void* sprite);     // for hooks that receive `this`
 int SpriteAnimId(int32_t id);               // animation id (RESDATA.INI section), -1 if unreadable
 
 void ClearAI(int32_t id);    // CGameSprite::ClearAI(0): actions, triggers, current action
+// SpellPST's cast-in-progress flag, casting-aura counter (-1 = may cast a spell) and cast-running flag.
+bool CastState(int32_t id, int32_t* in_progress, int16_t* counter, bool* running = nullptr);
+bool SetCastAura(int32_t id, int16_t counter);
 void DropPath(int32_t id);   // CGameSprite::DropPath
 bool MakeEnemy(int32_t id);  // CGameSprite::Enemy (the Enemy() action), for staging fights
 

@@ -43,6 +43,17 @@ inline int OnsetKind(int32_t left, int opcode) {
   return OnsetResolvesNow(left) ? 1 : 0;
 }
 
+// The casting aura: after a cast starts, CGameSprite::DoAction counts the caster's AI ticks (lin 4A26A0 l.39-52,
+// win 1404079D0: word +0x46A8) and clears it (-1) at ROUND_LENGTH unless a cast still runs (+0x46B0); SpellPST
+// refuses a new spell while the counter is >= 0. In a fight the caster's AI runs on its own turns only, so the
+// round clock steps the counter by the round that passed between its turns, as it steps effects.
+inline int16_t StepCastAura(int16_t counter, uint32_t ticks, uint32_t round_length, bool casting) {
+  if (counter < 0) return counter;  // -1: aura clean (-2.. unused)
+  const uint32_t c = static_cast<uint32_t>(counter) + ticks;
+  if (c >= round_length && !casting) return -1;
+  return static_cast<int16_t>(c > 0x7FFF ? 0x7FFF : c);
+}
+
 // Lingering spells (area clouds, Swarm Curse) pulse on a tick countdown once they have landed. Each
 // gets one round of ticks per round of its caster: kFirst from landing (the first pulse belongs to the
 // round it was cast in), then kRound from the start of each of the caster's turns. Swarm Curse pulses
