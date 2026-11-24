@@ -164,7 +164,32 @@ void UnpackSpriteG(float g, float* lm, float* depth);
 // it gets the same scene-wide darkening as the floor (the area ambient, `ambient` in the ini) and gains
 // what the lights add above that ambient relative to its own LM (a torch next to a creature in a painted
 // dark nook still lights its lit side). l = light buffer value.
-float SpriteLight(float l, float ambient, float lm, float gain);
+// ao_factor (SpriteAoFactor) darkens only the ambient part: a torch still lights a creature in a corner.
+float SpriteLight(float l, float ambient, float lm, float gain, float ao_factor = 1.0f);
+// Sprite ambient occlusion (ao.bin GLA1: 255 open .. 0 enclosed; GemRB LIGHTING_PLAN 8.1.2, built for a
+// creature standing on the floor): nearest texel at (x, feet y), clamped, 0..1; 1 without a map.
+float AoAt(const SceneMap& ao, float x, float y);
+// Multiplier of a sprite pixel's ambient: 1 - (1 - ao) * strength (strength 0..1, sprite_ao).
+float SpriteAoFactor(float ao, float strength);
+
+// Painted emitters: a baked light from the lights stage stands at its emitter's ground point, z above it
+// (GemRB lights 6.1 F / depth 7.2.7: y = ey + h, z = h), so the painted flame is at (x, y - z). Pools have
+// no emitter in the art. core = radius * core_scale, 8..48 px. False = no emitter.
+bool PaintedEmitter(const BakedLight& l, float core_scale, float* ex, float* ey, float* core);
+// Glow weight of a scene pixel (colour 0..1) at `dist` px from a painted emitter (GLSL paintFs): bright
+// pixels only (max channel 0.70..0.92 ramp), full inside half the core, 0 at the core's edge.
+float PaintedGlowWeight(float r, float g, float b, float dist, float core);
+
+// Hand area lights (assets/lighting/arealights.tsv, shipped from data/arealights.tsv): baked lights placed
+// by hand where the GemRB pipeline found none. Line: WED x y z radius r g b strength kind shadow, the
+// lights.txt light fields after the area's WED ('#' comments; bad lines skipped).
+struct AreaLight {
+  char wed[9] = {};
+  BakedLight light;
+};
+std::vector<AreaLight> ParseAreaLights(const std::string& text);
+// Appends the rows of `wed` (case-insensitive) to `out`; returns how many.
+size_t AddAreaLights(const std::vector<AreaLight>& table, const std::string& wed, std::vector<BakedLight>* out);
 // Key-light shadow (projected silhouette, GemRB ScenePolish::DrawShadows `project`): the key line's dir
 // is where shadows fall; a sprite pixel h px above the feet lands on the floor at (x + h*sx, feet + h*sy)
 // with sx = k*dirX, sy = k*dirY*0.72 - 0.15*(1 - |dirY|) (sideways casts keep a little depth), |sy| >= 0.22

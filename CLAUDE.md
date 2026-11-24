@@ -190,6 +190,13 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `PSTF_LightCreatureTrace(frames)` then `()` -> samples, moving, holds, largest step px (light, sprite anchor):
   per drawn frame, so it sees the draw-only frames between ticks (the walk check in lighting_shadows.lua). Engine fact: PST realizes creature palettes without flag 4
   (cdb: 0x300C0), the blob alpha is the BAM palette's own alpha byte.
+  Sprite AO + painted emitter glow + hand area lights (`tests\ingame\lighting_ao.lua`, save `000000076` — 126 has no
+  baked emitter in view; same env as lighting_sprites): `[lighting] sprite_ao` (ao.bin at the creature's feet scales its
+  ambient only), `painted_glow` (a baked light's painted flame at (x, y - z) goes into the emissive buffer), `area_lights`
+  (`data/arealights.tsv` -> `assets\lighting\`, lights.txt fields after the WED). Probes `PSTF_LightAo(x,y)` -> AO
+  factor, raw ao, hand area lights here, painted emitters drawn; `PSTF_LightSpriteMean()` -> mean luma of the lit
+  creature pixels (measured next frame). Baldur.lua `Disable Movies` must be 1: with movies on, `PSTF_TEST_TICK=1`
+  makes autoload fail at once (`autoload: FAILED, timeout (screen other)`).
   Day/night (`tests\ingame\lighting_night.lua`, night save `000000166`): the engine's time-of-day tint (CInfinity
   +0x2EC; applied = min(+0x2E4, +0x2EC) + +0x2E0) is divided out in the composite and replaced by our ambient
   (moonlight / dusk warmth / night light gain / lightmap pools, `[lighting] day_night` keys). Probe

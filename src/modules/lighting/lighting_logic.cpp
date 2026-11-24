@@ -3,6 +3,7 @@
 #include "modules/lighting/lighting_logic.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -567,8 +568,76 @@ void UnpackSpriteG(float g, float* lm, float* depth) {
   *depth = g - level * 64.0f;
 }
 
-float SpriteLight(float l, float ambient, float lm, float gain) {
-  return ambient + std::max(0.0f, l - ambient) / std::max(lm, 0.3f) * gain;
+float SpriteLight(float l, float ambient, float lm, float gain, float ao_factor) {
+  return ambient * ao_factor + std::max(0.0f, l - ambient) / std::max(lm, 0.3f) * gain;
+}
+
+float AoAt(const SceneMap& m, float x, float y) {
+  if (m.w <= 0 || m.h <= 0 || m.data.size() < size_t(m.w) * m.h) return 1.0f;
+  const int texel = m.texel > 0 ? m.texel : 2;
+  const int tx = std::max(0, std::min(m.w - 1, int(std::floor(x / float(texel)))));
+  const int ty = std::max(0, std::min(m.h - 1, int(std::floor(y / float(texel)))));
+  return float(m.data[size_t(ty) * m.w + tx]) / 255.0f;
+}
+
+float SpriteAoFactor(float ao, float strength) { return 1.0f - (1.0f - Clamp01(ao)) * Clamp01(strength); }
+
+bool PaintedEmitter(const BakedLight& l, float core_scale, float* ex, float* ey, float* core) {
+  if (l.kind == Kind::Pool) return false;
+  *ex = l.x;
+  *ey = l.y - l.z;
+  *core = std::max(8.0f, std::min(48.0f, l.radius * core_scale));
+  return true;
+}
+
+float PaintedGlowWeight(float r, float g, float b, float dist, float core) {
+  if (core <= 0) return 0.0f;
+  auto smooth = [](float e0, float e1, float v) {
+    const float t = Clamp01((v - e0) / (e1 - e0));
+    return t * t * (3.0f - 2.0f * t);
+  };
+  const float v = std::max(r, std::max(g, b));
+  return smooth(0.70f, 0.92f, v) * (1.0f - smooth(0.5f * core, core, dist));
+}
+
+std::vector<AreaLight> ParseAreaLights(const std::string& text) {
+  std::vector<AreaLight> out;
+  std::istringstream stream(text);
+  std::string line;
+  while (std::getline(stream, line)) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    const size_t start = line.find_first_not_of(" \t");
+    if (start == std::string::npos || line[start] == '#') continue;
+    std::istringstream in(line.substr(start));
+    std::string wed, kind;
+    AreaLight a;
+    BakedLight& l = a.light;
+    float radius = 0;
+    int casts = 0;
+    if (!(in >> wed >> l.x >> l.y >> l.z >> radius >> l.r >> l.g >> l.b >> l.strength >> kind >> casts)) continue;
+    if (wed.empty() || wed.size() > 8 || !ParseKind(kind, &l.kind)) continue;
+    for (size_t i = 0; i < wed.size(); ++i) a.wed[i] = char(std::toupper(static_cast<unsigned char>(wed[i])));
+    l.radius = std::max(10.0f, std::min(600.0f, radius));  // the lights.txt clamps (ParseLights)
+    l.r = Clamp01(l.r);
+    l.g = Clamp01(l.g);
+    l.b = Clamp01(l.b);
+    l.strength = Clamp01(l.strength);
+    l.casts_shadow = casts != 0;
+    out.push_back(a);
+  }
+  return out;
+}
+
+size_t AddAreaLights(const std::vector<AreaLight>& table, const std::string& wed, std::vector<BakedLight>* out) {
+  std::string up(wed);
+  for (char& c : up) c = char(std::toupper(static_cast<unsigned char>(c)));
+  size_t n = 0;
+  for (const AreaLight& a : table)
+    if (up == a.wed) {
+      out->push_back(a.light);
+      ++n;
+    }
+  return n;
 }
 
 float ContactShadow(float dx, float dy, float rx, float ry, float k) {

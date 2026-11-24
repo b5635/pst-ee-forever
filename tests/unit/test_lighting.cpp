@@ -575,3 +575,56 @@ TEST_CASE("lighting: sprite buffer packing, sprite light, key shadow projection"
   KeyShadowAxes(0.9f, 0.2f, 0.85f, &ax, &ay);  // 0.1224 - 0.12 = 0.0024: clamped to 0.22
   CHECK(Near(ay, 0.22));
 }
+
+TEST_CASE("lighting: sprite AO (ao.bin) darkens only the creature's ambient") {
+  SceneMap ao;  // 2x2 texels of 2 px: open, half, enclosed, open
+  ao.w = 2;
+  ao.h = 2;
+  ao.texel = 2;
+  ao.data = {255, 128, 0, 255};
+  CHECK(Near(AoAt(ao, 0.5f, 0.5f), 1.0) && Near(AoAt(ao, 3.9f, 1.0f), 128 / 255.0));
+  CHECK(Near(AoAt(ao, 1.0f, 2.0f), 0.0) && Near(AoAt(ao, -50, 99), 0.0));  // clamped to the edge texels
+  CHECK(AoAt(SceneMap(), 10, 10) == 1.0f);                                 // no map: open
+  CHECK(Near(SpriteAoFactor(1.0f, 0.6f), 1.0) && Near(SpriteAoFactor(0.0f, 0.6f), 0.4));
+  CHECK(Near(SpriteAoFactor(0.5f, 1.0f), 0.5) && Near(SpriteAoFactor(0.0f, 0.0f), 1.0));
+  CHECK(Near(SpriteAoFactor(-1.0f, 2.0f), 0.0));  // clamped
+  // ambient 0.66 x 0.4, the torch's 0.3 above the ambient untouched (LM 0.5: x2)
+  CHECK(Near(SpriteLight(0.66f, 0.66f, 0.5f, 1.0f, 0.4f), 0.264));
+  CHECK(Near(SpriteLight(0.96f, 0.66f, 0.5f, 1.0f, 0.4f), 0.864));
+}
+
+TEST_CASE("lighting: painted emitters of baked lights glow") {
+  BakedLight l;  // AR0105 hanging lantern (GemRB LIGHTING_PLAN 14: emitter 1921,730, ground 1921,768, z 38)
+  l.x = 1921;
+  l.y = 768;
+  l.z = 38;
+  l.radius = 100;
+  l.kind = Kind::Steady;
+  float ex = 0, ey = 0, core = 0;
+  CHECK(PaintedEmitter(l, 0.2f, &ex, &ey, &core) && Near(ex, 1921) && Near(ey, 730) && Near(core, 20));
+  l.radius = 600;
+  CHECK(PaintedEmitter(l, 0.2f, &ex, &ey, &core) && Near(core, 48));  // 8..48
+  l.radius = 10;
+  CHECK(PaintedEmitter(l, 0.2f, &ex, &ey, &core) && Near(core, 8));
+  l.kind = Kind::Pool;  // light-map pools have nothing painted
+  CHECK(!PaintedEmitter(l, 0.2f, &ex, &ey, &core));
+  CHECK(Near(PaintedGlowWeight(1.0f, 0.8f, 0.4f, 5, 20), 1.0));     // bright flame pixel at the core
+  CHECK(PaintedGlowWeight(0.6f, 0.5f, 0.4f, 0, 20) == 0.0f);        // the wall around it: no
+  CHECK(Near(PaintedGlowWeight(0.81f, 0.81f, 0.81f, 0, 20), 0.5));  // halfway up the 0.70..0.92 ramp
+  CHECK(Near(PaintedGlowWeight(1.0f, 1.0f, 1.0f, 15, 20), 0.5));    // halfway between half core and core
+  CHECK(PaintedGlowWeight(1.0f, 1.0f, 1.0f, 20, 20) == 0.0f && PaintedGlowWeight(1, 1, 1, 0, 0) == 0.0f);
+}
+
+TEST_CASE("lighting: hand area lights (arealights.tsv)") {
+  const auto t = ParseAreaLights("# WED x y z radius r g b strength kind shadow\r\n"
+                                 "ar0508 1466 1700 27 180 1.0 0.6 0.3 0.8 fire 1\r\n"
+                                 "AR0508 10 20 30 900 2 0.5 -1 0.5 steady 0\n"
+                                 "AR0106 1 2 3 4 5 6\nTOOLONGWED 1 2 3 4 1 1 1 1 fire 0\nAR0106 1 2 3 40 1 1 1 1 lamp 0\n");
+  CHECK(t.size() == 2);
+  std::vector<BakedLight> out(1);
+  CHECK(AddAreaLights(t, "Ar0508", &out) == 2 && out.size() == 3);
+  CHECK(Near(out[1].x, 1466) && Near(out[1].y, 1700) && Near(out[1].z, 27) && Near(out[1].radius, 180));
+  CHECK(out[1].kind == Kind::Fire && out[1].casts_shadow && Near(out[1].strength, 0.8));
+  CHECK(Near(out[2].radius, 600) && out[2].r == 1.0f && out[2].b == 0.0f && !out[2].casts_shadow);  // clamps
+  CHECK(AddAreaLights(t, "AR0106", &out) == 0 && out.size() == 3);
+}

@@ -42,6 +42,9 @@ $vfx = Join-Path $data 'assets\vfx'
 New-Item -ItemType Directory -Force $vfx | Out-Null
 Copy-Item (Join-Path $root 'data\vfxlight.tsv') $vfx -Force  # hand light table (lighting module)
 Copy-Item (Join-Path $root 'data\vfxglow.tsv') $vfx -Force   # hand glow overrides (lighting module)
+$lightdir = Join-Path $data 'assets\lighting'
+New-Item -ItemType Directory -Force $lightdir | Out-Null
+Copy-Item (Join-Path $root 'data\arealights.tsv') $lightdir -Force  # hand area lights (lighting module)
 $gore = Join-Path $data 'assets\gore'
 New-Item -ItemType Directory -Force $gore | Out-Null
 Copy-Item (Join-Path $root 'data\hitmat.2da') $gore -Force    # material rows (gore module; GemRB unhardcoded/pst)
