@@ -98,11 +98,6 @@ bool HudOk() {
     for (const auto& s : sym::kAll)
       for (uint32_t r : need)
         if (s.rva == r) {
-          // The 8-member party retargets this instruction's displacement (engine/party.cpp checked it).
-          if (r == sym::kRvaPartyIds && Party8()) {
-            ++found;
-            continue;
-          }
           if (!CheckSymbol(s)) return 0;
           ++found;
         }
@@ -168,11 +163,6 @@ bool SelectOk() {
     for (const auto& s : sym::kAll)
       for (uint32_t r : need)
         if (s.rva == r) {
-          // The 8-member party retargets this instruction's displacement (engine/party.cpp checked it).
-          if (r == sym::kRvaPartyIds && Party8()) {
-            ++found;
-            continue;
-          }
           if (!CheckSymbol(s)) return 0;
           ++found;
         }
@@ -191,11 +181,6 @@ bool CostOk() {
     for (const auto& s : sym::kAll)
       for (uint32_t r : need)
         if (s.rva == r) {
-          // The 8-member party retargets this instruction's displacement (engine/party.cpp checked it).
-          if (r == sym::kRvaPartyIds && Party8()) {
-            ++found;
-            continue;
-          }
           if (!CheckSymbol(s)) return 0;
           ++found;
         }
@@ -343,11 +328,6 @@ bool SpritesAvailable() {
     for (const auto& s : sym::kAll)
       for (uint32_t r : need)
         if (s.rva == r) {
-          // The 8-member party retargets this instruction's displacement (engine/party.cpp checked it).
-          if (r == sym::kRvaPartyIds && Party8()) {
-            ++found;
-            continue;
-          }
           if (!CheckSymbol(s)) return 0;
           ++found;
         }

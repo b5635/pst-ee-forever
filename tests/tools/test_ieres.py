@@ -23,3 +23,13 @@ def test_area_count_matches_lighting_data():
     # 123 WEDs, one LM light map each (same set as the GemRB lighting pipeline, docs/VISUALS_PLAN.md)
     assert len(find(".", "WED")) == 123
     assert len(find("LM$", "BMP")) == 123
+
+
+def test_party8_save_portraits_shipped():
+    # CInfGame::SaveGame writes PORTRT<slot>.BMP into existing resources only (dimmGetResObject(.., create=0),
+    # lin 3628A0): the game ships PORTRT0..5, so slots 6..7 need ours or the save faults in CRes::Write.
+    assert set("PORTRT%d.BMP" % i for i in range(6)) <= set(find("^PORTRT[0-9]$", "BMP"))
+    ours = os.path.join(ROOT, "data", "override")
+    for i in (6, 7):
+        p = os.path.join(ours, "PORTRT%d.BMP" % i)
+        assert os.path.getsize(p) == 3128 and open(p, "rb").read(2) == b"BM"

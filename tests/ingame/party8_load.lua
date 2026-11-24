@@ -1,6 +1,9 @@
 ﻿-- SPDX-License-Identifier: GPL-2.0-or-later
 -- 8-member party save/load round trip: loads the quick save party8.lua wrote with 8 members and checks
--- the engine restored all 8 in the same order with a portrait slot each, and the triggers see them.
+-- the engine restored all 8 in the same order with the same portrait slots, and the triggers see them.
+-- Saved layout (party8.lua: Grace left as member 7 and rejoined last): order ...,Vhail,Nordom,Grace;
+-- portraits ...,Vhail,Grace,Nordom (Grace got her freed portrait slot 6 back). InPartySlot reads the
+-- portrait slot.
 -- Run after party8.lua: tools\launch.ps1 -Save 000000001 -Lua tests\ingame\party8_load.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'} -Until 'party8_load: ok|TEST FAIL' -Close
 local want = 'Nameless,Dakkon,Annah,Morte,Ignus,Vhail,Nordom,Grace'
 local f = 0
@@ -13,11 +16,15 @@ function pstfTestTick()
 	local s = PSTF_Party()
 	local count = tonumber(s:match('count=(%-?%d+)'))
 	if count ~= 8 then return fail('count ' .. tostring(count)) end
-	local fixed = s:match('fixed=([^ ]+)')
-	if fixed:find('-1', 1, true) then return fail('a portrait slot is empty: ' .. fixed) end
+	local order, fixed = s:match('order=([^ ]+)'), s:match('fixed=([^ ]+)')
+	local o = {}
+	for id in order:gmatch('[^,]+') do o[#o + 1] = id end
+	local want_fixed = table.concat({o[1], o[2], o[3], o[4], o[5], o[6], o[8], o[7]}, ',')
+	if fixed ~= want_fixed then return fail('portraits ' .. fixed .. ', want ' .. want_fixed) end
 	local tno = PSTF_PartyId(0)
 	if PSTF_Trigger(tno, 0x406a, 8, '') ~= 1 then return fail('NumInParty(8)') end
-	if PSTF_Trigger(tno, 0x4090, 7, 'Grace') ~= 1 then return fail('InPartySlot("Grace",7)') end
+	if PSTF_Trigger(tno, 0x4090, 6, 'Grace') ~= 1 then return fail('InPartySlot("Grace",6)') end
+	if PSTF_Trigger(tno, 0x4090, 7, 'Nordom') ~= 1 then return fail('InPartySlot("Nordom",7)') end
 	PSTF_Note('party8_load: ok ' .. names)
 	pstfTestTick = nil
 end

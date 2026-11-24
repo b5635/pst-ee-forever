@@ -63,6 +63,20 @@ void* __fastcall MarshalMemset(uint8_t* entry5, int value, size_t n) {
   return entry5;
 }
 
+// CAIGroup::GetOffsets(this, formation, angle, party): for party moves (party != 0) it allocates
+// max(this+0x20 selected count, 7) points; the size patch doubles the buffer, we fill point 7.
+using OffsetsFn = int32_t*(__fastcall*)(uint8_t*, int16_t, int16_t, uint8_t);
+OffsetsFn g_offsets = nullptr;
+int32_t* __fastcall GetOffsets(uint8_t* group, int16_t formation, int16_t angle, uint8_t party) {
+  int32_t* pts = g_offsets(group, formation, angle, party);
+  if (pts && party && group) {
+    const int32_t selected = *reinterpret_cast<const int32_t*>(group + 0x20);
+    const int have = selected > 7 ? (selected > 255 ? 255 : selected) : 7;  // the engine's v8 (u8)
+    if (have < sym::party::kMax) party::ExtendFormation(pts, have);
+  }
+  return pts;
+}
+
 }  // namespace
 
 const PartyLayout& Party() { return g_layout; }
@@ -134,6 +148,35 @@ int CanSaveGame(uint32_t* reason) {
       game, reason, 0, 0, 1);
 }
 
+std::string FormationPoints(int formation, int angle) {
+  const uint64_t chitin = *reinterpret_cast<const uint64_t*>(sym::kVaBaldurChitin);
+  const uint64_t game = chitin ? *reinterpret_cast<const uint64_t*>(chitin + sym::kOffChitinGame) : 0;
+  if (!game || !g_offsets) return "";
+  // CInfGame +0xA290 = the selection CAIGroup (lin 41616; win LeaveAreaName 14041AB35 lea rcx,[r13+0A290h]).
+  auto* group = reinterpret_cast<uint8_t*>(game + 0xA290);
+  // Through the hooked entry, as the engine calls it. The buffer leaks (probe only, 128 bytes a call).
+  auto fn = reinterpret_cast<OffsetsFn>(Va(sym::kRvaGetOffsets));
+  const int32_t* pts = fn(group, static_cast<int16_t>(formation), static_cast<int16_t>(angle), 1);
+  if (!pts) return "";
+  char b[48];
+  std::snprintf(b, sizeof b, "selected=%d pts=", *reinterpret_cast<const int32_t*>(group + 0x20));
+  std::string out = b;
+  for (int i = 0; i < sym::party::kMax; ++i) {
+    std::snprintf(b, sizeof b, "%s%d,%d", i ? ";" : "", pts[2 * i], pts[2 * i + 1]);
+    out += b;
+  }
+  return out;
+}
+
+bool UnselectAll() {
+  const sym::Symbol* s = Find(sym::kRvaUnselectAll);
+  const uint64_t chitin = *reinterpret_cast<const uint64_t*>(sym::kVaBaldurChitin);
+  const uint64_t game = chitin ? *reinterpret_cast<const uint64_t*>(chitin + sym::kOffChitinGame) : 0;
+  if (!s || !game || !CheckSymbol(*s)) return false;
+  reinterpret_cast<void(__fastcall*)(uint64_t)>(Va(s->rva))(game);
+  return true;
+}
+
 bool InstallParty8() {
   uint32_t bad = 0;
   if (const char* why = party::CheckTables(&bad)) {
@@ -145,8 +188,9 @@ bool InstallParty8() {
   const sym::Symbol* destroy = Find(sym::kRvaDestroyGame);
   const sym::Symbol* ctrl = Find(sym::kRvaGetControlled);
   const sym::Symbol* mset = Find(sym::kRvaMarshalMemsetCall);
-  if (!ctor || !destroy || !ctrl || !mset || !CheckSymbol(*ctor) || !CheckSymbol(*destroy) || !CheckSymbol(*ctrl) ||
-      !CheckSymbol(*mset)) {
+  const sym::Symbol* offs = Find(sym::kRvaGetOffsets);
+  if (!ctor || !destroy || !ctrl || !mset || !offs || !CheckSymbol(*ctor) || !CheckSymbol(*destroy) ||
+      !CheckSymbol(*ctrl) || !CheckSymbol(*mset) || !CheckSymbol(*offs)) {
     Log("party: hook symbols differ from the manifest; party module off");
     return false;
   }
@@ -161,11 +205,13 @@ bool InstallParty8() {
   g_destroy = reinterpret_cast<DestroyFn>(InlineHook(*destroy, 15, reinterpret_cast<void*>(&DestroyGame)));
   g_ctrl = reinterpret_cast<CtrlFn>(InlineHook(*ctrl, 6, reinterpret_cast<void*>(&GetControlled)));
   const bool mset_ok = RedirectCall(*mset, reinterpret_cast<void*>(&MarshalMemset)) != 0;
-  if (!g_ctor || !g_destroy || !g_ctrl || !mset_ok) {
+  g_offsets = reinterpret_cast<OffsetsFn>(InlineHook(*offs, 10, reinterpret_cast<void*>(&GetOffsets)));
+  if (!g_ctor || !g_destroy || !g_ctrl || !mset_ok || !g_offsets) {
     // The sites are already written; without the ctor hook slots 6..7 would hold heap garbage.
     Log("party: FATAL hook install failed after patching (ctor %p destroy %p ctrl %p)", g_ctor, g_destroy, g_ctrl);
     return false;
   }
+  SetManifestRewrite(&party::RewriteBytes);
   g_layout = {sym::party::kNewFixed, sym::party::kNewOrder, sym::party::kCount, sym::party::kMax};
   Log("party: 8-member party on: %d sites + patches applied, arrays at +0x%X/+0x%X, CInfGame 0x%X bytes", n,
       sym::party::kNewFixed, sym::party::kNewOrder, sym::party::kNewSize);

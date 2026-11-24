@@ -100,3 +100,4 @@
 1402E8926	48 81 C4 10 09 00 00	48 81 C4 E0 0B 00 00	CInfGame::Marshal: add rsp, 0xBE0
 1406F07A8	27 68 90 00 1F 34 2D 01 1F 01 22 01	27 68 BD 00 1F 34 87 01 1F 01 7C 01	CInfGame::Marshal unwind codes (rdata 1406F07A4): SAVE_XMM128 xmm6 0x900->0xBD0, SAVE_NONVOL rbx 0x968->0xC38, ALLOC_LARGE 0x910->0xBE0
 1406F07C8	F0 08 00 00	C0 0B 00 00	CInfGame::Marshal __GSHandlerCheck data: cookie at establisher+0x8F0 -> +0xBC0
+14012577F	B8 08 00 00 00	B8 10 00 00 00	CAIGroup::GetOffsets: formation buffer 2x (8 bytes x 2N): area moves index it by party/portrait slot (lin 4DF1A0 LeaveAreaName, 441170 EnterArea, 551350 CompressTime, 4BC0C0/617D10 Lua leave) but it holds max(selected,7); entry 7 is filled by our hook (engine/party.cpp)

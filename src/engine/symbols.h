@@ -236,6 +236,12 @@ inline constexpr uint8_t kCStringAssignBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 
 // party_patches.tsv). Target 140583160 = memset (ported name CItem::GetMaxUsageCount is wrong).
 inline constexpr uint8_t kMarshalMemsetCallBytes[] = {0xE8, 0xC0, 0xB7, 0x29, 0x00};
 constexpr uint32_t kRvaMarshalMemsetCall = 0x2E799B;
+// CAIGroup::GetOffsets(short formation, short angle, uchar party) (lin 5D92D0 / win 140125720): formation
+// points for party moves, max(selected +0x20, 7) of them; read per party slot by area moves. Hooked to
+// fill point 7 (buffer doubled by the patch at 14012577F). Prologue: mov [rsp+8],rbx; mov [rsp+10h],dx.
+inline constexpr uint8_t kGetOffsetsBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x66, 0x89, 0x54,
+                                               0x24, 0x10, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41};
+constexpr uint32_t kRvaGetOffsets = 0x125720;
 // Save probe (PSTF_CanSave): CInfGame::CanSaveGame(uint& reason, uchar, uchar, uchar) lin 369B50 / win 1402D2EB0.
 inline constexpr uint8_t kCanSaveGameBytes[] = {0x40, 0x55, 0x56, 0x57, 0x48, 0x83, 0xEC, 0x30,
                                                 0x41, 0x0F, 0xB6, 0xF0, 0x48, 0x8B, 0xFA, 0x48};
@@ -844,6 +850,7 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CAITrigger::CAITrigger(short,int)", kRvaTriggerCtor, kTriggerCtorBytes, "lin 608BA0 / win 14013E7C0"),
     PSTF_SYM("CGameAIBase::EvaluateStatusTrigger", kRvaEvalTrigger, kEvalTriggerBytes, "lin 186C30 / win 1401656B0"),
     PSTF_SYM("CInfGame::Marshal.memset5", kRvaMarshalMemsetCall, kMarshalMemsetCallBytes, "lin 365550 / win 1402E799B"),
+    PSTF_SYM("CAIGroup::GetOffsets", kRvaGetOffsets, kGetOffsetsBytes, "lin 5D92D0 / win 140125720"),
     PSTF_SYM("CInfGame::CanSaveGame", kRvaCanSaveGame, kCanSaveGameBytes, "lin 369B50 / win 1402D2EB0"),
     PSTF_SYM("CString assign (char const*)", kRvaCStringAssign, kCStringAssignBytes, "win 140484490 (from 14013E776)"),
     PSTF_SYM("CanRestParty.spriteArea", kRvaSpriteArea, kSpriteAreaBytes, "win 1402D29AA"),

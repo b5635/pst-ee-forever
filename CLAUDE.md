@@ -76,7 +76,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   Installed: WinDbg + `cdb` (`winget install Microsoft.WinDbg`; `%LOCALAPPDATA%\Microsoft\WindowsApps\cdbX64.exe`).
 - The engine writes a full minidump per crash to `Documents\Infinity Engine - Enhanced Edition\crash\dump.3.2.2.0.NNNN.dmp`.
   First step on any crash report: `tools\dbg.ps1` (newest dump; `-Dump FILE`, `-Extra "cdb cmds"`): exception, registers,
-  faulting code, stack with `pst_forever.pdb` names. `python -I tools/crash.py [DUMP] [--all]` names Torment.exe frames
+  faulting code, stack with `pst_forever.pdb` names. `python -I tools/crash.py [DUMP] [--all]` (or `--va RVA ...` for the addresses in our log's CRASH block) names Torment.exe frames
   from our RE names (cdb has no symbols for the exe) and needs no debugger.
 - Our own log gets a `CRASH (first chance) ...` block (module+RVA, registers, code pointers on the stack) from the
   vectored handler in `src/core/crashlog.cpp`. Every tick handler and the world overlay run under SEH (`GuardedCall`):
@@ -216,6 +216,11 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   of cycle 0: BAM V1/BAMC/V2), Lua `pstfStat`, `pstfHov`, `pstfBarPages()`. `src/core/gameres.*` reads override +
   chitin.key/BIF (BAM sizes, SPL/ITM icon and name). CGameEffect parent: +0x90 type, +0x94 resref, +0x9C flags.
 - 8-member party: `docs/PARTY8_PLAN.md`; `python -I tools/party_refs.py [--list|--bounds]` lists every use of the
-  CInfGame party arrays.
+  CInfGame party arrays; `python -I tools/party_scan.py` lists 6-sized locals / "%d" names in the functions we patched.
+  Tests (Hive): `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\party8.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'}
+  -Until 'party8: ok|TEST FAIL' -Close -Timeout 200` (joins to 8, quick-saves = `000000001`), then with `-Save 000000001`:
+  `party8_load.lua` (`-Until 'party8_load: ok|TEST FAIL'`), `party8_formation.lua` (same env), `party8_fight.lua`
+  (env `PSTF_TEST_TICK=1; PSTF_TBC_AUTOPARTY=1`, `-Timeout 300`). Probes: `PSTF_Party/PartyNames/Trigger/CanSave/
+  Formation/UnselectAll`. `CheckSymbol` accepts bytes the party layout retargeted (manifest rewrite).
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

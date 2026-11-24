@@ -75,8 +75,20 @@ uint64_t InlineHook(const sym::Symbol& prologue, size_t copy_len, void* detour) 
   return reinterpret_cast<uint64_t>(tramp);
 }
 
+namespace {
+ManifestRewrite g_rewrite = nullptr;
+}
+
+void SetManifestRewrite(ManifestRewrite fn) { g_rewrite = fn; }
+
 bool CheckSymbol(const sym::Symbol& s) {
   if (BytesEqual(Va(s.rva), s.bytes, s.len)) return true;
+  uint8_t want[128];
+  if (g_rewrite && s.len <= sizeof want) {
+    std::memcpy(want, s.bytes, s.len);
+    g_rewrite(s.rva, want, s.len);
+    if (BytesEqual(Va(s.rva), want, s.len)) return true;
+  }
   Log("manifest: %s at %llX: bytes differ from the manifest (%s)", s.name,
       static_cast<unsigned long long>(sym::kImageBase + s.rva), s.evidence);
   return false;

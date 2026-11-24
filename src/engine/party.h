@@ -36,6 +36,14 @@ int EvalTrigger(int32_t who, uint16_t id, int32_t param1, const char* object_nam
 // (-1 = none). -1 if unavailable. Game thread only.
 int CanSaveGame(uint32_t* reason);
 
+// CAIGroup::GetOffsets(selection group, formation, angle, party=1) through its hooked entry, as area
+// moves call it: "selected=N pts=x,y;..." (8 points, x1000 grid units). "" without a game. Probe;
+// game thread only.
+std::string FormationPoints(int formation, int angle);
+
+// CInfGame::UnselectAll (probe: a selection smaller than the party). Game thread only.
+bool UnselectAll();
+
 // True when the 8-slot layout is active.
 inline bool Party8() { return Party().max == 8; }
 

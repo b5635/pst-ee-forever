@@ -8,8 +8,13 @@ namespace pstf {
 
 inline uint8_t* Va(uint32_t rva) { return reinterpret_cast<uint8_t*>(sym::kImageBase + rva); }
 
-// True if the in-memory bytes at the symbol match the manifest (logs a mismatch).
+// True if the in-memory bytes at the symbol match the manifest (logs a mismatch). With a manifest
+// rewrite set, bytes our own table patches changed (the 8-member party layout) also match.
 bool CheckSymbol(const sym::Symbol& s);
+
+// Turns manifest bytes at [rva, rva+n) into what they are after our own table patches (in place).
+using ManifestRewrite = void (*)(uint32_t rva, uint8_t* bytes, size_t n);
+void SetManifestRewrite(ManifestRewrite fn);
 
 // Redirects the 5-byte `call rel32` at `site_rva` to `detour` through a near trampoline.
 // Verifies the manifest bytes first. Returns the original call target, or 0 on failure.

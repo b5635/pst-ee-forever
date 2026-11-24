@@ -3,6 +3,8 @@
 
   python -I tools/crash.py                 -> newest dump in Documents\\Infinity Engine - Enhanced Edition\\crash
   python -I tools/crash.py DUMP [--all]    -> one dump; --all also lists every thread's top frames
+  python -I tools/crash.py --va RVA|VA ...  -> name Torment.exe addresses (e.g. the RVAs of our log's
+                                              CRASH block, "Torment.exe+480F7C"); no dump needed
 
 Torment.exe addresses are named from resources/re/win/dump/funcs.txt (+ manual_names.tsv);
 pst_forever.dll addresses from build/Release/pst_forever.map (linker /MAP).
@@ -164,6 +166,14 @@ def scan(dump, sym, rsp, size, limit):
 
 
 def main():
+    if "--va" in sys.argv:
+        sym = Symbols([(0x140000000, 0x6500000, "Torment.exe")])
+        for a in sys.argv[sys.argv.index("--va") + 1:]:
+            v = int(a.split("+")[-1], 16)
+            if v < 0x140000000:
+                v += 0x140000000
+            print("%X %s" % (v, sym.name(v)))
+        return
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     path = args[0] if args else max(glob.glob(os.path.join(CRASH_DIR, "*.dmp")), key=os.path.getmtime)
     dump = Dump(path)

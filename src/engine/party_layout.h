@@ -85,4 +85,34 @@ int ApplyAll(Check check, Write write, uint32_t* bad_rva = nullptr) {
   return n;
 }
 
+// The bytes at [rva, rva+n) after the sites and patches (in place; `buf` holds the on-disk bytes).
+// Lets other modules' manifest checks accept instructions the party layout retargeted.
+inline void RewriteBytes(uint32_t rva, uint8_t* buf, size_t n) {
+  for (const Site& s : kSites) {
+    if (s.rva >= rva + n || rva >= s.rva + s.len) continue;
+    uint8_t nb[15];
+    SiteNewBytes(s, nb);
+    for (uint32_t i = 0; i < s.len; ++i)
+      if (s.rva + i >= rva && s.rva + i < rva + n) buf[s.rva + i - rva] = nb[i];
+  }
+  for (const Patch& p : kPatches) {
+    if (!p.why || p.rva >= rva + n || rva >= p.rva + p.len) continue;
+    for (uint32_t i = 0; i < p.len; ++i)
+      if (p.rva + i >= rva && p.rva + i < rva + n) buf[p.rva + i - rva] = p.new_bytes[i];
+  }
+}
+
+// CAIGroup::GetOffsets(group, formation, angle, party=1) (lin 5D92D0 / win 140125720) returns
+// max(selected, 7) formation points (x, y pairs, already rotated), but area moves read point[slot] for
+// every party/portrait slot. With fewer than 8 selected, point 7 extends the formation past point 6 on
+// its side (6 + (6 - 4): the tables alternate left/right); the engine then finds the nearest open
+// square for it as for the others.
+// `pts` holds room for 8 points; `have` = points the engine filled.
+inline void ExtendFormation(int32_t* pts, int have) {
+  for (int i = have; i < kMax; ++i) {
+    for (int c = 0; c < 2; ++c)
+      pts[2 * i + c] = i >= 3 ? 2 * pts[2 * (i - 1) + c] - pts[2 * (i - 3) + c] : (i >= 1 ? pts[c] : 0);
+  }
+}
+
 }  // namespace pstf::party

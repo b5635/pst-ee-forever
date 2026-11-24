@@ -55,6 +55,24 @@ int __cdecl LuaCanSave(engine::LuaState* L) {
   return 2;
 }
 
+// PSTF_Formation(formation[, angle]) -> "selected=N pts=x,y;..." (CAIGroup::GetOffsets for a party move).
+int __cdecl LuaFormation(engine::LuaState* L) {
+  const int f = static_cast<int>(engine::LuaNumberArg(L, 1, 0));
+  const int a = static_cast<int>(engine::LuaNumberArg(L, 2, 0));
+  const std::string s = engine::FormationPoints(f, a);
+  Log("lua: PSTF_Formation(%d, %d) -> %s", f, a, s.c_str());
+  engine::LuaPushString(L, s.c_str());
+  return 1;
+}
+
+// PSTF_UnselectAll() -> 1/0 (CInfGame::UnselectAll).
+int __cdecl LuaUnselectAll(engine::LuaState* L) {
+  const bool ok = engine::UnselectAll();
+  Log("lua: PSTF_UnselectAll -> %d", ok ? 1 : 0);
+  engine::LuaPushNumber(L, ok ? 1 : 0);
+  return 1;
+}
+
 }  // namespace
 
 void InstallParty(const IniMap& ini) {
@@ -67,6 +85,8 @@ void InstallParty(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_PartyNames", &LuaPartyNames);
   dev::AddLuaFunction("PSTF_Trigger", &LuaTrigger);
   dev::AddLuaFunction("PSTF_CanSave", &LuaCanSave);
+  dev::AddLuaFunction("PSTF_Formation", &LuaFormation);
+  dev::AddLuaFunction("PSTF_UnselectAll", &LuaUnselectAll);
 }
 
 }  // namespace pstf::party
