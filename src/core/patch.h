@@ -22,6 +22,10 @@ uint64_t ReplacePointer(const sym::Symbol& slot, void* repl);
 // Executable memory within +-2 GB of the exe (rel32 reach), for code stubs. nullptr when full.
 uint8_t* AllocCode(size_t n);
 
+// Raw write of `n` bytes at an rva (code or rdata), no manifest check: for generated tables that
+// carry their own expected bytes (engine/party_sites.h), checked by the caller first.
+bool WriteBytesAt(uint32_t rva, const uint8_t* bytes, size_t n);
+
 // Writes `n` bytes at the symbol's address after checking its manifest bytes (n <= s.len).
 bool PatchCode(const sym::Symbol& s, const uint8_t* bytes, size_t n);
 

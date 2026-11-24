@@ -21,6 +21,10 @@ if ($Remove) {
     $p = Join-Path $Game $f
     if (Test-Path $p) { Remove-Item $p -Confirm:$false; Write-Host "removed $f" }
   }
+  Get-ChildItem (Join-Path $root 'data\override') -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $p = Join-Path $Game "override\$($_.Name)"
+    if (Test-Path $p) { Remove-Item $p -Confirm:$false; Write-Host "removed override\$($_.Name)" }
+  }
   Write-Host 'deploy: removed (pst_forever\ folder with ini/logs kept)'
   exit 0
 }
@@ -42,6 +46,8 @@ $gore = Join-Path $data 'assets\gore'
 New-Item -ItemType Directory -Force $gore | Out-Null
 Copy-Item (Join-Path $root 'data\hitmat.2da') $gore -Force    # material rows (gore module; GemRB unhardcoded/pst)
 Copy-Item (Join-Path $root 'data\hitarmor.tsv') $gore -Force  # animation -> armor (tools/hitmat.py)
+# Turn-based hotbar BAMs (tools/make_ui_bams.py): PF* names, nothing of the game's is replaced.
+Get-ChildItem (Join-Path $root 'data\override') -File -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $Game 'override') -Force }
 $ini = Join-Path $data 'pst_forever.ini'
 if ($ResetIni -or -not (Test-Path $ini)) { Copy-Item (Join-Path $root 'data\pst_forever.ini') $ini -Force }
 Write-Host "deploy: ok -> $Game"

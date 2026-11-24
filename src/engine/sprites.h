@@ -59,11 +59,34 @@ struct CellCoster {
   uint8_t personal_space = 1;
   int flags = 0;
   int width = 0, height = 0;  // search map in cells (CSearchBitmap +312/+316, GetCost's bounds)  // GetCost's last argument (SetTarget passes 1); 0 = terrain only
+  uint64_t occ = 0;  // occupancy bytes (CSearchBitmap +288)
   bool ok() const { return bitmap && terrain; }
   int Cost(int cx, int cy, int16_t* pixel = nullptr) const;
+  // The cost the engine's path search uses (CSearchBitmap::SnapshotGetCost lin 33FC20, win 1402AFA70):
+  // Cost(), plus for every creature-count bit (0x0E) of the occupancy over the footprint diamond
+  // (box (ps-2)/2, |dx|+|dy| <= that + 1) 5 x cost x bits: a standing creature (0x02) is not a wall,
+  // it is ten times the ground's cost to walk through, so paths go round it.
+  int SearchCost(int cx, int cy) const;
 };
 CellCoster CosterFor(int32_t id);
-void SelectOnly(int32_t id);  // -1: select nobody
+// While it lives, the creature's own footprint is out of the live search map (CSearchBitmap +288: one
+// occupancy byte per cell, bit 0 / 0x70 stationary creatures, 0x0E moving count; lin 33F6B0
+// AddObject / 33F860 RemoveObject, same diamond: box (ps-1)/2, |dx|+|dy| <= ps/2+1), as the engine's
+// own search does with the walker (SetTarget lin 51E5F0 L155 RemoveObject; SearchThreadMain
+// SnapshotRemoveObject). Restored byte for byte. Game thread only, for a synchronous preview search.
+class SearchMapLift {
+ public:
+  explicit SearchMapLift(int32_t id);
+  ~SearchMapLift();
+  SearchMapLift(const SearchMapLift&) = delete;
+  SearchMapLift& operator=(const SearchMapLift&) = delete;
+
+ private:
+  uint64_t occ_ = 0;
+  std::vector<std::pair<uint64_t, uint8_t>> saved_;
+};
+int SearchMapByte(int32_t id, int cx, int cy);  // probe: occupancy byte of a cell in id's area (-1)
+void SelectOnly(int32_t id, bool sound = false);  // -1: select nobody; sound: its selection line
 
 // Sub-tick draw state (symbols.h "frame interpolation"). draw_x/draw_y are the integer positions the
 // engine draws at (object +0x0C/+0x10); x/y are exact positions. For a walking creature x/y carry the

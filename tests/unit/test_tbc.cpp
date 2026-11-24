@@ -426,6 +426,8 @@ TEST_CASE("tbc hud: menu text and Lua data") {
   CHECK(m.find("pstfDot1\"") == std::string::npos);  // the line is drawn by the engine now
   CHECK(m.find("pstfOrigPortraitL") != std::string::npos);
   CHECK(m.find("action \"PSTF_EndTurn()\"") != std::string::npos);
+  CHECK(m.find("name 'PSTF_STATUS'") != std::string::npos);
+  CHECK(m.find("pstfHudGuard") != std::string::npos);
   CHECK(std::count(m.begin(), m.end(), '`') == 2);  // one inline Lua chunk
   CHECK(std::count(m.begin(), m.end(), '{') == std::count(m.begin(), m.end(), '}'));
   HudView v;
@@ -595,4 +597,185 @@ TEST_CASE("tbc combat log: line format and action names") {
   CHECK(CombatLogLine(12, 5, 3, 7, 808714, 2, 12, "TURN", "Dak'kon (880088) hp 35/42") ==
         "12:05:03.007 w808714 R2 +0012 | TURN   Dak'kon (880088) hp 35/42");
   CHECK(ActionName(368) == "WaitRandom" && ActionName(3) == "Attack" && ActionName(999) == "action 999");
+}
+
+TEST_CASE("tbc APR: 1.5 attacks = 2 swings, then 1, the attack ends after its swings") {
+  CHECK(AprHalvesFromStat(7) == 3);  // TNO in the Hive save: 1 1/2
+  CHECK(AttacksThisRound(3, 0) == 2 && AttacksThisRound(3, 1) == 1 && AttacksThisRound(3, 2) == 2);
+  Economy e(31, 51, true);
+  e.want_swings = 2;
+  e.Feed(1, 0, false, 3);  // Attack, in reach
+  for (int i = 0; i < 10; ++i) e.Feed(1, 0, false, 3);
+  e.Swing();
+  auto st = e.Feed(20, 0, false, 3);
+  CHECK(st.stop == Stop::None && e.acting && e.SwingsLeft() == 1);  // one more to come
+  e.Swing();
+  st = e.Feed(1, 0, false, 3);
+  CHECK(st.stop == Stop::None && e.SwingsLeft() == 0);  // its animation finishes first
+  for (int i = 0; i < 7 && st.stop == Stop::None; ++i) st = e.Feed(1, 0, false, 3);
+  CHECK(st.stop == Stop::RoundDone && !e.acting);
+  // The engine's round ended with a swing missing: up to a second round for it.
+  Economy l(31, 51, true);
+  l.want_swings = 2;
+  l.Feed(1, 0, false, 3);
+  l.Swing();
+  st = l.Feed(55, 0, false, 3);
+  CHECK(st.stop == Stop::None && l.acting);
+  st = l.Feed(50, 0, false, 3);
+  CHECK(st.stop == Stop::RoundDone);
+  // One swing wanted, got: done after the tail, well before the 51-tick round.
+  Economy o(31, 51, false);
+  o.want_swings = 1;
+  o.Feed(1, 0, false, 3);
+  o.Swing();
+  st = o.Feed(8, 0, false, 3);
+  CHECK(st.stop == Stop::RoundDone);
+}
+
+TEST_CASE("tbc AI: after its action the turn is over, no wandering off") {
+  Economy a(31, 51, false);
+  a.want_swings = 1;
+  a.Feed(1, 0, false, 3);
+  a.Swing();
+  auto st = a.Feed(8, 0, false, 3);
+  CHECK(st.stop == Stop::RoundDone && st.hold_walk);
+  st = a.Feed(1, 0, true, 355);  // its script runs away right after: held, not walked
+  CHECK(st.hold_walk);
+  st = a.Feed(3, 0, true, 355);
+  CHECK(st.end_turn);
+}
+
+#include "modules/tbc/ui_layout.h"
+
+TEST_CASE("tbc BG3 layout: portraits move to their own menu, select buttons go, the rest stays") {
+  std::string bar =
+      "menu\n{\n\tname \"WORLD_ACTIONBAR\"\n\tonClose\n\t\"\n\t\tInfinity_PopMenu('WORLD_ACTIONBAR_LEFT')\n\t\"\n}\n"
+      "menu\n{\n\tname \"WORLD_ACTIONBAR_LEFT\"\n\tonOpen \"horribleTimeFrameOffset = 0\"\n"
+      "\tbutton\n\t{\n\t\tarea 84 57 25 24\n\t\tbam \"CIRCBUTT\"\n\t\taction\n\t\t\"\n\t\t\tgame:SelectAll()\n\t\t\"\n\t}\n";
+  for (int q = 0; q < 5; ++q)
+    bar += "\tbutton\n\t{\n\t\tarea 110 0 45 85\n\t\tbam \"TACTBUTT\"\n\t\tsequence " + std::to_string(q) + "\n\t}\n";
+  for (int n = 5; n >= 0; --n) {
+    const std::string k = std::to_string(n);
+    bar += "\ttext\n\t{\n\t\tarea 763 0 85 85\n\t\tmosaic lua \"getPortraitBg(" + k + ")\"\n\t}\n";
+    bar += "\tbutton\n\t{\n\t\tarea 769 4 74 58\n\t\tportrait " + k + "\n\t\taction \"Infinity_OnPortraitLClick(" + k + ")\"\n\t}\n";
+    bar += "\tbutton\n\t{\n\t\tarea 767 64 78 16\n\t\thealthbar " + k + "\n\t}\n";
+    bar += "\tbutton \n\t{\n\t\tenabled \"Infinity_CanLevelUp(" + k + ")\"\n\t\tbam \"LVLBUTT\"\n\t}\n";
+  }
+  bar += "}\nmenu\n{\n\tname \"WORLD_ACTIONBAR_LEFT_TABLET\"\n\tbutton\n\t{\n\t\tportrait 0\n\t}\n}\n";
+  CHECK(MenuItems(bar, "WORLD_ACTIONBAR_LEFT").size() == 30);
+  std::string why;
+  const std::string out = Bg3Layout(bar, &why);
+  CHECK(why.empty());
+  const auto left = MenuItems(out, "WORLD_ACTIONBAR_LEFT");
+  CHECK(left.size() == 2);  // select-all and Talk (TACTBUTT 4) stay
+  CHECK(out.find("sequence 4") != std::string::npos && out.find("sequence 3") == std::string::npos);
+  const auto port = MenuItems(out, "PSTF_PORTRAITS");
+  CHECK(port.size() == 25);  // 24 moved + the layout ticker
+  CHECK(out.find("name \"pstfPortPic5\"") != std::string::npos && out.find("name \"pstfPortLvl0\"") != std::string::npos);
+  CHECK(MenuItems(out, "WORLD_ACTIONBAR_LEFT_TABLET").size() == 1);  // the tablet bar is untouched
+  // Not the bar we know: nothing changes.
+  const std::string odd = "menu\n{\n\tname \"WORLD_ACTIONBAR_LEFT\"\n\tbutton\n\t{\n\t\tportrait 0\n\t}\n}\n";
+  CHECK(Bg3Layout(odd, &why) == odd && !why.empty());
+  // the open hook raises our menus over the bar again (no close hook any more: pstfHudGuard)
+  CHECK(out.find("pstfHudRaise()") != std::string::npos);
+  // 8-member party: slots 6 and 7 are slot 5's group renumbered
+  const std::string out8 = Bg3Layout(bar, &why, 8);
+  CHECK(why.empty());
+  CHECK(MenuItems(out8, "PSTF_PORTRAITS").size() == 33);
+  CHECK(out8.find("name \"pstfPortPic7\"") != std::string::npos);
+  CHECK(out8.find("\tportrait 7\n") != std::string::npos && out8.find("\thealthbar 6\n") != std::string::npos);
+  CHECK(out8.find("getPortraitBg(7)") != std::string::npos && out8.find("Infinity_OnPortraitLClick(6)") != std::string::npos);
+  CHECK(out8.find("Infinity_CanLevelUp(7)") != std::string::npos);
+  CHECK(out8.find("enabled \"Infinity_GetNumCharacters() > 7\"") != std::string::npos);  // empty slot: no ornament
+}
+
+TEST_CASE("tbc hud: hotbar menu, End Turn bam, floats and attacks in the Lua data") {
+  const std::string m = BuildHudMenu(true);
+  CHECK(m.find("name 'PSTF_BAR'") != std::string::npos);
+  CHECK(m.find("bam \"PFENDTRN\"") != std::string::npos);
+  CHECK(m.find("pstfBg3 = pstfBg3Ok == true") != std::string::npos);
+  CHECK(m.find("'PFTRIP'") != std::string::npos && m.find("'AMGUARD'") == std::string::npos);  // no Block/Guard
+  CHECK(m.find("bam \"PFPAGEUP\"") != std::string::npos && m.find("action \"pstfBarNext()\"") != std::string::npos);
+  CHECK(m.find("PSTF_BAR_COLS = 10") != std::string::npos && m.find("PSTF_BAR_ROWS = 2") != std::string::npos);
+  CHECK(m.find("text color lua \"0xFFFFFF\"") != std::string::npos);  // white "Initiative: N", "23 / 31 ft"
+  CHECK(m.find("name \"pstfSt5_8R5\"") != std::string::npos && m.find("name \"pstfSt6_1O\"") == std::string::npos);
+  CHECK(BuildHudMenu(true, 8).find("name \"pstfSt7_8G1\"") != std::string::npos);
+  CHECK(m.find("name \"pstfStH_8I\"") != std::string::npos);
+  CHECK(m.find("name \"pstfCardBtn1\"") != std::string::npos && m.find("name \"pstfFloat16\"") != std::string::npos);
+  CHECK(std::count(m.begin(), m.end(), '{') == std::count(m.begin(), m.end(), '}'));
+  CHECK(BuildHudMenu(false).find("pstfBg3 = false") != std::string::npos);
+  HudView v;
+  v.on = true;
+  v.attacks_left = 1;
+  v.attacks_round = 2;
+  v.floats.push_back({100, 50, "Initiative: 7"});
+  const std::string lua = BuildHudLua(v);
+  CHECK(lua.find(",atk=1,atkRound=2,floats={{x=100,y=50,t=\"Initiative: 7\"},}") != std::string::npos);
+}
+
+#include "modules/tbc/status.h"
+
+TEST_CASE("tbc status: one icon per spell/item, debuffs first, rounds left and the drained share") {
+  StatusSpans spans;
+  std::vector<StatusEffect> fx = {
+      {1, "SPWI101", 0, 450, true},     // 4.5 rounds of a buff (two effects of it)
+      {1, "SPWI101", 0, 300, true},
+      {1, "SPPR101", 0x400, 120, true}, // a hostile spell: debuff, 2 rounds
+      {1, "SPFLASH", 0, 20, true},      // a flash, not a status
+      {2, "POTN08", 0, 900, true},      // a potion
+      {1, "SPEQUIP", 0, 0, false},      // not timed
+  };
+  auto icons = CollectStatus(7, fx, 1000, 100, &spans, 8);
+  CHECK(icons.size() == 3);
+  CHECK(icons[0].parent == "SPPR101" && icons[0].debuff && icons[0].rounds == 2);
+  CHECK(icons[1].parent == "SPWI101" && !icons[1].debuff && icons[1].rounds == 5);
+  CHECK(icons[2].parent == "POTN08" && icons[2].parent_type == 2 && icons[2].rounds == 9);
+  CHECK(icons[1].share == 1.0);
+  // 150 ticks later: 300 of 450 left
+  fx = {{1, "SPWI101", 0, 300, true}};
+  icons = CollectStatus(7, fx, 1150, 100, &spans, 8);
+  CHECK(icons.size() == 1 && std::abs(icons[0].share - 300.0 / 450.0) < 1e-9);
+  // recast: a later end restarts the span
+  fx = {{1, "SPWI101", 0, 600, true}};
+  icons = CollectStatus(7, fx, 1200, 100, &spans, 8);
+  CHECK(icons[0].share == 1.0 && icons[0].rounds == 6);
+  CHECK(CollectStatus(7, fx, 1200, 100, nullptr, 0).empty());
+}
+
+TEST_CASE("tbc status: the drained frame and fitted icons") {
+  // full: the whole outline of a 22 px box, 2 px thick, in five pieces from the top centre
+  auto f = DrainFrame(0, 0, 22, 2, 1.0);
+  CHECK(f.size() == 5);
+  CHECK(f[0].x == 1 && f[0].y == 0 && f[0].w == 10 && f[0].h == 2);   // top, centre to the left corner
+  CHECK(f[1].x == 0 && f[1].y == 0 && f[1].w == 2 && f[1].h == 22);   // left side
+  CHECK(f[2].x == 0 && f[2].y == 20 && f[2].w == 22 && f[2].h == 2);  // bottom
+  CHECK(f[3].x == 20 && f[3].y == 0 && f[3].w == 2 && f[3].h == 22);  // right side
+  CHECK(f[4].x == 10 && f[4].y == 0 && f[4].w == 12 && f[4].h == 2);  // top, right corner to the centre
+  // a quarter: half the top-left leg's way... the top-left leg (10) and 10 of the left side
+  f = DrainFrame(0, 0, 22, 2, 0.25);
+  CHECK(f.size() == 2 && f[0].w == 10 && f[1].h == 12);
+  CHECK(DrainFrame(0, 0, 22, 2, 0.0).empty());
+  // item icons keep their aspect: Bandages (30 x 23) in a 38 px square
+  const Rect r = FitIcon(30, 23, 38);
+  CHECK(r.w == 38 && r.h == 29 && r.x == 0 && r.y == 4);
+  const Rect q = FitIcon(32, 32, 38);
+  CHECK(q.w == 38 && q.h == 38);
+  const StatusIconView v = MakeIconView({"SPWI101", 1, 3, 0.5, false}, "SPWI101C", 274, 32, 32, 22);
+  CHECK(v.fit.x == 3 && v.fit.w == 16 && v.frame.size() == 3);
+  CHECK(MakeIconView({"X", 1, 1, 1.0, true}, "B", -1, 256, 256, kStatusPortraitPx).fit.w == kStatusPortraitPx - 6);
+  HoverView h;
+  h.on = true;
+  h.name_ref = 5;
+  h.icons.push_back(v);
+  const std::string lua = BuildStatusLua({{}, {v}}, h);
+  CHECK(lua.find("pstfStat = {[0]={},[1]={{b=\"SPWI101C\",n=274,r=3,d=false,fit={3,3,16,16},f={") != std::string::npos);
+  CHECK(lua.find("pstfHov = {on=true,fight=false,name=5,") != std::string::npos);
+}
+
+TEST_CASE("tbc preview: a creature is dear ground, the path goes round it and stays round") {
+  // open ground 5, a creature footprint (cost 55) in a 3x3 block in the middle of a straight line
+  auto cost = [](int x, int y) { return (x >= 4 && x <= 6 && y >= 3 && y <= 5) ? 55 : 5; };
+  const auto p = FindCellPath({0, 4}, {10, 4}, cost, 10000, 12, 12, 5);
+  CHECK(p.size() >= 3);  // not a straight cut through it
+  for (size_t i = 1; i < p.size(); ++i) CHECK(LineWalkable(p[i - 1], p[i], cost, 5));
 }

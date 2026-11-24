@@ -13,11 +13,24 @@
 #include <string>
 #include <vector>
 
+#include "modules/tbc/status.h"
+
 namespace pstf::tbc {
 
 constexpr int kHudCards = 12;
-constexpr int kHudBar = 48;   // hotbar buttons (4 rows x up to 12 engine action-bar slots)
+constexpr int kHudBar = 48;   // hotbar buttons (engine bar: all at once above it, up to 48)
+constexpr int kBarCols = 10, kBarRows = 2;  // BG3 layout: a page of the hotbar in the bottom bar
+constexpr int kStatusSlots = 8;  // party slots with status icons next to the portrait
+constexpr int kStatusIcons = 8;  // icons per portrait (2 rows of 4)
+constexpr int kHoverIcons = 8;   // icons on the hover card
+constexpr int kStatusPortraitPx = 26, kStatusHoverPx = 30, kStatusFramePx = 2;
 constexpr int kHudDots = 0;  // the line is drawn in the world pass now (engine DrawLine2d)
+constexpr int kHudFloats = 16;  // floating text over creatures ("Initiative 7")
+
+struct HudFloat {
+  int x = 0, y = 0;  // UI coordinates of the text centre
+  std::string text;
+};
 
 struct HudCard {
   int32_t id = -1;
@@ -36,17 +49,14 @@ struct HudView {
   int slot = -1;               // party slot whose turn it is (-1: not a party turn)
   double move_ft = 0, max_ft = 0;
   bool action_used = false, acting = false;
+  int attacks_left = -1;       // swings left this round (-1: not known)
+  int attacks_round = 0;       // swings this round (APR, alternating for 1.5 etc.)
+  std::vector<HudFloat> floats;
   std::string msg;             // short notice ("No action left this turn")
   std::vector<int> dots;       // x,y pairs in UI coordinates, reachable
   std::vector<int> red_dots;   // x,y pairs, beyond the movement left
   int path_ft = 0;             // whole path length, shown at its end
   int label_x = -1, label_y = -1;
-  // Hover card (BG3): the creature under the cursor, its HP and, for a foe, the chance to hit it.
-  bool hover = false;
-  int32_t hover_name_ref = -1;
-  std::string hover_name;
-  int hover_hp = 0, hover_max = 0, hover_chance = -1, hover_ac = 0, hover_needs = 0;
-  bool hover_foe = false;
   // Dice panel: the last attack roll or saving throw.
   bool dice = false;
   int dice_kind = 0;           // 0 attack, 1 saving throw
@@ -59,7 +69,37 @@ struct HudView {
   double dice_alpha = 0;
 };
 
-std::string BuildHudMenu();             // menu PSTF_TBC + its Lua helpers
+// A status icon as the menu shows it: the BAM, its fitted rect and the drained frame (offsets inside
+// the icon box), the source's name and the rounds left.
+struct StatusIconView {
+  std::string bam;
+  int32_t name_ref = -1;
+  int rounds = 0;
+  bool debuff = false;
+  Rect fit;
+  std::vector<Rect> frame;
+};
+StatusIconView MakeIconView(const StatusIcon& s, const std::string& bam, int32_t name_ref, int bam_w, int bam_h, int box);
+
+// Hover card (BG3): the creature under the cursor, its HP, buffs/debuffs and, in a fight, for a foe,
+// the chance that the active party member hits it.
+struct HoverView {
+  bool on = false;
+  int32_t name_ref = -1;
+  std::string name;
+  int hp = 0, max_hp = 0, chance = -1, ac = 0, needs = 0;
+  bool foe = false, fight = false;
+  std::vector<StatusIconView> icons;
+};
+// "pstfStat = {...} pstfHov = {...}"; party[slot] = that slot's icons.
+std::string BuildStatusLua(const std::vector<std::vector<StatusIconView>>& party, const HoverView& h);
+
+// menus PSTF_TBC (fight overlay) and PSTF_BAR (hotbar) + their Lua helpers. `bg3`: the hotbar sits in
+// the bottom bar where the portraits were (they move to the right edge, ui_layout.h), and stays there
+// out of fights too; else it shows in fights only, above the turn panel.
+// menu PSTF_STATUS (status icons next to the portraits + hover card), shown with the bottom bar.
+// pstfHudGuard() (called every frame) keeps our menus on the stack exactly when they belong there.
+std::string BuildHudMenu(bool bg3 = false, int party_max = 6);
 std::string BuildHudLua(const HudView& v);  // "pstfTbc = {...}"
 
 }  // namespace pstf::tbc

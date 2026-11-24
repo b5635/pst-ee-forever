@@ -3,6 +3,8 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "core/log.h"
 #include "core/patch.h"
@@ -23,11 +25,17 @@ std::string& Extra() {
   static std::string s;
   return s;
 }
+std::vector<MenuTransform>& Transforms() {
+  static std::vector<MenuTransform> v;
+  return v;
+}
 CStr g_keep{nullptr};  // our reference keeps the combined text alive: tokens point into it
 
 CStr* __fastcall MenuCopy(CStr* out, const CStr* src) {
-  if (Extra().empty() || !src || !src->p) return g_copy(out, src);
-  const std::string text = std::string(src->p) + "\n" + Extra() + "\n";
+  if ((Extra().empty() && Transforms().empty()) || !src || !src->p) return g_copy(out, src);
+  std::string ui(src->p);
+  for (MenuTransform fn : Transforms()) ui = fn(ui);
+  const std::string text = ui + "\n" + Extra() + "\n";
   reinterpret_cast<CtorFn>(Va(sym::kRvaCStringCtor))(out, text.c_str());  // refcount 1
   g_copy(&g_keep, out);  // refcount 2: survives the caller's release (old g_keep leaks: tiny, rare)
   Log("menu: UI.MENU %zu bytes + %zu bytes of pst_forever menus", std::strlen(src->p), Extra().size());
@@ -37,6 +45,7 @@ CStr* __fastcall MenuCopy(CStr* out, const CStr* src) {
 }  // namespace
 
 void AddMenuText(const std::string& menu_text) { Extra() += menu_text + "\n"; }
+void AddMenuTransform(MenuTransform fn) { Transforms().push_back(fn); }
 
 bool InstallMenuHook() {
   if (g_copy) return true;

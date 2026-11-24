@@ -208,6 +208,39 @@ constexpr uint32_t kRvaAnimate = 0x3FB520, kRvaEnemyEa = 0x408B0A, kRvaEnemyId =
 constexpr uint32_t kRvaQueueCount = 0x172D31, kRvaClearAICurAction = 0x404BC6;
 constexpr uint64_t kVaObjArray = 0x14072D860ull, kVaObjMax = 0x14072D854ull, kVaObjNext = 0x14072D858ull;
 constexpr uint32_t kOffGamePartyIds = 0xA200, kOffGamePartyCount = 0xA218;
+
+// --- 8-member party (src/engine/party.cpp; sites/patches: party_sites.h) ---------------------------
+// CBaldurChitin::Init 14014126E `call sub_1402CEE40` = the CInfGame ctor (lin CInfGame::CInfGame 39A030,
+// only caller CBaldurChitin::Init 157800 L134): after it the new arrays get -1 (the ctor fills the old ones).
+inline constexpr uint8_t kGameCtorCallBytes[] = {0xE8, 0xCD, 0xDB, 0x18, 0x00};
+// CInfGame::DestroyGame (lin 385110 / win 1402D7600): clears fixed slots 0..5 with three qword stores
+// (1402D7887..); we clear 6..7 after it. Prologue: 3 x mov [rsp+x], reg (15 bytes, no RIP-relative).
+inline constexpr uint8_t kDestroyGameBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18,
+                                                0x48, 0x89, 0x7C, 0x24, 0x20, 0x55, 0x41, 0x54};
+// CMultiplayerSettings::GetCharacterControlledByPlayer (lin 2ACB20 / win 140245C20): i32[6] at +0x50;
+// slots 6..7 ask for slot 0. Prologue push rbx; sub rsp,20h (6 bytes) + movsxd rax, edx.
+inline constexpr uint8_t kGetControlledBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x63, 0xC2, 0x45};
+constexpr uint32_t kRvaGameCtorCall = 0x14126E, kRvaDestroyGame = 0x2D7600, kRvaGetControlled = 0x245C20;
+// Trigger probe (PSTF_Trigger): CAITrigger::CAITrigger(short id, int param1) (lin 608BA0 / win 14013E7C0;
+// layout from win 14013E700: +0 u16 id, +8 CAIObjectType whose +0 is the name CString, size 0x40),
+// CGameAIBase::EvaluateStatusTrigger(CAITrigger const&) (lin 186C30 / win 1401656B0) and the CString
+// assign the ctor uses for its strings (win 140484490, called with "" at 14013E776; null-checks rdx).
+inline constexpr uint8_t kTriggerCtorBytes[] = {0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x08, 0x48,
+                                                0x89, 0x68, 0x10, 0x48, 0x89, 0x70, 0x18, 0x57};
+inline constexpr uint8_t kEvalTriggerBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x55, 0x56, 0x57,
+                                                0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57};
+inline constexpr uint8_t kCStringAssignBytes[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B,
+                                                  0xD9, 0x48, 0x85, 0xD2, 0x75, 0x15, 0x33, 0xC0};
+// CInfGame::Marshal (lin 365550 / win 1402E78F0) zeroes its stack CGameSaveCharacter entries 1..5 with
+// memset(entry, 0, 0x160); the last call (entry 5, 1402E799B) also zeroes entries 6..7 (frame grown,
+// party_patches.tsv). Target 140583160 = memset (ported name CItem::GetMaxUsageCount is wrong).
+inline constexpr uint8_t kMarshalMemsetCallBytes[] = {0xE8, 0xC0, 0xB7, 0x29, 0x00};
+constexpr uint32_t kRvaMarshalMemsetCall = 0x2E799B;
+// Save probe (PSTF_CanSave): CInfGame::CanSaveGame(uint& reason, uchar, uchar, uchar) lin 369B50 / win 1402D2EB0.
+inline constexpr uint8_t kCanSaveGameBytes[] = {0x40, 0x55, 0x56, 0x57, 0x48, 0x83, 0xEC, 0x30,
+                                                0x41, 0x0F, 0xB6, 0xF0, 0x48, 0x8B, 0xFA, 0x48};
+constexpr uint32_t kRvaCanSaveGame = 0x2D2EB0;
+constexpr uint32_t kRvaTriggerCtor = 0x13E7C0, kRvaEvalTrigger = 0x1656B0, kRvaCStringAssign = 0x484490;
 constexpr uint32_t kOffSpritePos = 0x0C, kOffSpriteArea = 0x18, kOffSpriteEa = 0x38, kOffSpriteId = 0x48;
 constexpr uint32_t kOffSpriteQueueCount = 0x348, kOffSpriteCurAction = 0x3F0;
 constexpr uint32_t kOffSpriteStatsSel = 0x4BBC, kOffSpriteStatsA = 0xFE8, kOffSpriteStatsB = 0x1C98;
@@ -603,6 +636,11 @@ constexpr uint32_t kOffEffOpcode = 0x10, kOffEffSpriteSel = 0x4BBC;
 // fade in/out colour, e.g. SPWI406; colour read as bytes 0..2 of param1, CGameEffectTintScreen::ApplyEffect
 // lin 1DCAB0 / win 1401E7BE0).
 constexpr uint32_t kOffEffParam1 = 0x1C, kOffEffParam2 = 0x20;
+// Parent resource of an effect (status icons): CGameEffect keeps the EFF v2 record at its own offsets, so
+// +0x90 parent type (1 spell, 2 item), +0x94 parent resref, +0x9C the parent's SPL/ITM flags. Evidence: the
+// source resref is compared at +148 in CGameEffectList::RemoveAllEffectsFromSourceRes (lin 1F6EC0 /
+// win 140208710, `*(_QWORD *)(v11 + 148)`).
+constexpr uint32_t kOffEffParentType = 0x90, kOffEffParentRes = 0x94, kOffEffParentFlags = 0x9C;
 // Held creatures still take effects at once: CGameSprite::ProcessEffectList(int) lin 4E21F0, win 1404231E0
 // (its per-tick caller is ProcessAI, which held creatures skip). Its once-a-second gate compares the
 // AI tick counter sprite+0x3A0 (`mov r8d,[rsi+3A0h]` 14042338C; lin this+232*4, ++ in ProcessAI L653).
@@ -679,6 +717,25 @@ inline constexpr uint8_t kVisMaskBytes[] = {0x00, 0x80, 0x14, 0x18, 0xFF, 0x7F, 
 constexpr uint32_t kRvaVisMapLea = 0x3DD9D5, kRvaVisMasks = 0x63976C, kOffAreaVisMap = 0xB88, kOffAreaWidthPx = 0x688,
                    kOffAreaHeightPx = 0x68C;
 constexpr uint16_t kVisExplored = 0x8000, kVisCombat = 0x4000;  // slot 14: no party member uses it
+// A creature drawn although no party member sees it: CGameObject +0x4C is the "seen" countdown that
+// CGameSprite::Render needs > 0 (lin 562A10 L204 `*((__int16 *)this + 38) > 0`). Clairvoyance sets it
+// for every creature it shows: CGameArea::ShowMonstersInArea (lin 1B8460, win 1401A0F90) at 1401A108C
+// `inc cx; shl cx,2; mov [rax+4Ch],cx` = (VISIBLE_DELAY 7 + 1) * 4 = 32.
+inline constexpr uint8_t kShowMonstersVisBytes[] = {0x66, 0xFF, 0xC1, 0x66, 0xC1, 0xE1, 0x02, 0x66, 0x89, 0x48, 0x4C};
+constexpr uint32_t kRvaShowMonstersVis = 0x1A108C, kOffObjVisible = 0x4C;
+constexpr int16_t kVisibleCount = 32;
+// Attacks per round: derived stats +0x12 (short, CDerivedStats::NumAttacksShortToFloat encoding; Swing
+// lin 4EAC10 L423 `v23[9]`, win 1404334E0 `v37 = 7338` = stats 0x1C98 + 0x12). A half attack (1.5,
+// 2.5 ...) is real on the swing slot that comes up when the sprite's half-attack counter is even:
+// Swing win 140434F9B `movzx eax, byte [rbx+50C4h]` ... `(v & 1) == 0` ... 140434FCB `inc [rbx+50C4h]`
+// (lin 4EAC10 L1465-1470, there +0x50AC).
+inline constexpr uint8_t kHalfAttackBytes[] = {0x0F, 0xB6, 0x83, 0xC4, 0x50, 0x00, 0x00};
+constexpr uint32_t kRvaHalfAttack = 0x434F9B, kOffSpriteHalfAttack = 0x50C4, kOffStatNumAttacks = 0x12;
+// Bored voice lines: CScreenWorld +0xA8 counts AsynchronousUpdate passes; above Bored Timeout a random
+// party member says SOUND_BORED (lin 4308B0 L1075-1099, win 140353B20 L523 `++*(a1 + 168)` at
+// 140354B28 `inc dword [r14+0A8h]`).
+inline constexpr uint8_t kBoredIncBytes[] = {0x41, 0xFF, 0x86, 0xA8, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaBoredInc = 0x354B28, kOffWorldBored = 0xA8;
 constexpr int kVisTile = 32;
 // Stopping a walk: CMessageDropPath::Run (lin 293C30, win 1402355D0) drops the path and, if the
 // sprite's sequence (+0x4428) is SEQ_WALK (10, rdata 1406490FE), sets SEQ_READY (7, rdata 1406490F6)
@@ -780,6 +837,15 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CanRestParty.objNext", kRvaObjNextCmp, kObjNextCmpBytes, "win 1402D297B"),
     PSTF_SYM("CanRestParty.partyCount", kRvaPartyCount, kPartyCountBytes, "win 1402D2917"),
     PSTF_SYM("CanRestParty.partyIds", kRvaPartyIds, kPartyIdsBytes, "win 1402D294C"),
+    PSTF_SYM("CBaldurChitin::Init.newGame", kRvaGameCtorCall, kGameCtorCallBytes, "lin 157800 L134 / win 14014126E"),
+    PSTF_SYM("CInfGame::DestroyGame", kRvaDestroyGame, kDestroyGameBytes, "lin 385110 / win 1402D7600"),
+    PSTF_SYM("CMultiplayerSettings::GetCharacterControlledByPlayer", kRvaGetControlled, kGetControlledBytes,
+             "lin 2ACB20 / win 140245C20"),
+    PSTF_SYM("CAITrigger::CAITrigger(short,int)", kRvaTriggerCtor, kTriggerCtorBytes, "lin 608BA0 / win 14013E7C0"),
+    PSTF_SYM("CGameAIBase::EvaluateStatusTrigger", kRvaEvalTrigger, kEvalTriggerBytes, "lin 186C30 / win 1401656B0"),
+    PSTF_SYM("CInfGame::Marshal.memset5", kRvaMarshalMemsetCall, kMarshalMemsetCallBytes, "lin 365550 / win 1402E799B"),
+    PSTF_SYM("CInfGame::CanSaveGame", kRvaCanSaveGame, kCanSaveGameBytes, "lin 369B50 / win 1402D2EB0"),
+    PSTF_SYM("CString assign (char const*)", kRvaCStringAssign, kCStringAssignBytes, "win 140484490 (from 14013E776)"),
     PSTF_SYM("CanRestParty.spriteArea", kRvaSpriteArea, kSpriteAreaBytes, "win 1402D29AA"),
     PSTF_SYM("CanRestParty.spritePos", kRvaSpritePos, kSpritePosBytes, "win 1402D29CF"),
     PSTF_SYM("CGameSprite::Animate", kRvaAnimate, kAnimateBytes, "lin 4A2030 / win 1403FB520"),
@@ -856,6 +922,9 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("PostRenderButton.disabled", kRvaBarDisabled, kBarDisabledBytes, "win 1402C8097"),
     PSTF_SYM("CGameObject::GetObjectType", kRvaGetObjectType, kGetObjectTypeBytes, "lin 176FB0 / win 140173050"),
     PSTF_SYM("CGameSprite::Render.vismap", kRvaVisMapLea, kVisMapLeaBytes, "lin 562A10 / win 1403DD9D5"),
+    PSTF_SYM("CGameArea::ShowMonstersInArea.visible", kRvaShowMonstersVis, kShowMonstersVisBytes, "lin 1B8460 / win 1401A108C"),
+    PSTF_SYM("CGameSprite::Swing.halfattack", kRvaHalfAttack, kHalfAttackBytes, "lin 4EAC10 / win 140434F9B"),
+    PSTF_SYM("CScreenWorld::AsynchronousUpdate.bored", kRvaBoredInc, kBoredIncBytes, "lin 4308B0 / win 140354B28"),
     PSTF_SYM("CMessageDropPath::Run.seq", kRvaDropPathSeq, kDropPathSeqBytes, "lin 293C30 / win 14023560D"),
     PSTF_SYM("CGameSprite::SetSequence", kRvaSetSequence, kSetSequenceBytes, "lin 50A270 / win 1403E8800"),
     PSTF_SYM("CGameSprite::UseItem", kRvaUseItem, kUseItemBytes, "lin 4D5180 / win 140436690"),

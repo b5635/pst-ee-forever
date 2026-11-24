@@ -10,6 +10,9 @@ namespace pstf::engine {
 
 // Appends `menu_text` to every UI.MENU load (boot, and the debug UI reload). Call once per module.
 void AddMenuText(const std::string& menu_text);
+// Rewrites UI.MENU itself before our text is appended (e.g. the BG3 bar layout). Called on every load.
+using MenuTransform = std::string (*)(const std::string& ui);
+void AddMenuTransform(MenuTransform fn);
 bool InstallMenuHook();
 
 }  // namespace pstf::engine

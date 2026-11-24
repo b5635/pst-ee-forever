@@ -44,6 +44,14 @@ struct EffectView {
   int32_t left = 0;  // ticks to expiry (absolute/delayed types), else 0
 };
 std::vector<EffectView> TimedEffects(int32_t id);
+// Timed effects with their parent spell/item (status icons).
+struct ParentEffectView {
+  uint32_t parent_type = 0, parent_flags = 0;
+  char parent[9] = {};
+  int32_t left = 0;  // ticks to expiry
+  bool timed = false;
+};
+std::vector<ParentEffectView> ParentEffects(int32_t id);
 // The creature's colour glow effects (opcodes 8, 9, 52, 61, 353 tint screen; symbols.h "Colour effects").
 struct ColorEffectView {
   int opcode = 0;
@@ -108,6 +116,17 @@ struct CombatStats {
   int thac0 = 0, ac = 0, hp = 0, max_hp = 0;
 };
 bool GetCombatStats(int32_t id, CombatStats* out);
+
+// Attacks per round as the engine stores it (derived stat, short encoding: 0..5, 6..10 = 0.5..4.5);
+// -1 when there is no such creature.
+int NumAttacksStat(int32_t id);
+// Makes the engine's next half-attack slot real (true) or skipped (false) for this creature, so the
+// 1.5-APR alternation follows the creature's own turn-based rounds (symbols.h kRvaHalfAttack).
+void SetHalfAttackReal(int32_t id, bool real);
+// Creatures drawn although no party member sees them, as Clairvoyance does (object +0x4C countdown).
+void KeepVisible(const std::vector<int32_t>& ids);
+// No bored voice lines now: the world screen's bored counter goes back to 0.
+void ResetBoredTimer();
 
 // --- action bar ----------------------------------------------------------------------------------
 struct BarButton {

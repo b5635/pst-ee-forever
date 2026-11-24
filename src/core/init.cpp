@@ -9,6 +9,7 @@
 #include "modules/dev/autoload.h"
 #include "modules/lighting/lighting_module.h"
 #include "modules/gore/gore_module.h"
+#include "modules/party/party_module.h"
 #include "modules/smooth/smooth_module.h"
 #include "modules/tbc/tbc_module.h"
 #include "modules/dev/lua_bridge.h"
@@ -23,6 +24,7 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   pstf::InstallCrashLog();
   if (!pstf::IsSupportedExe()) return 1;
   const auto& ini = pstf::Config();
+  pstf::party::InstallParty(ini);  // first: it rewrites engine code other modules check
   if (pstf::IniBool(ini, "voice.examine", false)) {
     pstf::voice::InstallExamineVoice();
   } else {

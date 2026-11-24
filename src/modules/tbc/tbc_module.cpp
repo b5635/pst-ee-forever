@@ -51,10 +51,13 @@
 #include "modules/tbc/economy.h"
 #include "modules/tbc/hud.h"
 #include "modules/tbc/hover.h"
+#include "modules/tbc/status.h"
+#include "core/gameres.h"
 #include "modules/tbc/round_rules.h"
 #include "modules/tbc/path_line.h"
 #include "modules/tbc/path_preview.h"
 #include "modules/tbc/turn_clock.h"
+#include "modules/tbc/ui_layout.h"
 
 namespace pstf::tbc {
 namespace {
@@ -141,6 +144,24 @@ struct State {
   uint32_t since_action = 1000;      // world ticks since its action stopped running
   bool resolving_logged = false;
   PulseBudget pulses;                // lingering spells: one round of pulse ticks per caster round
+  int sight_radius = 448;            // [tbc] sight_radius: px of fog lifted around each foe in the fight
+  bool select_voice = true;          // [tbc] select_voice: a party member's turn plays its selection line
+  bool no_bored = true;              // [tbc] no_bored: no bored voice lines during a fight
+  bool steady_ai = false;            // the AI walker of this turn got SetInterrupt(FALSE) (walks in one go)
+  bool paused_screen = false;        // a menu screen (inventory, character...) is up: the fight waits
+  // Floating text over creatures ("Initiative 7"), until GetTickCount passes `until`.
+  struct Float {
+    int32_t id;
+    std::string text;
+    uint32_t until;
+  };
+  std::vector<Float> floats;
+  int apr_halves = 0;                // the active creature's APR x2 (0: unknown) for the HUD
+  int party_max = 6;                 // [party] size: portrait slots (6 vanilla, 8 with the party module)
+  std::unique_ptr<GameRes> res;      // game resources: icon sizes, spell icons/names (status icons)
+  StatusSpans status_spans;          // first-seen length of each buff on each creature
+  std::vector<std::vector<StatusIconView>> status_party;
+  uint32_t status_t0 = 0;            // GetTickCount of the last party status collection
 } g;
 
 // The creature's spell is still on its way (a projectile object it cast is in the area): its turn
@@ -318,7 +339,7 @@ void EndFight(const char* why) {
   }
   if (g.hud) {
     const std::string err = engine::LuaDoString(
-        "pstfTbc = {on=false,cards={},dots={},rdots={}} if pstfTbcOpen then Infinity_PopMenu('PSTF_TBC') end");
+        "pstfTbc = {on=false,cards={},dots={},rdots={}} if Infinity_IsMenuOnStack('PSTF_TBC') then Infinity_PopMenu('PSTF_TBC') end");
     if (!err.empty()) Log("tbc: hud close failed: %s", err.c_str());
   }
   Say("Combat over: back to real time");
@@ -346,6 +367,10 @@ void StartFight(const std::vector<Seen>& join, uint32_t now) {
   for (int32_t id : g.dir->Order()) order += (order.empty() ? "" : ", ") + Who(id);
   Log("tbc: fight %u starts, %zu combatants, order: %s", g.fights, who.size(), order.c_str());
   RegisterNames(g.dir->Order());
+  g.floats.clear();
+  for (int32_t id : g.dir->Order())
+    if (const Combatant* c = g.dir->Find(id))
+      g.floats.push_back({id, "Initiative: " + std::to_string(c->initiative), GetTickCount() + 3500});
   {
     std::string lines;
     for (int32_t id : g.dir->Order()) {
@@ -353,8 +378,8 @@ void StartFight(const std::vector<Seen>& join, uint32_t now) {
       engine::CombatStats st;
       engine::GetCombatStats(id, &st);
       char b[96];
-      std::snprintf(b, sizeof b, " %s hp %s, THAC0 %d, AC %d", c && c->r.side == Side::Hostile ? "foe  " : "party",
-                    HpText(id).c_str(), st.thac0, st.ac);
+      std::snprintf(b, sizeof b, " %s hp %s, THAC0 %d, AC %d, initiative %d", c && c->r.side == Side::Hostile ? "foe  " : "party",
+                    HpText(id).c_str(), st.thac0, st.ac, c ? c->initiative : 0);
       lines += "\n      " + Name(id) + b;
     }
     CLog("START", "fight " + std::to_string(g.fights) + ", " + std::to_string(who.size()) + " combatants in initiative order:" + lines);
@@ -406,7 +431,10 @@ void Scan(uint32_t now) {
     engine::DropPath(s.id);
     Log("tbc: %s joins (round %u)", Who(s.id).c_str(), g.dir->Round());
     RegisterNames({s.id});
-    CLog("JOIN", Name(s.id) + " hp " + HpText(s.id));
+    const Combatant* jc = g.dir->Find(s.id);
+    const int ini = jc ? jc->initiative : 0;
+    g.floats.push_back({s.id, "Initiative: " + std::to_string(ini), GetTickCount() + 3500});
+    CLog("JOIN", Name(s.id) + " hp " + HpText(s.id) + ", initiative " + std::to_string(ini));
   }
   if (!g.dir->Running()) EndFight("one side is gone");
 }
@@ -417,6 +445,8 @@ void OnTurnChange(int32_t prev, int32_t next) {
     engine::DropPath(prev);
   }
   g.nudged = -1;
+  g.steady_ai = false;
+  g.apr_halves = 0;
   g.current = next;
   g.end_requested = false;
   g.resolve_ticks = 0;
@@ -470,6 +500,19 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.hold_current = false;
   g.preview_goal = {-1, -1};
   if (slot >= 0 && !g.auto_party) engine::ClearAI(next);  // nothing queued while it waited: player orders only
+  // Attacks this round with the engine's own APR: 3/2 = 2 swings in the creature's 1st, 3rd... round,
+  // 1 in the others. The engine's half-attack switch is set to match, so its round has exactly that many.
+  if (c) {
+    const int stat = engine::NumAttacksStat(next);
+    g.apr_halves = stat >= 0 ? AprHalvesFromStat(static_cast<int16_t>(stat)) : 0;
+    const int want = AttacksThisRound(g.apr_halves, c->own_rounds);
+    if (g.apr_halves & 1) engine::SetHalfAttackReal(next, want > g.apr_halves / 2);
+    if (g.rolls) g.econ.want_swings = want;
+    CLog("APR", Name(next) + " attacks per round x2 = " + std::to_string(g.apr_halves) + ", own round " +
+                    std::to_string(c->own_rounds + 1) + ": " + std::to_string(want) + " attack" + (want == 1 ? "" : "s"));
+  }
+  // Its selection line, as a portrait click would play it (the engine's SelectCharacter with sound).
+  if (slot >= 0 && !g.auto_party && g.select_voice) engine::SelectOnly(next, true);
   g.bar_t0 = 0;  // the hotbar is collected again for whoever acts now
   {
     engine::SpriteInfo s0;
@@ -510,7 +553,7 @@ std::vector<Pt> PreviewCells(int32_t id, Pt from, Pt to) {
   engine::CellCoster thin = coster;
   thin.personal_space = 1;
   auto cost = [&](int x, int y) {
-    const int c = coster.Cost(x, y);
+    const int c = coster.SearchCost(x, y);
     if (c < kImpassable) return c;
     const bool close_by = (std::abs(x - start.x) <= 3 && std::abs(y - start.y) <= 3) ||
                           (std::abs(x - goal.x) <= 2 && std::abs(y - goal.y) <= 2);
@@ -519,6 +562,9 @@ std::vector<Pt> PreviewCells(int32_t id, Pt from, Pt to) {
   int min_cost = kImpassable;
   for (int i = 0; i < 16; ++i)
     if (coster.terrain[i] > 0 && coster.terrain[i] < min_cost) min_cost = coster.terrain[i];
+  // The walker itself is out of the search map while the engine searches its path (SetTarget's
+  // RemoveObject): only the OTHER creatures block, as they will block the real walk.
+  const engine::SearchMapLift lift(id);
   return FindCellPath(start, goal, cost, 30000, coster.width, coster.height,
                       min_cost < kImpassable ? min_cost : 1);
 }
@@ -564,58 +610,60 @@ std::vector<Pt> HoverPreview(const engine::SpriteInfo& me) {
   return pts;
 }
 
-// World pass (engine render): the movement line, gold for the feet left, red beyond, over a dark
-// outline; a small diamond where it ends.
+// World pass (engine render): the movement line as a thin glowing thread (BG3): a soft amber halo,
+// a bright core, red past the feet left; a small glowing ring where the walk ends. The engine's line
+// is drawn at alpha 0xAA at least (DrawLine2d), so the glow is layered colours, wide and dim to thin
+// and bright.
+struct GlowColors {
+  uint32_t halo, mid, core;
+};
+constexpr GlowColors kGlowGold{0x1A4A8C, 0x40A8F0, 0xC8F4FF};  // 0xBBGGRR
+constexpr GlowColors kGlowRed{0x101470, 0x2838E0, 0xB4C0FF};
+void GlowSegment(Pt a, Pt b, const GlowColors& c, float scale) {
+  engine::DrawWorldLine(a.x, a.y, b.x, b.y, c.halo, 2.6f * scale);
+  engine::DrawWorldLine(a.x, a.y, b.x, b.y, c.mid, 1.3f * scale);
+  engine::DrawWorldLine(a.x, a.y, b.x, b.y, c.core, 0.55f * scale);
+}
+void GlowRing(Pt e, const GlowColors& c) {
+  constexpr int kN = 20;
+  const double rx = 9.0, ry = 6.75;  // ground plane, 4:3
+  for (int pass = 0; pass < 3; ++pass) {
+    const uint32_t col = pass == 0 ? c.halo : pass == 1 ? c.mid : c.core;
+    const float w = pass == 0 ? 2.4f : pass == 1 ? 1.2f : 0.5f;
+    for (int i = 0; i < kN; ++i) {
+      const double a0 = 6.283185307 * i / kN, a1 = 6.283185307 * (i + 1) / kN;
+      engine::DrawWorldLine(e.x + static_cast<int>(rx * std::cos(a0)), e.y + static_cast<int>(ry * std::sin(a0)),
+                            e.x + static_cast<int>(rx * std::cos(a1)), e.y + static_cast<int>(ry * std::sin(a1)), col, w);
+    }
+  }
+}
 void DrawMovementLine() {
-  constexpr uint32_t kGold = 0x3CC4FF, kRed = 0x2020E0, kShadow = 0x0A0E14;
   if (g.running && g.unreachable && g.line.empty()) {
     const Pt c = g.cursor;
-    for (int pass = 0; pass < 2; ++pass) {
-      const uint32_t col = pass ? kRed : kShadow;
-      const float w = pass ? 2.4f : 4.4f;
-      engine::DrawWorldLine(c.x - 10, c.y - 8, c.x + 10, c.y + 8, col, w);
-      engine::DrawWorldLine(c.x - 10, c.y + 8, c.x + 10, c.y - 8, col, w);
-    }
+    GlowSegment({c.x - 8, c.y - 6}, {c.x + 8, c.y + 6}, kGlowRed, 1.0f);
+    GlowSegment({c.x - 8, c.y + 6}, {c.x + 8, c.y - 6}, kGlowRed, 1.0f);
     return;
   }
   if (!g.running || g.line.size() < 2) return;
-  const float core = g.line_preview ? 2.6f : 3.2f;
-  double total = 0;
-  for (int pass = 0; pass < 2; ++pass) {
-    double left = g.econ.move_ft;
-    total = 0;
-    for (size_t i = 1; i < g.line.size(); ++i) {
-      const Pt a = g.line[i - 1], b = g.line[i];
-      const double seg = FeetBetween(a.x, a.y, b.x, b.y);
-      total += seg;
-      if (pass == 0) {
-        engine::DrawWorldLine(a.x, a.y, b.x, b.y, kShadow, core + 2.4f);
-        continue;
-      }
-      if (left >= seg) {
-        engine::DrawWorldLine(a.x, a.y, b.x, b.y, kGold, core);
-      } else if (left > 0) {
-        const double t = left / seg;
-        const Pt m{a.x + static_cast<int>((b.x - a.x) * t), a.y + static_cast<int>((b.y - a.y) * t)};
-        engine::DrawWorldLine(a.x, a.y, m.x, m.y, kGold, core);
-        engine::DrawWorldLine(m.x, m.y, b.x, b.y, kRed, core);
-      } else {
-        engine::DrawWorldLine(a.x, a.y, b.x, b.y, kRed, core);
-      }
-      left -= seg;
+  const float scale = g.line_preview ? 0.9f : 1.0f;
+  double left = g.econ.move_ft, total = 0;
+  for (size_t i = 1; i < g.line.size(); ++i) {
+    const Pt a = g.line[i - 1], b = g.line[i];
+    const double seg = FeetBetween(a.x, a.y, b.x, b.y);
+    total += seg;
+    if (left >= seg) {
+      GlowSegment(a, b, kGlowGold, scale);
+    } else if (left > 0) {
+      const double t = left / seg;
+      const Pt m{a.x + static_cast<int>((b.x - a.x) * t), a.y + static_cast<int>((b.y - a.y) * t)};
+      GlowSegment(a, m, kGlowGold, scale);
+      GlowSegment(m, b, kGlowRed, scale);
+    } else {
+      GlowSegment(a, b, kGlowRed, scale);
     }
+    left -= seg;
   }
-  const Pt e = g.line.back();
-  const uint32_t end_color = total <= g.econ.move_ft + 0.01 ? kGold : kRed;
-  const int r = 12, ry = 9;  // a ground-plane diamond (4:3) where the walk would end
-  for (int pass = 0; pass < 2; ++pass) {
-    const uint32_t c = pass ? end_color : kShadow;
-    const float w = pass ? 2.2f : 4.2f;
-    engine::DrawWorldLine(e.x - r, e.y, e.x, e.y - ry, c, w);
-    engine::DrawWorldLine(e.x, e.y - ry, e.x + r, e.y, c, w);
-    engine::DrawWorldLine(e.x + r, e.y, e.x, e.y + ry, c, w);
-    engine::DrawWorldLine(e.x, e.y + ry, e.x - r, e.y, c, w);
-  }
+  GlowRing(g.line.back(), total <= g.econ.move_ft + 0.01 ? kGlowGold : kGlowRed);
 }
 
 
@@ -637,6 +685,7 @@ void TakeRolls() {
     // the sound goes with that line, this frame (the last save of the frame wins).
     if (e.kind == engine::RollEvent::Save && g.save_sounds) sound = true, sound_good = e.success;
     if (!g.running || !Contains(g.in, e.actor)) continue;
+    if (e.kind == engine::RollEvent::Attack && e.actor == g.current) g.econ.Swing();
     Log("tbc: roll: %s %s d20 %d total %d needs %d -> %s", Who(e.actor).c_str(),
         e.kind == engine::RollEvent::Attack ? ("attacks " + Who(e.target)).c_str() : "saves", e.roll, e.total, e.needs,
         e.success ? (e.kind == engine::RollEvent::Attack ? "hit" : "saved") : (e.kind == engine::RollEvent::Attack ? "miss" : "failed"));
@@ -692,9 +741,37 @@ void FillDice(HudView* v) {
   v->dice_sum = b;
 }
 
-// The creature under the cursor (combatants only) and, for a foe, the chance that the active party
-// member (or the leader) hits it with the engine's own THAC0 and AC.
-void FillHover(HudView* v) {
+// Status icons (buffs/debuffs) of a creature: one per spell or item with timed effects on it.
+std::vector<StatusIconView> StatusIconsOf(int32_t id, int box, size_t max_icons) {
+  std::vector<StatusIconView> out;
+  if (!g.res) return out;
+  std::vector<StatusEffect> fx;
+  for (const auto& e : engine::ParentEffects(id)) fx.push_back({e.parent_type, e.parent, e.parent_flags, e.left, e.timed});
+  uint32_t now = 0;
+  bool running = false;
+  engine::WorldTime(&now, &running);
+  const int round = engine::RoundLengthTicks() ? engine::RoundLengthTicks() : kRoundTicksPst;
+  for (const StatusIcon& s : CollectStatus(id, fx, now, round, &g.status_spans, max_icons * 2)) {
+    std::string bam;
+    int32_t name = -1;
+    if (s.parent_type == 1) {
+      if (const SpellFacts* f = g.res->Spell(s.parent)) bam = f->icon, name = f->name;
+    } else if (const ItemFacts* f = g.res->Item(s.parent)) {
+      bam = f->icon, name = f->name;
+    }
+    if (bam.empty()) continue;  // no icon to show (helper spells)
+    const auto size = g.res->BamSize(bam);
+    if (size.first <= 0) continue;
+    out.push_back(MakeIconView(s, bam, name, size.first, size.second, box));
+    if (out.size() >= max_icons) break;
+  }
+  return out;
+}
+
+// The creature under the cursor (anyone alive in the leader's area; combatants only in a fight), its
+// status icons and, for a foe in a fight, the chance that the active party member (or the leader) hits it
+// with the engine's own THAC0 and AC.
+void FillHover(HoverView* v) {
   int wx = 0, wy = 0;
   if (g.hover_at.x >= 0) {
     wx = g.hover_at.x, wy = g.hover_at.y;  // test probe PSTF_HoverAt
@@ -702,27 +779,61 @@ void FillHover(HudView* v) {
     return;
   }
   std::vector<HoverCandidate> cand;
-  for (int32_t id : g.in) {
-    engine::SpriteInfo o;
-    if (engine::GetSprite(id, &o) && o.alive) cand.push_back({id, o.x, o.y});
+  if (g.running) {
+    for (int32_t id : g.in) {
+      engine::SpriteInfo o;
+      if (engine::GetSprite(id, &o) && o.alive) cand.push_back({id, o.x, o.y});
+    }
+  } else {
+    for (const auto& s : engine::AllSprites())
+      if (s.area == g.area && s.alive) cand.push_back({s.id, s.x, s.y});
   }
   const int32_t id = PickHovered(cand, wx, wy);
   if (id == -1) return;
   engine::SpriteInfo o;
   if (!engine::GetSprite(id, &o)) return;
-  v->hover = true;
-  v->hover_name_ref = o.name_ref;
-  v->hover_name = Who(id);
-  v->hover_hp = o.hp;
-  v->hover_max = o.max_hp;
+  v->on = true;
+  v->fight = g.running;
+  v->name_ref = o.name_ref;
+  v->name = Who(id);
+  v->hp = o.hp;
+  v->max_hp = o.max_hp;
+  v->icons = StatusIconsOf(id, kStatusHoverPx, kHoverIcons);
+  if (!g.running) return;
   const Combatant* c = g.dir->Find(id);
-  v->hover_foe = c && c->r.side == Side::Hostile;
+  v->foe = c && c->r.side == Side::Hostile;
   const int32_t me = PartySlot(g.current) >= 0 ? g.current : (g.party.empty() ? -1 : g.party[0]);
   engine::CombatStats a, t;
-  if (v->hover_foe && me != -1 && engine::GetCombatStats(me, &a) && engine::GetCombatStats(id, &t)) {
-    v->hover_ac = t.ac;
-    v->hover_needs = NeedsToHit(a.thac0, t.ac);
-    v->hover_chance = HitChancePercent(a.thac0, t.ac);
+  if (v->foe && me != -1 && engine::GetCombatStats(me, &a) && engine::GetCombatStats(id, &t)) {
+    v->ac = t.ac;
+    v->needs = NeedsToHit(a.thac0, t.ac);
+    v->chance = HitChancePercent(a.thac0, t.ac);
+  }
+}
+
+// Every frame (all screens): our menus on the stack where they belong; on the world screen and the menu
+// screens, the status icons next to the portraits (4 times a second) and the hover card (world only).
+void UpdateStatusHud(engine::Screen scr) {
+  if (!g.hud) return;
+  std::string code = "if pstfHudGuard then pstfHudGuard() end";
+  const bool world = scr == engine::Screen::World;
+  if (world || scr == engine::Screen::Other) {
+    const uint32_t ms = GetTickCount();
+    if (ms - g.status_t0 >= 250 || g.status_t0 == 0 || world) {
+      if (ms - g.status_t0 >= 250 || g.status_t0 == 0) {
+        g.status_t0 = ms | 1u;
+        g.status_party.clear();
+        for (int32_t id : engine::PartyIds()) g.status_party.push_back(StatusIconsOf(id, kStatusPortraitPx, kStatusIcons));
+      }
+      HoverView h;
+      if (world) FillHover(&h);
+      code += " " + BuildStatusLua(g.status_party, h) + " pstfStatusLayout()";
+    }
+  }
+  const std::string err = engine::LuaDoString(code.c_str());
+  if (!err.empty()) {
+    static int reported = 0;
+    if (reported++ < 5) Log("tbc: status hud update failed: %s", err.c_str());
   }
 }
 
@@ -804,13 +915,28 @@ void UpdateHud(uint32_t now) {
     v.cards.push_back(card);
   }
   v.party_turn = PartySlot(g.current) >= 0;  // also with party AI (tests, demos)
-  FillHover(&v);
   FillDice(&v);
   v.slot = PartySlot(g.current);
   v.move_ft = g.econ.move_ft;
   v.max_ft = g.econ.max_ft;
   v.action_used = g.econ.action_used;
   v.acting = g.econ.acting;
+  v.attacks_left = g.econ.want_swings > 0 ? g.econ.SwingsLeft() : -1;
+  v.attacks_round = g.econ.want_swings;
+  {
+    const uint32_t ms = GetTickCount();
+    g.floats.erase(std::remove_if(g.floats.begin(), g.floats.end(), [&](const State::Float& f) {
+                     return static_cast<int32_t>(f.until - ms) <= 0;
+                   }), g.floats.end());
+    for (const auto& f : g.floats) {
+      engine::SpriteInfo o;
+      if (!engine::GetSprite(f.id, &o)) continue;
+      int wx = o.x, wy = o.y, ux = 0, uy = 0;
+      engine::InterpDrawPos(f.id, &wx, &wy);
+      if (!engine::WorldToUi(wx, wy - 90, &ux, &uy)) continue;  // above its head
+      v.floats.push_back({ux, uy, f.text});
+    }
+  }
   if (now < g.notice_until) v.msg = g.notice;
   engine::SpriteInfo me;
   if (g.current != -1 && engine::GetSprite(g.current, &me)) {
@@ -841,7 +967,7 @@ void UpdateHud(uint32_t now) {
   }
   if (!v.party_turn) bar = " pstfBar = {}";
   const std::string code = BuildHudLua(v) + bar +
-                           " if not pstfTbcOpen then Infinity_PushMenu('PSTF_TBC') end pstfTbcLayout()";
+                           " pstfTbcLayout()";
   const std::string err = engine::LuaDoString(code.c_str());
   if (!err.empty()) {
     static int reported = 0;
@@ -866,10 +992,24 @@ void OnTick(uint64_t frame) {
   // tick belong to the iterations that advanced the world, not to the extra draw-only ones.
   if (!engine::InterpTickFrame()) return;
   if (!g.running) TestTick();
-  if (engine::ActiveScreen() != engine::Screen::World) {
+  const engine::Screen scr = engine::ActiveScreen();
+  UpdateStatusHud(scr);
+  if (scr == engine::Screen::Other) {
+    // Inventory, character sheet, journal, map...: the fight waits as it is (same turn, same order).
+    if (g.running && !g.paused_screen) Log("tbc: fight waits while a menu screen is up");
+    g.paused_screen = g.running;
+    if (g.running) TestTick();  // tests drive the screens too
+    return;
+  }
+  if (scr != engine::Screen::World) {
     EndFight("left the world screen");
     g.have_time = false;
+    g.paused_screen = false;
     return;
+  }
+  if (g.paused_screen) {
+    g.paused_screen = false;
+    Log("tbc: back on the world screen, the fight goes on");
   }
   uint32_t now = 0;
   bool running = false;
@@ -888,9 +1028,24 @@ void OnTick(uint64_t frame) {
   if (g.music && !g.party.empty()) engine::KeepBattleMusic(g.party[0], 150);
   if (g.sight && !g.party.empty()) {
     std::vector<int32_t> foes;
-    for (int32_t id : g.in)
-      if (PartySlot(id) < 0) foes.push_back(id);
-    engine::RevealCombatants(g.party[0], foes, 96);  // the party sees everyone in the fight
+    for (int32_t id : g.in) {
+      const Combatant* fc = g.dir->Find(id);
+      if (PartySlot(id) < 0 && fc && fc->r.side == Side::Hostile) foes.push_back(id);
+    }
+    // The party sees every foe in the fight: the fog lifts around it as around a party member, and it
+    // is drawn wherever it stands (as Clairvoyance shows creatures).
+    engine::RevealCombatants(g.party[0], foes, g.sight_radius);
+    engine::KeepVisible(foes);
+  }
+  if (g.no_bored) engine::ResetBoredTimer();
+  // A waiting combatant that was bumped (pushed aside by a walker) must not walk in place: no path.
+  for (int32_t id : g.in) {
+    if (!Held(id)) continue;
+    engine::SpriteInfo o;
+    if (engine::GetSprite(id, &o) && o.has_path) {
+      engine::DropPath(id);
+      CLog("PUSH", Name(id) + " was pushed while waiting: path dropped");
+    }
   }
   if (g.round_effects) engine::WatchProjectiles();
   TestTick();  // after the clock shift: tests read the same remaining ticks the engine compares
@@ -929,6 +1084,12 @@ void OnTick(uint64_t frame) {
   // A quick item used between two frames still takes the action (UseItem = 34).
   const uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
   const EconomyStep st = g.econ.Feed(dt, moved, s.has_path, fed);
+  if (!g.econ.party && s.has_path && !g.steady_ai) {
+    // Sure of itself: its script does not re-plan the walk every pass (stop-and-go); it walks there in
+    // one go, then acts. The engine lifts SetInterrupt(FALSE) when its action queue runs empty.
+    g.steady_ai = true;
+    engine::SetNoInterrupt(cur);
+  }
   g.hold_current = st.hold_walk;
   if (st.nudge) {
     // Its own script picked nothing (many creatures only wait or wander): the engine's attack on the
@@ -979,7 +1140,9 @@ void OnTick(uint64_t frame) {
       for (int32_t id : g.in) n += engine::ResolvingOnsets(id);  // e.g. Cone of Cold's 100-tick onset
     }
     // A projectile appears up to a second after the cast animation ends: give it 25 ticks.
-    if (n > 0 || (g.econ.action_used && g.since_action < 25 && g.resolve_ticks < kResolveCapTicks)) {
+    // A melee or ranged attack has no projectile to wait for (an arrow is part of its swing).
+    const bool may_cast = g.econ.act_action != 3;
+    if (n > 0 || (g.econ.action_used && may_cast && g.since_action < 25 && g.resolve_ticks < kResolveCapTicks)) {
       wait_spell = true;
       g.resolve_ticks += dt;
       if (!g.resolving_logged) {
@@ -1422,6 +1585,96 @@ int __cdecl LuaBarSlots(engine::LuaState* L) {
   return 1;
 }
 
+// PSTF_CenterOn(id): the initiative card click: the camera centres on that combatant (where it is drawn).
+int __cdecl LuaCenterOn(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  engine::SpriteInfo o;
+  const bool ok = engine::GetSprite(id, &o);
+  if (ok) {
+    int x = o.x, y = o.y;
+    engine::InterpDrawPos(id, &x, &y);
+    g.cam_t0 = 0;  // a pan to the turn owner in progress gives way
+    engine::CenterView(x, y);
+  }
+  Log("lua: PSTF_CenterOn(%X) -> %d", static_cast<unsigned>(id), ok ? 1 : 0);
+  engine::LuaPushBool(L, ok);
+  return 1;
+}
+// PSTF_TbcAttacks() -> attacks this round (0: unknown), swings so far, APR x2 of the active creature.
+int __cdecl LuaTbcAttacks(engine::LuaState* L) {
+  engine::LuaPushNumber(L, g.running ? g.econ.want_swings : 0);
+  engine::LuaPushNumber(L, g.running ? g.econ.swings : 0);
+  engine::LuaPushNumber(L, g.running ? g.apr_halves : 0);
+  return 3;
+}
+// PSTF_SearchByte(x, y[, id]) -> occupancy byte of the search-map cell under world point x,y (probe).
+int __cdecl LuaSearchByte(engine::LuaState* L) {
+  const auto ids = engine::PartyIds();
+  const int x = static_cast<int>(engine::LuaNumberArg(L, 1, -1)), y = static_cast<int>(engine::LuaNumberArg(L, 2, -1));
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 3, ids.empty() ? -1 : ids[0]));
+  const int b = engine::SearchMapByte(id, x / 16, y / 12);
+  Log("lua: PSTF_SearchByte(%d,%d) -> %d", x, y, b);
+  engine::LuaPushNumber(L, b);
+  return 1;
+}
+// PSTF_PreviewPts(x, y) -> "x,y;x,y;..." of the leader's preview path to world point x,y (probe), and
+// PSTF_EnginePath(id) -> the same for the engine's current walk path of that creature.
+int __cdecl LuaPreviewPts(engine::LuaState* L) {
+  const auto ids = engine::PartyIds();
+  const Pt to{static_cast<int>(engine::LuaNumberArg(L, 1, -1)), static_cast<int>(engine::LuaNumberArg(L, 2, -1))};
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 3, ids.empty() ? -1 : ids[0]));
+  std::string out;
+  engine::SpriteInfo me;
+  if (engine::GetSprite(id, &me))
+    for (const Pt& p : PreviewPoints(PreviewCells(id, {me.x, me.y}, to), to))
+      out += std::to_string(p.x) + "," + std::to_string(p.y) + ";";
+  Log("lua: PSTF_PreviewPts(%d,%d) -> %s", to.x, to.y, out.c_str());
+  engine::LuaPushString(L, out.c_str());
+  return 1;
+}
+int __cdecl LuaEnginePath(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  std::string out;
+  for (const auto& p : engine::PathPoints(id)) out += std::to_string(p.first) + "," + std::to_string(p.second) + ";";
+  Log("lua: PSTF_EnginePath(%X) -> %s", static_cast<unsigned>(id), out.c_str());
+  engine::LuaPushString(L, out.c_str());
+  return 1;
+}
+
+// PSTF_IconSize(bam) -> w, h of its first frame (0, 0 when unknown): hotbar icons keep their aspect.
+int __cdecl LuaIconSize(engine::LuaState* L) {
+  const std::string name = engine::LuaStringArg(L, 1);
+  const auto s = g.res ? g.res->BamSize(name) : std::pair<int, int>{0, 0};
+  engine::LuaPushNumber(L, s.first);
+  engine::LuaPushNumber(L, s.second);
+  return 2;
+}
+
+// PSTF_Status(id) -> number of status icons; logs "BAM name rounds buff|debuff frame-rects;..." and the raw
+// timed parent effects (type res flags left).
+int __cdecl LuaStatus(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  std::string raw;
+  for (const auto& e : engine::ParentEffects(id))
+    raw += std::to_string(e.parent_type) + ":" + e.parent + ":" + std::to_string(e.parent_flags) + ":" + std::to_string(e.left) + " ";
+  const auto icons = StatusIconsOf(id, kStatusPortraitPx, kStatusIcons);
+  std::string out;
+  for (const auto& v : icons)
+    out += v.bam + " " + std::to_string(v.name_ref) + " r" + std::to_string(v.rounds) + (v.debuff ? " debuff" : " buff") +
+           " frame" + std::to_string(v.frame.size()) + ";";
+  Log("lua: PSTF_Status(%X) -> %zu: %s | effects %s", static_cast<unsigned>(id), icons.size(), out.c_str(), raw.c_str());
+  engine::LuaPushNumber(L, static_cast<double>(icons.size()));
+  return 1;
+}
+
+std::string Bg3Transform(const std::string& ui) {
+  std::string why;
+  std::string out = Bg3Layout(ui, &why, g.party_max);
+  if (why.empty()) Log("tbc: BG3 layout: %d portraits on the left edge, hotbar in the bottom bar", g.party_max);
+  else Log("tbc: BG3 layout not applied: %s", why.c_str());
+  return out;
+}
+
 int IniInt(const IniMap& ini, const char* key, int fallback) {
   auto it = ini.find(key);
   if (it == ini.end() || it->second.empty()) return fallback;
@@ -1457,6 +1710,10 @@ bool InstallTbc(const IniMap& ini) {
   g.dice_panel = IniBool(ini, "tbc.dice_panel", false);
   g.save_sounds = IniBool(ini, "tbc.save_sounds", true);
   g.sight = IniBool(ini, "tbc.combat_sight", true);
+  g.sight_radius = IniInt(ini, "tbc.sight_radius", g.sight_radius);
+  g.select_voice = IniBool(ini, "tbc.select_voice", true);
+  g.no_bored = IniBool(ini, "tbc.no_bored", true);
+  g.party_max = IniInt(ini, "party.size", 6) >= 8 && IniBool(ini, "party.enabled", false) ? 8 : 6;
   {
     const int feet = IniInt(ini, "tbc.move_feet", 31);
     g.move_feet = feet > 0 ? feet : 31;
@@ -1479,6 +1736,7 @@ bool InstallTbc(const IniMap& ini) {
     std::wstring dir(exe);
     dir = dir.substr(0, dir.find_last_of(L"\\/") + 1);
     g.sound_dir = dir + L"pst_forever\\sounds\\";
+    g.res = std::make_unique<GameRes>(dir.substr(0, dir.size() - 1));
     char exe8[MAX_PATH] = {};
     GetModuleFileNameA(nullptr, exe8, MAX_PATH);
     std::string d8(exe8);
@@ -1540,7 +1798,9 @@ bool InstallTbc(const IniMap& ini) {
   }
   if (IniBool(ini, "tbc.hud", true)) {
     if (engine::HudAvailable() && engine::InstallMenuHook()) {
-      engine::AddMenuText(BuildHudMenu());
+      const bool bg3 = IniBool(ini, "tbc.bg3_layout", true);
+      engine::AddMenuText(BuildHudMenu(bg3, g.party_max));
+      if (bg3) engine::AddMenuTransform(&Bg3Transform);
       g.hud = true;
       g.draw = engine::InstallWorldDraw(&DrawOverlay);
       g.rolls = engine::InstallRollHooks();
@@ -1578,6 +1838,13 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_DiceAt", &LuaDiceAt);
   dev::AddLuaFunction("PSTF_HoverAt", &LuaHoverAt);
   dev::AddLuaFunction("PSTF_RollProbe", &LuaRollProbe);
+  dev::AddLuaFunction("PSTF_CenterOn", &LuaCenterOn);
+  dev::AddLuaFunction("PSTF_IconSize", &LuaIconSize);
+  dev::AddLuaFunction("PSTF_Status", &LuaStatus);
+  dev::AddLuaFunction("PSTF_TbcAttacks", &LuaTbcAttacks);
+  dev::AddLuaFunction("PSTF_SearchByte", &LuaSearchByte);
+  dev::AddLuaFunction("PSTF_PreviewPts", &LuaPreviewPts);
+  dev::AddLuaFunction("PSTF_EnginePath", &LuaEnginePath);
   Log("tbc: installed (ProcessAI slot, 2 walk calls, tick); radii %d/%d/%d, end turn key %X%s, "
       "move %.0f ft, hud %s, camera %s",
       g.radii.start, g.radii.join, g.radii.leave, g.end_turn_vk, g.auto_party ? ", auto party" : "",

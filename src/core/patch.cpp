@@ -46,6 +46,8 @@ bool WriteCode(void* dst, const void* src, size_t n) {
 
 uint8_t* AllocCode(size_t n) { return AllocTrampoline(n); }
 
+bool WriteBytesAt(uint32_t rva, const uint8_t* bytes, size_t n) { return WriteCode(Va(rva), bytes, n); }
+
 bool PatchCode(const sym::Symbol& s, const uint8_t* bytes, size_t n) {
   if (n > s.len || !CheckSymbol(s)) return false;
   return WriteCode(Va(s.rva), bytes, n);

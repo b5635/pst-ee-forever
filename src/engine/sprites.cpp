@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "engine/sprites.h"
+#include "engine/party.h"
 
 #include <cstdlib>
 
@@ -97,6 +98,11 @@ bool HudOk() {
     for (const auto& s : sym::kAll)
       for (uint32_t r : need)
         if (s.rva == r) {
+          // The 8-member party retargets this instruction's displacement (engine/party.cpp checked it).
+          if (r == sym::kRvaPartyIds && Party8()) {
+            ++found;
+            continue;
+          }
           if (!CheckSymbol(s)) return 0;
           ++found;
         }
@@ -162,6 +168,11 @@ bool SelectOk() {
     for (const auto& s : sym::kAll)
       for (uint32_t r : need)
         if (s.rva == r) {
+          // The 8-member party retargets this instruction's displacement (engine/party.cpp checked it).
+          if (r == sym::kRvaPartyIds && Party8()) {
+            ++found;
+            continue;
+          }
           if (!CheckSymbol(s)) return 0;
           ++found;
         }
@@ -180,6 +191,11 @@ bool CostOk() {
     for (const auto& s : sym::kAll)
       for (uint32_t r : need)
         if (s.rva == r) {
+          // The 8-member party retargets this instruction's displacement (engine/party.cpp checked it).
+          if (r == sym::kRvaPartyIds && Party8()) {
+            ++found;
+            continue;
+          }
           if (!CheckSymbol(s)) return 0;
           ++found;
         }
@@ -218,6 +234,65 @@ int CellCoster::Cost(int cx, int cy, int16_t* pixel) const {
   return c;
 }
 
+namespace {
+// The search map of the creature's area, its occupancy bytes and size (0 if none).
+uint64_t SearchOcc(int32_t id, int* w, int* h, int* cx, int* cy) {
+  const uint64_t p = HudAvailable() && CostOk() ? Lookup(id) : 0;
+  if (!p) return 0;
+  const uint64_t area = R<uint64_t>(p + sym::kOffSpriteArea);
+  if (!Plausible(area)) return 0;
+  const uint64_t bm = area + sym::kOffAreaSearch;
+  *w = R<int32_t>(bm + 312);
+  *h = R<int32_t>(bm + 316);
+  const uint64_t occ = R<uint64_t>(bm + 288);
+  if (*w <= 0 || *h <= 0 || *w > 4096 || *h > 4096 || !Plausible(occ)) return 0;
+  if (cx) *cx = R<int32_t>(p + sym::kOffSpritePos) / 16;
+  if (cy) *cy = R<int32_t>(p + sym::kOffSpritePos + 4) / 12;
+  return occ;
+}
+}  // namespace
+
+SearchMapLift::SearchMapLift(int32_t id) {
+  int w = 0, h = 0, cx = 0, cy = 0;
+  const uint64_t occ = SearchOcc(id, &w, &h, &cx, &cy);
+  if (!occ) return;
+  const int ps = CosterFor(id).personal_space;
+  const int half = (ps - 1) / 2, diamond = ps / 2 + 1;
+  for (int y = cy - half; y <= cy + half; ++y)
+    for (int x = cx - half; x <= cx + half; ++x) {
+      if (x < 0 || y < 0 || x >= w || y >= h || std::abs(x - cx) + std::abs(y - cy) > diamond) continue;
+      const uint64_t a = occ + static_cast<uint64_t>(y) * w + x;
+      const uint8_t b = R<uint8_t>(a);
+      if (!(b & 0x7F)) continue;
+      saved_.push_back({a, b});
+      *reinterpret_cast<volatile uint8_t*>(a) = static_cast<uint8_t>(b & 0x80);
+    }
+  occ_ = occ;
+}
+SearchMapLift::~SearchMapLift() {
+  for (const auto& s : saved_) *reinterpret_cast<volatile uint8_t*>(s.first) = s.second;
+}
+int SearchMapByte(int32_t id, int cx, int cy) {
+  int w = 0, h = 0;
+  const uint64_t occ = SearchOcc(id, &w, &h, nullptr, nullptr);
+  if (!occ || cx < 0 || cy < 0 || cx >= w || cy >= h) return -1;
+  return R<uint8_t>(occ + static_cast<uint64_t>(cy) * w + cx);
+}
+
+int CellCoster::SearchCost(int cx, int cy) const {
+  const int base = Cost(cx, cy);
+  if (base >= 0xFF || !occ) return base;
+  const int half = (personal_space - 2) / 2;
+  int cost = base;
+  for (int dy = -half; dy <= half; ++dy)
+    for (int dx = -half; dx <= half; ++dx) {
+      const int x = cx + dx, y = cy + dy;
+      if (x < 0 || y < 0 || x >= width || y >= height || std::abs(dx) + std::abs(dy) > half + 1) continue;
+      cost += 5 * base * (R<uint8_t>(occ + static_cast<uint64_t>(y) * width + x) & 0x0E);
+    }
+  return cost;
+}
+
 CellCoster CosterFor(int32_t id) {
   CellCoster c;
   const uint64_t p = HudAvailable() && CostOk() ? Lookup(id) : 0;
@@ -238,6 +313,8 @@ CellCoster CosterFor(int32_t id) {
   c.width = R<int32_t>(c.bitmap + 312);
   c.height = R<int32_t>(c.bitmap + 316);
   if (c.width <= 0 || c.height <= 0 || c.width > 4096 || c.height > 4096) c.bitmap = 0;
+  c.occ = c.bitmap ? R<uint64_t>(c.bitmap + 288) : 0;
+  if (!Plausible(c.occ)) c.occ = 0;
   return c;
 }
 
@@ -246,11 +323,11 @@ bool IsSelected(int32_t id) {
   return p && R<int32_t>(p + sym::kOffSpriteSelected) != 0;
 }
 
-void SelectOnly(int32_t id) {
+void SelectOnly(int32_t id, bool sound) {
   const uint64_t g = SelectOk() && SpritesAvailable() ? Game() : 0;
   if (!g) return;
   reinterpret_cast<void(__fastcall*)(uint64_t)>(Va(sym::kRvaUnselectAll))(g);
-  if (id != -1) reinterpret_cast<int64_t(__fastcall*)(uint64_t, int32_t, uint8_t)>(Va(sym::kRvaSelectChar))(g, id, 0);
+  if (id != -1) reinterpret_cast<int64_t(__fastcall*)(uint64_t, int32_t, uint8_t)>(Va(sym::kRvaSelectChar))(g, id, sound ? 1 : 0);  // SelectCharacter(id, playSound) lin 36A1A0 L110
   reinterpret_cast<void(__fastcall*)(uint64_t)>(Va(sym::kRvaSelectToolbar))(g);
 }
 
@@ -266,6 +343,11 @@ bool SpritesAvailable() {
     for (const auto& s : sym::kAll)
       for (uint32_t r : need)
         if (s.rva == r) {
+          // The 8-member party retargets this instruction's displacement (engine/party.cpp checked it).
+          if (r == sym::kRvaPartyIds && Party8()) {
+            ++found;
+            continue;
+          }
           if (!CheckSymbol(s)) return 0;
           ++found;
         }
@@ -394,8 +476,8 @@ void RestoreObjectPos(int32_t id, int x, int y) {
 
 bool EvalAs(int32_t id, const std::string& bcs) {
   const uint64_t g = SpritesAvailable() ? Game() : 0;
-  if (!g || !Lookup(id) || R<int16_t>(g + sym::kOffGamePartyCount) < 1) return false;
-  volatile int32_t* slot0 = reinterpret_cast<volatile int32_t*>(g + sym::kOffGamePartyIds);
+  if (!g || !Lookup(id) || R<int16_t>(g + Party().count_off) < 1) return false;
+  volatile int32_t* slot0 = reinterpret_cast<volatile int32_t*>(g + Party().order_off);
   const int32_t keep = *slot0;
   *slot0 = id;
   const std::string err = LuaDoString(("C:Eval(" + LuaQuote(bcs) + ", 0)").c_str());
@@ -407,9 +489,9 @@ std::vector<int32_t> PartyIds() {
   std::vector<int32_t> ids;
   const uint64_t g = SpritesAvailable() ? Game() : 0;
   if (!g) return ids;
-  const int n = R<int16_t>(g + sym::kOffGamePartyCount);
-  for (int i = 0; i < n && i < 6; ++i) {
-    const int32_t id = R<int32_t>(g + sym::kOffGamePartyIds + 4 * i);
+  const int n = R<int16_t>(g + Party().count_off);
+  for (int i = 0; i < n && i < Party().max; ++i) {
+    const int32_t id = R<int32_t>(g + Party().order_off + 4 * i);
     if (id != -1) ids.push_back(id);
   }
   return ids;

@@ -228,6 +228,30 @@ std::vector<EffectView> TimedEffects(int32_t id) {
   return out;
 }
 
+std::vector<ParentEffectView> ParentEffects(int32_t id) {
+  std::vector<ParentEffectView> out;
+  const uint64_t p = ClockSymbolsOk() ? LookupSprite(id) : 0;
+  const uint64_t g = GameObject();
+  if (!p || !g) return out;
+  const uint32_t now = R<uint32_t>(g + 0x7820);
+  ForEachEffect(p, [&](uint64_t eff) {
+    ParentEffectView v;
+    const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
+    v.timed = type == 4096;  // absolute: running now (delayed types have not started)
+    if (!v.timed) return;
+    v.left = static_cast<int32_t>(R<uint32_t>(eff + sym::kOffEffTick) - now);
+    v.parent_type = R<uint32_t>(eff + sym::kOffEffParentType);
+    v.parent_flags = R<uint32_t>(eff + sym::kOffEffParentFlags);
+    for (int i = 0; i < 8; ++i) {
+      const char c = R<char>(eff + sym::kOffEffParentRes + i);
+      if (!c) break;
+      v.parent[i] = c;
+    }
+    out.push_back(v);
+  });
+  return out;
+}
+
 std::vector<ColorEffectView> ColorEffects(int32_t id) {
   std::vector<ColorEffectView> out;
   const uint64_t p = ClockSymbolsOk() ? LookupSprite(id) : 0;
@@ -680,6 +704,36 @@ bool GetCombatStats(int32_t id, CombatStats* out) {
   out->max_hp = R<int16_t>(s + 4);
   out->hp = R<int16_t>(p + sym::kOffSpriteHp);
   return true;
+}
+
+int NumAttacksStat(int32_t id) {
+  static const int ok = AllOk({sym::kRvaThac0Ac, sym::kRvaHalfAttack}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  return p ? R<int16_t>(Stats(p) + sym::kOffStatNumAttacks) : -1;
+}
+
+void SetHalfAttackReal(int32_t id, bool real) {
+  static const int ok = AllOk({sym::kRvaHalfAttack}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p) return;
+  const uint32_t v = R<uint32_t>(p + sym::kOffSpriteHalfAttack);
+  if (((v & 1) == 0) != real) W<uint32_t>(p + sym::kOffSpriteHalfAttack, v + 1);
+}
+
+void KeepVisible(const std::vector<int32_t>& ids) {
+  static const int ok = AllOk({sym::kRvaShowMonstersVis}) ? 1 : 0;
+  if (!ok) return;
+  for (int32_t id : ids) {
+    const uint64_t p = LookupSprite(id);
+    if (p && R<int16_t>(p + sym::kOffObjVisible) < sym::kVisibleCount) W<int16_t>(p + sym::kOffObjVisible, sym::kVisibleCount);
+  }
+}
+
+void ResetBoredTimer() {
+  static const int ok = AllOk({sym::kRvaBoredInc}) ? 1 : 0;
+  const uint64_t c = ok ? R<uint64_t>(sym::kVaBaldurChitin) : 0;
+  const uint64_t w = c && PlausiblePtr(c) ? R<uint64_t>(c + sym::kOffChitinWorldScreen) : 0;
+  if (w && PlausiblePtr(w)) W<uint32_t>(w + sym::kOffWorldBored, 0);
 }
 
 std::vector<BarButton> ActionBarButtons() {

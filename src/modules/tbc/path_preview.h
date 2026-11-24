@@ -22,14 +22,19 @@ namespace pstf::tbc {
 constexpr int kImpassable = 0xFF;
 using CostFn = std::function<int(int cx, int cy)>;  // cell -> 1..254, or kImpassable
 
-// Every cell on the segment (Bresenham) after `a` is walkable (a: where the walker already is).
-inline bool LineWalkable(Pt a, Pt b, const CostFn& cost) {
+// Every cell on the segment (Bresenham) after `a` is walkable (a: where the walker already is) and,
+// with `max_cost`, no dearer than that (a straight cut must not run through a creature the path went
+// round).
+inline bool LineWalkable(Pt a, Pt b, const CostFn& cost, int max_cost = kImpassable - 1) {
   int x = a.x, y = a.y;
   const int dx = std::abs(b.x - a.x), dy = -std::abs(b.y - a.y);
   const int sx = a.x < b.x ? 1 : -1, sy = a.y < b.y ? 1 : -1;
   int err = dx + dy;
   for (bool first = true;; first = false) {
-    if (!first && cost(x, y) >= kImpassable) return false;
+    if (!first) {
+      const int c = cost(x, y);
+      if (c >= kImpassable || c > max_cost) return false;
+    }
     if (x == b.x && y == b.y) return true;
     const int e2 = 2 * err;
     if (e2 >= dy) err += dy, x += sx;
@@ -94,12 +99,20 @@ inline std::vector<Pt> FindCellPath(Pt start, Pt goal, const CostFn& cost, int m
   std::vector<Pt> cells;
   for (int k = gk; k != -1; k = parent[k]) cells.push_back({k % grid_w, k / grid_w});
   std::reverse(cells.begin(), cells.end());
-  // String pulling: from each kept point, jump to the farthest cell still in a straight walkable line.
+  // String pulling: from each kept point, jump to the farthest cell still in a straight walkable line
+  // that is no dearer per cell than the path it replaces (detours round creatures stay detours).
+  std::vector<int> cell_cost(cells.size());
+  for (size_t k = 0; k < cells.size(); ++k) cell_cost[k] = cost(cells[k].x, cells[k].y);
   out.push_back(cells.front());
   size_t i = 0;
   while (i + 1 < cells.size()) {
     size_t j = cells.size() - 1;
-    while (j > i + 1 && !LineWalkable(cells[i], cells[j], cost)) --j;
+    auto dearest = [&](size_t a, size_t b) {
+      int m = 0;
+      for (size_t k = a + 1; k <= b; ++k) m = std::max(m, cell_cost[k]);
+      return m;
+    };
+    while (j > i + 1 && !LineWalkable(cells[i], cells[j], cost, dearest(i, j))) --j;
     out.push_back(cells[j]);
     i = j;
   }

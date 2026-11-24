@@ -199,5 +199,23 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   lit by the lighting pass). Test: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\gore.lua -Env @{PSTF_TEST_TICK='1';
   PSTF_TBC_AUTOPARTY='1'} -Until 'gore: ok|TEST FAIL' -Close -Timeout 300`. Probes: `PSTF_GoreState()`,
   `PSTF_GoreHit(id, severity[, crit[, anim]])`. Deploy keeps an existing ini: add new sections to the game's ini by hand.
+- Turn-based APR + menu screens: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\tbc_apr.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'tbc_apr: ok|TEST FAIL' -Close -Timeout 400`
+  (TNO 1 1/2 APR swings 2,1,2,1; the inventory mid-fight keeps fight and order). Probe `PSTF_TbcAttacks()` -> wanted,
+  swung, APR x2 of the active creature; combat.log `APR` lines. Path preview vs engine walk: `tests\ingame\tbc_path.lua`
+  (same env without AUTOPARTY, `-Until 'tbc_path: ok|TEST FAIL'`); probes `PSTF_PreviewPts(x,y[,id])`, `PSTF_EnginePath(id)`,
+  `PSTF_SearchByte(x,y)` (search-map occupancy: a standing creature is 0x02, dear ground to the engine's search, not a wall).
+  `PSTF_CenterOn(id)` (initiative card click). BG3 bar layout = a UI.MENU text transform (`src/modules/tbc/ui_layout.h`,
+  log `tbc: BG3 layout: ...`); hotbar BAMs `data/override/PF*.BAM` from `python -I tools/make_ui_bams.py` (deploy copies
+  them into `<game>\override`). `launch.ps1`/`deploy.ps1` close a running game: check `Get-Process Torment` first, the
+  user may be playing.
+- HUD across screens (`tests\ingame\tbc_screens.lua`, save 126, env `PSTF_TEST_TICK=1`, `-Until 'tbc_screens: ok|TEST FAIL'`):
+  item icon aspect, Blessing status icon, hover card out of a fight, hotbar pages, bar after the inventory,
+  nothing of ours on the options screen. Our menus (PSTF_BAR, PSTF_PORTRAITS, PSTF_STATUS, PSTF_TBC) are put on/off
+  the stack every frame by Lua `pstfHudGuard()` (an engine bar pushed again goes over ours: `pstfHudRaise()` from
+  its onOpen re-pushes ours). Probes: `PSTF_Status(id)` (icons + raw parent effects), `PSTF_IconSize(bam)` (frame 0
+  of cycle 0: BAM V1/BAMC/V2), Lua `pstfStat`, `pstfHov`, `pstfBarPages()`. `src/core/gameres.*` reads override +
+  chitin.key/BIF (BAM sizes, SPL/ITM icon and name). CGameEffect parent: +0x90 type, +0x94 resref, +0x9C flags.
+- 8-member party: `docs/PARTY8_PLAN.md`; `python -I tools/party_refs.py [--list|--bounds]` lists every use of the
+  CInfGame party arrays.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

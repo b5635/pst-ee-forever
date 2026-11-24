@@ -11,6 +11,7 @@
 
 #include "core/patch_math.h"
 #include "engine/symbols.h"
+#include "engine/party_layout.h"
 
 namespace pstf {
 std::string Sha256File(const wchar_t* path);

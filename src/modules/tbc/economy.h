@@ -121,6 +121,21 @@ struct Economy {
   uint32_t since_act = 1000;  // ticks since the action stopped running
   static constexpr uint32_t kFollowUpTicks = 30;  // a forced cast this soon after is part of it
   bool nudged = false;
+  // Attack rounds with the engine's own APR (tbc_rules.h AttacksThisRound): when `want_swings` is set
+  // (> 0) an attack action ends once that many swings have landed and kSwingTailTicks have passed
+  // after the last one (the swing animation finishes), not after a fixed round of ticks; with fewer
+  // swings it may run up to two rounds (the engine's next round brings the missing swing).
+  static constexpr uint32_t kSwingTailTicks = 8;
+  static constexpr uint32_t kAiSettleTicks = 4;  // AI: after its action, this long and the turn is over
+  int want_swings = 0;
+  uint16_t act_action = 0;  // the action that took the turn's action (3 = Attack)
+  int swings = 0;
+  uint32_t since_swing = 0;
+  void Swing() {
+    ++swings;
+    since_swing = 0;
+  }
+  int SwingsLeft() const { return want_swings > swings ? want_swings - swings : 0; }
 
   Economy() = default;
   Economy(double feet, uint32_t round, bool is_party)
@@ -131,6 +146,7 @@ struct Economy {
   EconomyStep Feed(uint32_t dt, double moved_ft, bool has_path, uint16_t action) {
     EconomyStep out;
     total += dt;
+    since_swing += dt;
     if (!party && IsWaitAction(action)) {
       // Waits are ignored: no movement, no time. No action yet (it may have walked or fled): it picks
       // one, the nearest foe; acted (also when its script cut a running attack short with a wait),
@@ -165,6 +181,7 @@ struct Economy {
         } else {
           acting = true;
           action_used = true;
+          act_action = action;
           act_ticks = 0;
           did_something = true;
         }
@@ -176,6 +193,11 @@ struct Economy {
       if (!has_path && !(moved_ft > 0 && moved_ft < kTeleportFt)) act_ticks += dt;
       if (idle_action || walk_action) {
         acting = false;  // the engine finished it (spell cast, item used)
+      } else if (want_swings > 0 && swings > 0) {
+        if ((swings >= want_swings && since_swing >= kSwingTailTicks) || act_ticks >= 2 * round_ticks) {
+          acting = false;
+          out.stop = Stop::RoundDone;  // this round's swings are done
+        }
       } else if (act_ticks >= round_ticks) {
         acting = false;
         out.stop = Stop::RoundDone;  // one attack round, then stop repeating
@@ -185,7 +207,7 @@ struct Economy {
     last_action = action;
     const bool busy = acting || has_path || (!idle_action && out.stop == Stop::None);
     idle = busy ? 0 : idle + dt;
-    out.hold_walk = !MoveLeft();
+    out.hold_walk = !MoveLeft() || (!party && action_used && !acting);  // AI: no wandering off after it
     const bool spent = action_used && !acting && !MoveLeft();
     if (party) {
       out.end_turn = spent && !has_path;
@@ -197,7 +219,8 @@ struct Economy {
       }
       // Gave up: nudged and still nothing in hand (no action, no path) for kNudgeTicks.
       const bool gave_up = nudged && !did_something && idle >= kNudgeTicks;
-      out.end_turn = (spent && !has_path) || (action_used && !acting && idle >= kIdleTicks) ||
+      // Sure of itself: once its action is over, the AI's turn is (no script wandering afterwards).
+      out.end_turn = (spent && !has_path) || (action_used && !acting && since_act >= kAiSettleTicks) ||
                      (idle >= kIdleTicks && did_something && !acting) || gave_up ||
                      (out.stop == Stop::OutOfMove && action_used) ||
                      total >= 3 * round_ticks + kAiThinkTicks + kNudgeTicks;
