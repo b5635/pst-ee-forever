@@ -255,13 +255,13 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   ticks); combat.log `MOVE`/`AOO`/`AI`/`PUSH` lines. Sounds `data/override/PFSND*.WAV` (Ogg in WAV, from the GemRB fork).
 - Maneuver ground effects = filled noisy puffs (`src/modules/tbc/ground_fx.h`, `engine::DrawSoftPuffs`): Run dust burst +
   trail, Withdraw smoke burst + trail, knock-down dust. Look at them: `tools\launch.ps1 -Save 000000126 -Lua
-  tests\ingame	bc_groundfx.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'; PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='150'}
+  tests\ingame\tbc_groundfx.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'; PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='150'}
   -Until 'tbc_groundfx: ok' -Close` (TNO stands at ~572,475 of the half-size shot). Probe `PSTF_GroundFx(kind, id)`.
   Trip hits play the crushing armour sound (`PlayArmorHitSound(id, sym::kHitSoundCrushing)`, HIT_03<armor>).
 - Delayed effects that arrived together are classified together (`SyncSpellOnsets`): a 75-tick onset timed with its
   spell's visuals resolves now (Stygian Ice Storm's 8d8 lands with the ice drop; log `..., with its spell's visuals`).
-  Test: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame	bc_ice.lua -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_ice: ok|TEST FAIL' -Close`.
-  A projectile born outside its caster's turn flies on (`ProjectilePace`): `tests\ingame	bc_ignus_fire.lua` (save 990,
+  Test: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\tbc_ice.lua -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_ice: ok|TEST FAIL' -Close`.
+  A projectile born outside its caster's turn flies on (`ProjectilePace`): `tests\ingame\tbc_ignus_fire.lua` (save 990,
   same env, `-Until 'tbc_ignus_fire: ok|TEST FAIL'`; Ignus' fire starts the fight and must land before his turn).
 - Buffs: PST attached spell objects (op 375: Submerge the Will, shields) end on their own world-time stamp (+0x3FC),
   outside the effect lists: `ShiftEffectClock` moves them too. Their effects (and Power of One's) have no parent
