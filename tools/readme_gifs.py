@@ -8,6 +8,7 @@ Needs ffmpeg and gifski on PATH. Recordings (1920x1080, 30 fps; scenarios in too
   blood.mp4   showcase_blood.lua  real-time melee + every blood type ([tbc] start/join_radius 0 while recording)
   dlg.mp4     tests/ingame/dlgroll.lua
   hammer.mp4  showcase_hammer.lua (save 000000990: night off, then night lit; runs 200 frames)
+  party8.mp4  showcase_party8.lua (the 8-member quick save from tests/ingame/party8.lua; env PSTF_DLG_TEST=1, PSTF_TBC_NOFIGHT=1)
 Times are seconds into the recording: re-check them after a new recording (the log line times minus
 'autoload: world ready' give them, ~0.3 s later in the video).
 """
@@ -26,6 +27,7 @@ CLIPS = {
     "combat.gif": ([("tbc.mp4", 19.6, 9.0)], "crop=1120:630:400:150,scale=640:-2:flags=lanczos", 20, 80),
     "blood.gif": ([("blood.mp4", 21.0, 8.5)], "crop=960:540:800:230,scale=640:-2:flags=lanczos", 20, 80),
     "dialogue_roll.gif": ([("dlg.mp4", 12.3, 10.0)], "crop=960:1080:480:0,scale=480:-2:flags=lanczos", 20, 80),
+    "party8.gif": ([("party8.mp4", 14.6, 27.4)], "scale=640:-2:flags=lanczos", 12, 70),
     "lighting_spell.gif": ([("hammer.mp4", 11.2, 4.4), ("hammer.mp4", 16.0, 4.4)],
                            "[0:v]crop=960:600:220:260,scale=450:-2:flags=lanczos,drawbox=x=8:y=8:w=150:h=34:color=black@0.7:t=fill,drawtext=fontfile='C\\:/Windows/Fonts/georgiab.ttf':text='Vanilla':x=16:y=14:fontsize=22:fontcolor=0xE8C478[a];"
                            "[1:v]crop=960:600:220:260,scale=450:-2:flags=lanczos,drawbox=x=8:y=8:w=150:h=34:color=black@0.7:t=fill,drawtext=fontfile='C\\:/Windows/Fonts/georgiab.ttf':text='PST Forever':x=16:y=14:fontsize=22:fontcolor=0xE8C478[b];"

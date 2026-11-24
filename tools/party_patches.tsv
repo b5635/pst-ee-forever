@@ -101,3 +101,25 @@
 1406F07A8	27 68 90 00 1F 34 2D 01 1F 01 22 01	27 68 BD 00 1F 34 87 01 1F 01 7C 01	CInfGame::Marshal unwind codes (rdata 1406F07A4): SAVE_XMM128 xmm6 0x900->0xBD0, SAVE_NONVOL rbx 0x968->0xC38, ALLOC_LARGE 0x910->0xBE0
 1406F07C8	F0 08 00 00	C0 0B 00 00	CInfGame::Marshal __GSHandlerCheck data: cookie at establisher+0x8F0 -> +0xBC0
 14012577F	B8 08 00 00 00	B8 10 00 00 00	CAIGroup::GetOffsets: formation buffer 2x (8 bytes x 2N): area moves index it by party/portrait slot (lin 4DF1A0 LeaveAreaName, 441170 EnterArea, 551350 CompressTime, 4BC0C0/617D10 Lua leave) but it holds max(selected,7); entry 7 is filled by our hook (engine/party.cpp)
+140141025	B9 D8 07 00 00	B9 18 08 00 00	CBaldurChitin::Init: operator new(sizeof CScreenInventory) 0x7D8 -> 0x818 (room for the 8-slot ground-pile cache at +0x7D8 / flags at +0x7F8)
+140330916	BA D8 07 00 00	BA 18 08 00 00	CScreenInventory scalar deleting dtor: sized delete matches the new size
+140331FAC	83 BC BB 08 07 00 00 00	83 BC BB F8 07 00 00 00	CScreenInventory::FetchGroundPile: cached flag[portrait] (+0x708 i32[6] -> +0x7F8 i32[8]); portraits 6/7 read past it (garbage pile id -> uninitialised CItem* in MapButtonIdToItemInfo, crash in GetUseButtonMode)
+140331FEC	89 84 BB F0 06 00 00	89 84 BB D8 07 00 00	CScreenInventory::FetchGroundPile: pile[portrait] = id (+0x6F0 i32[6] -> +0x7D8 i32[8])
+14033205A	C7 84 BB F0 06 00 00 FF FF FF FF	C7 84 BB D8 07 00 00 FF FF FF FF	CScreenInventory::FetchGroundPile: pile[portrait] = -1
+140332065	C7 84 BB 08 07 00 00 01 00 00 00	C7 84 BB F8 07 00 00 01 00 00 00	CScreenInventory::FetchGroundPile: flag[portrait] = 1
+140332070	8B 84 BB F0 06 00 00	8B 84 BB D8 07 00 00	CScreenInventory::FetchGroundPile: return pile[portrait]
+140331052	48 81 C6 08 07 00 00	48 81 C6 F8 07 00 00	CScreenInventory::CancelEngine: ground-pile flush loop starts at the new flags
+140331059	41 BC 06 00 00 00	41 BC 08 00 00 00	CScreenInventory::CancelEngine: flush loop over 8 piles (mov r12d, 6 -> 8)
+140331069	83 7E E8 FF	83 7E E0 FF	CScreenInventory::CancelEngine: pile = flag - 0x20 (new arrays are 8 apart: cmp [rsi-18h] -> [rsi-20h])
+140331089	8B 5E E8	8B 5E E0	CScreenInventory::CancelEngine: pile = flag - 0x20 (mov ebx, [rsi-18h] -> [rsi-20h])
+140331DEC	48 89 BB 08 07 00 00 48 89 BB 10 07 00 00 48 89 BB 18 07 00 00	0F 57 C0 0F 11 83 F8 07 00 00 0F 11 83 08 08 00 00 0F 1F 40 00	CScreenInventory::EngineActivated: clear the 8 flags (three qword stores -> xorps xmm0; movups [rbx+7F8h]; movups [rbx+808h]; nop4; the tail jmp uiPush takes rcx only)
+140336950	33 C0 89 81 EC 06 00 00 48 89 81 08 07 00 00 48 89 81 10 07 00 00 48 89 81 18 07 00 00 C3 CC CC	33 C0 89 81 EC 06 00 00 0F 57 C0 0F 11 81 F8 07 00 00 0F 11 81 08 08 00 00 C3 CC CC CC CC CC CC	CScreenInventory::ResetGroundPile: page = 0, clear the 8 flags (leaf, rewritten in its 30 bytes + 2 pad)
+14014108E	B9 80 09 00 00	B9 E8 09 00 00	CBaldurChitin::Init: operator new(sizeof CScreenMap) 0x980 -> 0x9E8 (8 party markers of 12 bytes at +0x984; 0x984 = 12 * 0xCB, the engine indexes them as (i + base/12) * 12)
+14033AB52	BA 80 09 00 00	BA E8 09 00 00	CScreenMap scalar deleting dtor: sized delete matches the new size
+14033C960	48 05 C2 00 00 00	48 05 CB 00 00 00	CScreenMap::SetMap: marker[count].pos ((i + 0xC2) * 12 = +0x918 -> (i + 0xCB) * 12 = +0x984)
+14033C97D	89 B4 8B 20 09 00 00	89 B4 8B 8C 09 00 00	CScreenMap::SetMap: marker[count].id (+0x920 -> +0x98C)
+14033C992	66 83 FF 06	66 83 FF 08	CScreenMap::SetMap: one marker per party order slot, 8 (cmp di, 6 -> 8)
+14033CC45	B8 AB AA AA 2A F7 EF 8B C2 C1 E8 1F 03 D0 8D 04 52 03 C0 2B F8	83 E7 07 0F 1F 84 00 00 00 00 00 0F 1F 84 00 00 00 00 00 66 90	CScreenMap::TimerAsynchronousUpdate: the marker refreshed this tick = tick % 6 -> tick & 7 (and edi, 7; eax/edx are reloaded before use)
+14033CCAD	48 05 C2 00 00 00	48 05 CB 00 00 00	CScreenMap::TimerAsynchronousUpdate: marker[i].pos = sprite pos (new array)
+14033C5B0	48 8D 87 C2 00 00 00	48 8D 87 CB 00 00 00	CScreenMap::RenderAreaMap (named RenderFogOfWar in the port; lin 400DF0): marker[i].pos (new array)
+14033C59C	8B 8C 86 20 09 00 00	8B 8C 86 8C 09 00 00	CScreenMap::RenderAreaMap: marker[i].id (+0x920 -> +0x98C)

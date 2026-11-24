@@ -247,8 +247,13 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   Tests (Hive): `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\party8.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'}
   -Until 'party8: ok|TEST FAIL' -Close -Timeout 200` (joins to 8, quick-saves = `000000001`), then with `-Save 000000001`:
   `party8_load.lua` (`-Until 'party8_load: ok|TEST FAIL'`), `party8_formation.lua` (same env), `party8_fight.lua`
-  (env `PSTF_TEST_TICK=1; PSTF_TBC_AUTOPARTY=1`, `-Timeout 300`). Probes: `PSTF_Party/PartyNames/Trigger/CanSave/
-  Formation/UnselectAll`. `CheckSymbol` accepts bytes the party layout retargeted (manifest rewrite).
+  (env `PSTF_TEST_TICK=1; PSTF_TBC_AUTOPARTY=1`, `-Timeout 300`), `party8_screens.lua` (env `PSTF_DLG_TEST=1;
+  PSTF_TBC_NOFIGHT=1`, `-Until 'party8_screens: ok|TEST FAIL|faulted'`: record/inventory/spells/map for all 8).
+  Probes: `PSTF_Party/PartyNames/Trigger/CanSave/Formation/UnselectAll/ScreenCaches`. Open menu screens in
+  tests with `e:GetActiveEngine():OnLeftPanelButtonClick(N)` (1 map, 3 inventory, 4 record, 5 mage, 6 priest),
+  not `SelectEngine` (skips the screen's portrait update: empty record sheet).
+  Screen objects with per-member arrays grown for 8 (party_patches.tsv): CScreenInventory ground-pile cache,
+  CScreenMap markers. `CheckSymbol` accepts bytes the party layout retargeted (manifest rewrite).
 - Maneuvers (`[tbc] maneuvers`, `opportunity_attacks`; rules in `src/modules/tbc/maneuvers.h`, GemRB fork port): Run,
   Withdraw (party side only), Block, Trip/Knockdown on the hotbar (Block wears the engine's Guard icon; Guard is left out),
   directed AI (`DirectedAi`: run to close, block when hurt and surrounded, 20 % takedowns), attacks of opportunity.

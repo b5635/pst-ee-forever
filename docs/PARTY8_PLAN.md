@@ -56,6 +56,19 @@ their 6-slot arrays; see "Not covered").
   prologue hook fills point 7 = point 6 + (point 6 - point 4) (same side of the formation); the engine
   then finds the nearest open square for it. With all 8 selected the engine's own rule for groups
   past 7 applies (point 7 = member 8's place relative to the leader).
+- **Inventory ground-pile cache** (`CScreenInventory`, lin FetchGroundPile 3F60B0 / win 140331F30): one
+  ground pile id (i32[6] at +0x6F0) and a "fetched" flag (i32[6] at +0x708) per portrait. Portraits 6/7
+  read past them (pile[6] = flag[0], flag[6] = +0x720): a garbage pile id left `MapButtonIdToItemInfo`'s
+  CItem* uninitialised and member 7/8's inventory crashed in `GetUseButtonMode` (from
+  UpdateLuaEquipment on the portrait click). The allocation grows 0x7D8 -> 0x818 (Init 140141025, sized
+  delete 140330916); pile i32[8] at +0x7D8, flag i32[8] at +0x7F8: FetchGroundPile's five accesses, the
+  flush loop in CancelEngine (start, 6 -> 8, pile = flag - 0x20), and the flag clears in EngineActivated /
+  ResetGroundPile (rewritten in place as two 16-byte movups). GetMaxGroundPage is FetchGroundPile on Windows.
+- **Area map markers** (`CScreenMap`, lin SetMap 4012C0 / RenderAreaMap 400DF0 / TimerAsynchronousUpdate
+  401DE0; win 14033C6E0 / 14033C260 (ported as RenderFogOfWar) / 14033CAE0): 12-byte entries (pos, id) at
+  +0x918, addressed as (i + 0xC2) * 12. The allocation grows 0x980 -> 0x9E8 and the 8 entries sit at
+  +0x984 = 0xCB * 12; SetMap's loop runs over 8 order slots; the timer refreshes marker `tick & 7`
+  (was `tick % 6`). The count (+0x960) and dirty mask (+0x964, bit = portrait) stay in place.
 - **Other modules' manifest checks**: `CheckSymbol` accepts bytes the party layout retargeted
   (`SetManifestRewrite(party::RewriteBytes)`); the tbc selection lock (`OnPortraitLClick.select`,
   win 1402EA411, holds a retargeted `mov edx,[..+0A200h]`) was turned off by the mismatch before.
@@ -86,6 +99,11 @@ their 6-slot arrays; see "Not covered").
   slot). `party8_formation.lua` (same save): point 7 for 10 formation/angle pairs with a selection
   smaller than 8. `party8_fight.lua` (same save, `PSTF_TBC_AUTOPARTY=1`): all 8 are in the initiative
   order and each takes a turn; with `PSTF_SHOT_DIR` the shots show the 8-slot BG3 column and 9 cards.
+  `party8_screens.lua` (same save, env `PSTF_DLG_TEST=1`): every member's record, inventory, mage and priest
+  screens and the area map, opened through `OnLeftPanelButtonClick` as the radial buttons do (record shows
+  the selected member, the ground cache fills slot k and is flushed on close, 8 map markers). Probe
+  `PSTF_ScreenCaches()`. Opening a screen with Lua `SelectEngine` skips the target's OnPortraitLClick: the
+  record then shows a stale `currentID` (empty sheet) - not a bug, the buttons never do that.
 
 ## Findings worth keeping
 
@@ -116,12 +134,6 @@ use of a portrait number as an index:
   UpdateCharacterPartyOrder, MakeCharacterProtagonist, char-creation screens): left at 6.
 - Player1..Player6 object ids and `<PLAYER1>`..`<PLAYER6>` tokens stay 1..6 (OBJECT.IDS has no 7/8);
   Player6 now finds the 6th occupied of 8 portrait slots.
-- Presentation: area map party markers stay 6. `CScreenMap` keeps 6 x 12-byte entries at +0x918 (pos
-  qword, id) with the u16 count at +0x960 and a u32 dirty mask at +0x964 right after, so 8 needs the
-  array moved (grow the CScreenMap allocation, retarget SetMap / TimerAsynchronousUpdate (`tick % 6`) /
-  RenderFogOfWar (win 14033C260 = lin RenderCharacters?) / lin RenderAreaMap 400DF0, whose Windows twin
-  is not in the dump yet: find it first). Members 7/8 just have no marker; nothing reads past the array
-  (SetMap's loop stops at 6 order slots, the dirty bits 6/7 are never tested).
 - The world screen's first-3/last-3 group hotkeys and portrait number keys stay 6 (members 7/8 are
   selected through their portraits). Banter selection is count-based already.
 - The save list (`BuildGameSlot`) shows PORTRT0..5 only.

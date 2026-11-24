@@ -44,6 +44,11 @@ std::string FormationPoints(int formation, int angle);
 // CInfGame::UnselectAll (probe: a selection smaller than the party). Game thread only.
 bool UnselectAll();
 
+// The per-party-member caches the party layout grew in other screens, for probes:
+// "map count=N ids=a,b,.. mask=X inv sel=S piles=a,b,.. flags=a,b,.." (8 entries each when the layout is
+// on, 6 otherwise). "" without the screens. Game thread only.
+std::string ScreenCaches();
+
 // True when the 8-slot layout is active.
 inline bool Party8() { return Party().max == 8; }
 

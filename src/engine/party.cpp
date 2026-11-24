@@ -168,6 +168,40 @@ std::string FormationPoints(int formation, int angle) {
   return out;
 }
 
+// CBaldurChitin screen pointers (lin CBaldurChitin::Init 157800: this[554] inventory, this[557] map; win
+// 140140D10 stores them at +0x1100 / +0x1118; win CGameSprite::AIUpdateWalk 1403B80F3 reads the map at
+// +0x1118). Cache offsets: party_patches.tsv (CScreenInventory pile +0x6F0/flag +0x708 -> +0x7D8/+0x7F8;
+// CScreenMap markers +0x918 -> +0x984, 12 bytes: pos qword, id; count u16 +0x960; dirty mask +0x964).
+std::string ScreenCaches() {
+  const uint64_t chitin = *reinterpret_cast<const uint64_t*>(sym::kVaBaldurChitin);
+  if (!chitin) return "";
+  const auto* inv = *reinterpret_cast<const uint8_t* const*>(chitin + 0x1100);
+  const auto* map = *reinterpret_cast<const uint8_t* const*>(chitin + 0x1118);
+  if (!inv || !map) return "";
+  const bool on = Party8();
+  const int n = on ? 8 : 6;
+  const uint32_t marker = on ? 0x984 : 0x918, pile = on ? 0x7D8 : 0x6F0, flag = on ? 0x7F8 : 0x708;
+  char b[64];
+  const int count = *reinterpret_cast<const uint16_t*>(map + 0x960);
+  std::snprintf(b, sizeof b, "map count=%d ids=", count);
+  std::string out = b;
+  for (int i = 0; i < n; ++i) {
+    std::snprintf(b, sizeof b, "%s%d", i ? "," : "", i < count ? *reinterpret_cast<const int32_t*>(map + marker + 12 * i + 8) : -1);
+    out += b;
+  }
+  std::snprintf(b, sizeof b, " mask=%X inv sel=%d piles=", *reinterpret_cast<const uint32_t*>(map + 0x964),
+                *reinterpret_cast<const int32_t*>(inv + 0x50));
+  out += b;
+  for (int pass = 0; pass < 2; ++pass) {
+    if (pass) out += " flags=";
+    for (int i = 0; i < n; ++i) {
+      std::snprintf(b, sizeof b, "%s%d", i ? "," : "", *reinterpret_cast<const int32_t*>(inv + (pass ? flag : pile) + 4 * i));
+      out += b;
+    }
+  }
+  return out;
+}
+
 bool UnselectAll() {
   const sym::Symbol* s = Find(sym::kRvaUnselectAll);
   const uint64_t chitin = *reinterpret_cast<const uint64_t*>(sym::kVaBaldurChitin);

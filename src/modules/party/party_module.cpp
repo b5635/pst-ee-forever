@@ -73,6 +73,15 @@ int __cdecl LuaUnselectAll(engine::LuaState* L) {
   return 1;
 }
 
+// PSTF_ScreenCaches() -> "map count=N ids=.. mask=X inv sel=S piles=.. flags=.." (map markers and the
+// inventory ground-pile cache, 8 slots each with the layout on).
+int __cdecl LuaScreenCaches(engine::LuaState* L) {
+  const std::string s = engine::ScreenCaches();
+  Log("lua: PSTF_ScreenCaches -> %s", s.c_str());
+  engine::LuaPushString(L, s.c_str());
+  return 1;
+}
+
 }  // namespace
 
 void InstallParty(const IniMap& ini) {
@@ -87,6 +96,7 @@ void InstallParty(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_CanSave", &LuaCanSave);
   dev::AddLuaFunction("PSTF_Formation", &LuaFormation);
   dev::AddLuaFunction("PSTF_UnselectAll", &LuaUnselectAll);
+  dev::AddLuaFunction("PSTF_ScreenCaches", &LuaScreenCaches);
 }
 
 }  // namespace pstf::party

@@ -59,6 +59,15 @@ delegated to the original game.
 
 <p align="center"><img src="docs/media/lock_roll.png" alt="Bash the Door: a critical success on the d20" width="300"></p>
 
+### 8-member party
+
+Travel with the Nameless One and all seven companions at once. The portrait column grows to eight, and
+every member has their own character record, inventory, spell book and marker on the area map.
+Joining, leaving, saves and scripts all go through the engine's own code. The game's party lists are
+moved to 8-slot copies and every check that assumed six is patched.
+
+<p align="center"><img src="docs/media/party8.gif" alt="All eight party members: paging through each character record, then each inventory" width="640"></p>
+
 ### Dynamic lighting _(optional download)_
 
 Fires, torches and glowing spells light the scene around them. Night is actually dark, with warm pools
@@ -75,7 +84,6 @@ after installing it.
 ### And more
 
 - **Gore**: hits splash blood that matches what was hit (flesh, bone, metal), criticals spray, and stains stay on the floor for a while.
-- **8-member party**: the Nameless One and all seven companions at once. Joining, leaving, saves and scripts all go through the engine's own code.
 - **Smooth motion**: creatures and projectiles glide between the engine's steps instead of hopping. Game timing doesn't change.
 - **Examine voice-over**: with PST Revoiced installed, the "examine" (?) text you click in the world is read aloud too, and a new line or a dialogue cuts the old one off.
 
