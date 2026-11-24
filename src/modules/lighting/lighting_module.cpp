@@ -47,7 +47,7 @@ struct Settings {
   float light_gain = 1.0f, ambient = 1.0f, normal_strength = 0.8f, max_light = 1.25f, keep = 0.6f;
   int occlusion_steps = 16, budget = 64;
   // phase 4
-  bool emissive = true, bloom = true, fx_lights = true, fx_soften = true;
+  bool emissive = true, bloom = true, fx_lights = true, fx_soften = true, untinted_fx = true, self_lit = true;
   float emissive_keep = 0.8f, bloom_strength = 0.35f, bloom_threshold = 0.45f, fx_light_gain = 1.0f;
   float fx_boost = 0.15f, fx_fringe = 1.5f, fx_light_saturation = 1.6f;  // additive boost of glowing pixels, bloom colour fringe (px)
   int bloom_passes = 2;                       // blur iterations: 1 tight, 2+ a softer, wider halo
@@ -94,7 +94,8 @@ struct LightUni {
 struct CompUni {
   int scene, light, vp_origin, vp_size, mode, keep, max_light, emis, bloom, height, map, texel, has_height,
       emis_keep, bloom_strength, atmo, haze_colour, fx_boost, fringe, info, cov, shadow, sprites, ambient,
-      shadow_strength, cov_valid, engine_tint, lm, lm_pool, lm_mean, lm_area, ao, sprite_ao, ao_texel;
+      shadow_strength, cov_valid, engine_tint, lm, lm_pool, lm_mean, lm_area, ao, sprite_ao, ao_texel, fxm,
+      fxm_valid;
 } g_cu = {};
 struct PaintUni {
   int target, scene, vp_origin, map, emitter, gain, engine_tint;
@@ -170,6 +171,11 @@ unsigned g_info_prog = 0, g_shadow_prog = 0;
 unsigned g_info_tex = 0, g_info_fbo = 0, g_cov_tex = 0, g_cov_fbo = 0, g_shadow_tex = 0, g_shadow_fbo = 0;
 int g_info_w = 0, g_info_h = 0, g_cov_w = 0, g_cov_h = 0, g_cov_prev_fbo = 0;
 bool g_cov_used = false;     // a creature's coverage was captured this frame
+// Effect mask (window px): rgb = what untinted draws added, a = normal-blend untinted draws' alpha.
+unsigned g_fxm_tex = 0, g_fxm_fbo = 0;
+int g_fxm_w = 0, g_fxm_h = 0, g_fxm_prev_fbo = 0, g_fxm_mask[4] = {1, 1, 1, 1};
+bool g_fxm_used = false;
+uint64_t g_fxm_draws = 0;
 int g_cov_mask[4] = {1, 1, 1, 1};  // the engine's colour write mask around a coverage draw
 bool g_sprites_valid = false;  // the info buffer holds this frame's creatures
 struct InfoUni {
@@ -413,6 +419,8 @@ uniform vec2 u_lmArea;     // area px the lightmap texture covers
 uniform sampler2D u_ao;    // ao.bin (R8, 1 = open), area px / u_aoTexel
 uniform float u_spriteAO;  // sprite_ao strength (0 = off)
 uniform float u_aoTexel;
+uniform sampler2D u_fxm;   // effect mask: rgb what untinted draws added, a their alpha (window px)
+uniform int u_fxmValid;
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 // lighting_logic EmissiveWeight: brightness ramp raised by saturation.
 float emisWeight(vec3 c) {
@@ -432,16 +440,25 @@ void main() {
   vec2 uv = p / u_vpSize;
   vec3 l = texture(u_light, uv).rgb;
   if (u_mode == 1 || u_mode == 3) { gl_FragColor = vec4(l, c.a); return; }
-  vec3 ec =texelFetch(u_emis, ivec2(floor(gl_FragCoord.xy)), 0).rgb * step(0.0001, u_emisKeep);
-  // albedo: the engine's night tint out, except where an effect is drawn: the engine adds spell glows untinted
-  // (lighting_logic UndoTintFx); dividing them blew them up to an opaque, saturated blob at night
-  float fxCover = smoothstep(0.01, 0.12, max(ec.r, max(ec.g, ec.b)));
-  c.rgb = mix(min(c.rgb / max(u_engineTint, vec3(0.2)), vec3(1.0)), c.rgb, fxCover);
+  vec4 ecs = texelFetch(u_emis, ivec2(floor(gl_FragCoord.xy)), 0);
+  vec3 ec = ecs.rgb * step(0.0001, u_emisKeep);
+  // a.k.a. EffectCover; the capture's alpha = a self-lit creature (Ignus) drawn there: all of it unlit
+  float fxCover = max(smoothstep(0.01, 0.12, max(ec.r, max(ec.g, ec.b))), ecs.a);
+  // albedo: the engine's night tint out, except where the engine drew without it (lighting_logic UntintedCover,
+  // UndoTintFx): most spell BAMs are untinted; undone they turned blue and blew up to opaque blobs at night
+  ivec2 fq = ivec2(floor(gl_FragCoord.xy));
+  ivec2 fz = textureSize(u_fxm, 0);
+  vec4 fm = (u_fxmValid == 1 && fq.x < fz.x && fq.y < fz.y) ? texelFetch(u_fxm, fq, 0) : vec4(0.0);
+  float untinted = max(sqrt(clamp(fm.a, 0.0, 1.0)), smoothstep(0.01, 0.12, max(fm.r, max(fm.g, fm.b))));
+  vec3 drawn = c.rgb;  // what the engine drew: an untinted effect's pixels are shown as that (unlit)
+  c.rgb = min(c.rgb / max(u_engineTint, vec3(0.2)), vec3(1.0));  // the rest (and what shows through) is lit
   float e = emisWeight(ec);
   // Colour fringe: red and blue of the halo sampled a little apart along the direction from the centre.
   vec2 fd = normalize(uv - 0.5 + 1e-5) * u_fringe / vec2(textureSize(u_bloom, 0));
   vec3 b = vec3(texture(u_bloom, uv + fd).r, texture(u_bloom, uv).g, texture(u_bloom, uv - fd).b);
   if (u_mode == 5) { gl_FragColor = vec4(e, luma(b) * 4.0, luma(c.rgb) * 0.25, c.a); return; }
+  if (u_mode == 7) { gl_FragColor = vec4(max(ec, c.rgb * 0.25), c.a); return; }
+  if (u_mode == 8) { gl_FragColor = vec4(untinted, fxCover, luma(c.rgb) * 0.25, c.a); return; }
   vec4 si = texelFetch(u_info, ivec2(floor(p)), 0);
   bool spr = false;
   if (u_sprites == 1 && si.g >= 0.0) {
@@ -492,7 +509,8 @@ void main() {
   float hi = smoothstep(0.72, 1.0, max(c.r, max(c.g, c.b)));
   lit = mix(lit, max(lit, c.rgb), hi * u_keep);
   lit = mix(lit, max(lit, c.rgb), e * u_emisKeep);  // emitting pixels keep their own brightness
-  lit = mix(lit, c.rgb, fxCover);  // where an effect is drawn it shows as the engine drew it: it is not lit
+  lit = mix(lit, c.rgb, fxCover);  // where a (tinted) effect is drawn it shows unlit, its tint taken out
+  lit = mix(lit, drawn, untinted);  // an untinted one as the engine drew it (lighting_logic UndoTintFx)
   lit += ec * e * u_fxBoost;                          // and shine a little past it
   if (u_atmo.w > 0.0 && u_hasHeight == 1) {
     vec2 m = (p + 0.5) * u_map.xy + u_map.zw;
@@ -755,7 +773,8 @@ bool SetUp() {
           gl.GetUniformLocation(cp, "u_engineTint"), gl.GetUniformLocation(cp, "u_lm"),
           gl.GetUniformLocation(cp, "u_lmPool"), gl.GetUniformLocation(cp, "u_lmMean"),
           gl.GetUniformLocation(cp, "u_lmArea"), gl.GetUniformLocation(cp, "u_ao"),
-          gl.GetUniformLocation(cp, "u_spriteAO"), gl.GetUniformLocation(cp, "u_aoTexel")};
+          gl.GetUniformLocation(cp, "u_spriteAO"), gl.GetUniformLocation(cp, "u_aoTexel"),
+          gl.GetUniformLocation(cp, "u_fxm"), gl.GetUniformLocation(cp, "u_fxmValid")};
   const unsigned np = g_paint_prog;
   g_pnu = {gl.GetUniformLocation(np, "u_target"),  gl.GetUniformLocation(np, "u_scene"),
            gl.GetUniformLocation(np, "u_vpOrigin"), gl.GetUniformLocation(np, "u_map"),
@@ -795,6 +814,8 @@ bool SetUp() {
   gl.GenFramebuffers(1, &g_info_fbo);
   gl.GenFramebuffers(1, &g_cov_fbo);
   gl.GenFramebuffers(1, &g_shadow_fbo);
+  g_fxm_tex = NewTexture(kNearest);
+  gl.GenFramebuffers(1, &g_fxm_fbo);
   g_off = false;
   g_ready = true;
   Log("lighting: GL ready (%s), programs %u/%u, engine draw program %u", ver ? ver : "?", g_light_prog, g_comp_prog,
@@ -1056,10 +1077,12 @@ void PaintPass(const ViewMap& vm, int vx, int vy, int vw, int vh) {
   gl.BindFramebuffer(kFramebuffer, g_emis_fbo);
   gl.Viewport(0, 0, w, h);
   if (!g_cap_used) {  // no effect capture this frame: the buffer still holds an older frame
+    gl.ColorMask(1, 1, 1, 1);
     gl.ClearColor(0, 0, 0, 0);
     gl.Clear(kColorBit);
     g_cap_used = true;
   }
+  gl.ColorMask(1, 1, 1, 0);  // painted glow is colour only: alpha is the self-lit creature cover
   gl.UseProgram(g_paint_prog);
   gl.Uniform2f(g_pnu.target, float(w), float(h));
   gl.Uniform1i(g_pnu.scene, 0);
@@ -1724,6 +1747,10 @@ void Composite() {
   // The shadow buffer holds the final darkening (key and contact passes write their own strength).
   gl.Uniform1f(g_cu.shadow_strength, g_shadow_drawn && g_mode != DebugMode::RoundTrip ? 1.0f : 0.0f);
   gl.Uniform1i(g_cu.cov_valid, g_cov_used ? 1 : 0);
+  gl.Uniform1i(g_cu.fxm, 10);
+  gl.Uniform1i(g_cu.fxm_valid, g_fxm_used ? 1 : 0);
+  gl.ActiveTexture(kTexture0 + 10);
+  gl.BindTexture(kTex2D, g_fxm_tex);
   gl.ActiveTexture(kTexture0 + 7);
   gl.BindTexture(kTex2D, g_cov_tex);
   gl.ActiveTexture(kTexture0 + 6);
@@ -1780,6 +1807,7 @@ void PreDraw() {
   engine::ArmWorldComposite();
   g_cap_used = false;
   g_cov_used = false;
+  g_fxm_used = false;
 }
 
 int EmitDecision(const char* res, uint16_t cycle, uint16_t frame, uint32_t flags) {
@@ -1787,7 +1815,7 @@ int EmitDecision(const char* res, uint16_t cycle, uint16_t frame, uint32_t flags
   if (g_set.hand_lights && FindHandLight(g_hand, res)) return 2;           // light, no glow mask
   if (g_set.hand_lights && g_set.emissive && res && res[0])
     for (const HandLight& h : g_hand)
-      if (h.glow[0] && MatchPattern(h.glow, res)) return 1;  // e.g. Ignus: his BAMs glow (emissive)
+      if (h.glow[0] && MatchPattern(h.glow, res)) return 1 | 8;  // Ignus: his BAMs glow, all of him unlit
   if (!(g_set.emissive || g_set.bloom || g_set.fx_lights)) return 0;
   const GlowOverride* over = FindGlowOverride(g_glow_over, res);
   if (over && !over->glow) return 0;
@@ -1835,8 +1863,10 @@ bool EnsureEmisBuffer(int w, int h, int prev_draw) {
   return true;
 }
 
-// Binds the emissive buffer (cleared on the first capture of the frame) as the draw target.
-bool CaptureBegin() {
+// Binds the emissive buffer (cleared on the first capture of the frame) as the draw target. `whole`: the
+// draw's alpha goes into the buffer too (a self-lit creature: the composite keeps all its pixels unlit).
+int g_cap_mask[4] = {1, 1, 1, 1};
+bool CaptureBegin(bool whole) {
   if (!g_ready || !(g_set.emissive || g_set.bloom)) return false;
   auto& gl = g_gl;
   int vp[4];
@@ -1846,7 +1876,9 @@ bool CaptureBegin() {
   gl.GetIntegerv(0x8CA6 /*draw fbo*/, &g_cap_prev_fbo);
   if (!EnsureEmisBuffer(w, h, g_cap_prev_fbo)) return false;
   gl.BindFramebuffer(0x8CA9 /*draw*/, g_emis_fbo);
+  gl.GetIntegerv(0x0C23 /*colour writemask*/, g_cap_mask);  // the engine's, put back by CaptureEnd
   if (!g_cap_used) {
+    gl.ColorMask(1, 1, 1, 1);  // the clear zeroes alpha too (the self-lit cover)
     float cc[4];
     gl.GetFloatv(0x0C22, cc);
     const bool sc = gl.IsEnabled(kScissor) != 0;
@@ -1857,11 +1889,15 @@ bool CaptureBegin() {
     if (sc) gl.Enable(kScissor);
     g_cap_used = true;
   }
+  gl.ColorMask(1, 1, 1, whole && g_set.self_lit ? 1 : 0);
   ++g_cap_draws;
   return true;
 }
 
-void CaptureEnd() { g_gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_cap_prev_fbo)); }
+void CaptureEnd() {
+  g_gl.ColorMask(g_cap_mask[0] != 0, g_cap_mask[1] != 0, g_cap_mask[2] != 0, g_cap_mask[3] != 0);
+  g_gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_cap_prev_fbo));
+}
 
 // Creature coverage (sprite buffer): same as the emissive capture, own buffer.
 bool SpriteWant(const char* res) {
@@ -1921,11 +1957,70 @@ void CovEnd() {
   g_gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_cov_prev_fbo));
 }
 
+// Effect mask (gl_world SetFxMaskCallbacks): kind 1 writes alpha only, 2 colour only.
+bool FxMaskBegin(int kind) {
+  if (!g_ready || g_mode == DebugMode::Off || g_mode == DebugMode::RoundTrip || !g_set.untinted_fx) return false;
+  auto& gl = g_gl;
+  int vp[4];
+  gl.GetIntegerv(kViewport, vp);
+  const int w = vp[0] + vp[2], h = vp[1] + vp[3];
+  if (w <= 0 || h <= 0 || w > 16384 || h > 16384) return false;
+  gl.GetIntegerv(0x8CA6 /*draw fbo*/, &g_fxm_prev_fbo);
+  if (w != g_fxm_w || h != g_fxm_h) {
+    int prev_read = 0, active = 0, bound = 0;
+    gl.GetIntegerv(0x8CAA /*read fbo*/, &prev_read);
+    gl.GetIntegerv(0x84E0, &active);
+    gl.ActiveTexture(kTexture0);
+    gl.GetIntegerv(0x8069, &bound);
+    gl.BindTexture(kTex2D, g_fxm_tex);
+    gl.TexImage2D(kTex2D, 0, kRgba8, w, h, 0, kRgba, kUByte, nullptr);
+    gl.BindTexture(kTex2D, unsigned(bound));
+    gl.ActiveTexture(unsigned(active));
+    gl.BindFramebuffer(kFramebuffer, g_fxm_fbo);
+    gl.FramebufferTexture2D(kFramebuffer, kColorAttach0, kTex2D, g_fxm_tex, 0);
+    const bool complete = gl.CheckFramebufferStatus(kFramebuffer) == kFbComplete;
+    gl.BindFramebuffer(0x8CA8 /*read*/, unsigned(prev_read));
+    if (!complete) {
+      Log("lighting: effect mask %dx%d incomplete", w, h);
+      gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_fxm_prev_fbo));
+      g_fxm_w = g_fxm_h = 0;
+      return false;
+    }
+    g_fxm_w = w;
+    g_fxm_h = h;
+  }
+  gl.BindFramebuffer(0x8CA9 /*draw*/, g_fxm_fbo);
+  gl.GetIntegerv(0x0C23 /*colour writemask*/, g_fxm_mask);
+  if (!g_fxm_used) {
+    gl.ColorMask(1, 1, 1, 1);
+    float cc[4];
+    gl.GetFloatv(0x0C22, cc);
+    const bool sc = gl.IsEnabled(kScissor) != 0;
+    if (sc) gl.Disable(kScissor);
+    gl.ClearColor(0, 0, 0, 0);
+    gl.Clear(kColorBit);
+    gl.ClearColor(cc[0], cc[1], cc[2], cc[3]);
+    if (sc) gl.Enable(kScissor);
+    g_fxm_used = true;
+  }
+  // kind 1 (normal blend): colour and alpha. FX-surface blits are premultiplied: a spell's glow pixels have
+  // alpha 0 and add their colour (Spiritual Hammer's oval), a creature's are opaque. kind 2: colour only.
+  if (kind == 1) gl.ColorMask(1, 1, 1, 1);
+  else gl.ColorMask(1, 1, 1, 0);
+  ++g_fxm_draws;
+  return true;
+}
+
+void FxMaskEnd() {
+  g_gl.ColorMask(g_fxm_mask[0] != 0, g_fxm_mask[1] != 0, g_fxm_mask[2] != 0, g_fxm_mask[3] != 0);
+  g_gl.BindFramebuffer(0x8CA9 /*draw*/, unsigned(g_fxm_prev_fbo));
+}
+
 // --- Lua probes ------------------------------------------------------------------------------------
 // PSTF_LightDebug(mode) -> mode name. 0 lit, 1 light buffer, 2 round trip, 3 falloff, 4 off, 5 emissive.
 int __cdecl LuaDebug(engine::LuaState* L) {
   const int m = static_cast<int>(engine::LuaNumberArg(L, 1, -1));
-  if (m >= 0 && m <= 6) g_mode = static_cast<DebugMode>(m);
+  if (m >= 0 && m <= 8) g_mode = static_cast<DebugMode>(m);
   Log("lua: PSTF_LightDebug(%d) -> %s", m, DebugName(g_mode));
   engine::LuaPushString(L, DebugName(g_mode));
   return 1;
@@ -2048,6 +2143,8 @@ int __cdecl LuaSet(engine::LuaState* L) {
   else if (k == "emissive") g_set.emissive = v != 0;
   else if (k == "fx_lights") g_set.fx_lights = v != 0;
   else if (k == "fx_soften") g_set.fx_soften = v != 0;
+  else if (k == "untinted_fx") g_set.untinted_fx = v != 0;
+  else if (k == "self_lit") g_set.self_lit = v != 0;
   else if (k == "sprite_lighting") g_set.sprite_lighting = v != 0;
   else if (k == "sprite_occlusion") g_set.sprite_occlusion = v != 0;
   else if (k == "key_shadows") g_set.key_shadows = v != 0;
@@ -2291,6 +2388,8 @@ void InstallLighting(const IniMap& ini) {
   g_set.bloom_threshold = pct("lighting.bloom_threshold", 45, 0, 100);
   g_set.fx_lights = IniBool(ini, "lighting.fx_lights", true);
   g_set.fx_soften = IniBool(ini, "lighting.fx_soften", true);
+  g_set.untinted_fx = IniBool(ini, "lighting.untinted_fx", true);
+  g_set.self_lit = IniBool(ini, "lighting.self_lit", true);
   g_set.sprite_lighting = IniBool(ini, "lighting.sprite_lighting", true);
   g_set.sprite_occlusion = IniBool(ini, "lighting.sprite_occlusion", true);
   g_set.key_shadows = IniBool(ini, "lighting.key_shadows", true);
@@ -2332,7 +2431,7 @@ void InstallLighting(const IniMap& ini) {
   g_set.area_lights = IniBool(ini, "lighting.area_lights", true);
   int dbg = IniInt(ini, "lighting.debug", 0);
   if (const char* e = std::getenv("PSTF_LIGHT_DEBUG")) dbg = std::atoi(e);
-  if (dbg >= 0 && dbg <= 5) g_mode = static_cast<DebugMode>(dbg);
+  if (dbg >= 0 && dbg <= 8) g_mode = static_cast<DebugMode>(dbg);
 
   if (!engine::InstallWorldComposite(&Composite) || !engine::InstallWorldPreDraw(&PreDraw)) {
     Log("lighting: off, world pass sites do not match");
@@ -2369,6 +2468,7 @@ void InstallLighting(const IniMap& ini) {
     Log("lighting: %zu hand area lights (arealights.tsv)", g_area_lights.size());
   }
   engine::SetEmissiveCallbacks(&EmitDecision, &CaptureBegin, &CaptureEnd);
+  engine::SetFxMaskCallbacks(&FxMaskBegin, &FxMaskEnd);
   if (!g_set.bam_shadows) {
     g_bam_hidden = engine::HideBamShadows();
     Log(g_bam_hidden ? "lighting: BAM contact shadows hidden (bam_shadows=0)"

@@ -178,9 +178,12 @@ float EffectCover(const Rgb& fx) {
   const float t = std::max(0.0f, std::min(1.0f, (m - 0.01f) / 0.11f));
   return t * t * (3.0f - 2.0f * t);  // smoothstep(0.01, 0.12, m)
 }
-Rgb UndoTintFx(const Rgb& c, const Rgb& t, const Rgb& fx) {
+float UntintedCover(const Rgb& add, float alpha_sq) {
+  return std::max(std::sqrt(std::max(0.0f, std::min(1.0f, alpha_sq))), EffectCover(add));
+}
+Rgb UndoTintFx(const Rgb& c, const Rgb& t, float k) {
   const Rgb u = UndoTint(c, t);
-  const float k = EffectCover(fx);
+  k = std::max(0.0f, std::min(1.0f, k));
   return {u.r + (c.r - u.r) * k, u.g + (c.g - u.g) * k, u.b + (c.b - u.b) * k};
 }
 
@@ -742,6 +745,8 @@ const char* DebugName(DebugMode m) {
     case DebugMode::Off: return "off";
     case DebugMode::Emissive: return "emissive";
     case DebugMode::Sprites: return "sprites";
+    case DebugMode::EmisRaw: return "emisraw";
+    case DebugMode::Untinted: return "untinted";
   }
   return "?";
 }

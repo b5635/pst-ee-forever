@@ -210,6 +210,23 @@ int AttachedLeft(int32_t id, std::vector<int32_t>* out) {
   return n;
 }
 
+std::vector<AttachedView> AttachedObjects(int32_t id) {
+  std::vector<AttachedView> out;
+  const uint64_t p = LookupSprite(id);
+  const uint64_t g = GameObject();
+  if (!p || !g || !AllOk({sym::kRvaAttachedCount, sym::kRvaAttachedList, sym::kRvaAttachedEnd})) return out;
+  const uint32_t now = R<uint32_t>(g + 0x7820);
+  const int n = std::min<int>(R<uint8_t>(p + sym::kOffSpriteAttachedCount), sym::kMaxAttached);
+  for (int i = 0; i < n; ++i) {
+    const uint64_t o = R<uint64_t>(p + sym::kOffSpriteAttached + 8ull * i);
+    if (!PlausiblePtr(o)) continue;
+    const uint32_t end = R<uint32_t>(o + sym::kOffAttachedEnd);
+    const int32_t left = end ? static_cast<int32_t>(end - now) : 0;
+    if (left > 0) out.push_back({o, left});
+  }
+  return out;
+}
+
 int UnapplySpell(int32_t id, const char* res) {
   const uint64_t p = LookupSprite(id);
   if (!p || !res || !AllOk({sym::kRvaUnapplySpell})) return -1;

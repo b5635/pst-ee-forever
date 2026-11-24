@@ -403,6 +403,15 @@ TEST_CASE("tbc economy: script waits are free; walking up to attack is movement,
   CHECK(st.stop == Stop::RoundDone);
 }
 
+TEST_CASE("tbc path line: hidden while the creature casts") {
+  CHECK(ShowPathLine(true, 0));     // no action: the walk preview
+  CHECK(ShowPathLine(true, 23));    // MoveToPoint
+  CHECK(!ShowPathLine(true, 31));   // Spell (also its walk into range)
+  CHECK(!ShowPathLine(true, 95));   // SpellPoint
+  CHECK(!ShowPathLine(true, 191));  // SpellNoDec
+  CHECK(!ShowPathLine(false, 0));   // not the party's turn
+}
+
 TEST_CASE("tbc path line: cells decode as AIUpdateWalk, dots split at the budget") {
   const Grid g;
   // cell = (GRID_ACTUALY - 1 - y) * GRID_ACTUALX + x
@@ -740,6 +749,22 @@ TEST_CASE("tbc status: one icon per spell/item, debuffs first, rounds left and t
   icons = CollectStatus(7, fx, 1200, 100, &spans, 8);
   CHECK(icons[0].share == 1.0 && icons[0].rounds == 6);
   CHECK(CollectStatus(7, fx, 1200, 100, nullptr, 0).empty());
+  // Globe of Invulnerability: its sphere re-applies 3 s (45 tick) protections: a status (a quarter round is 25)
+  fx = {{1, "SPWI602", 0, 45, true}, {1, "SPFLASH", 0, 24, true}};
+  icons = CollectStatus(8, fx, 1200, 100, &spans, 8);
+  CHECK(icons.size() == 1 && icons[0].parent == "SPWI602" && icons[0].rounds == 1);
+}
+
+TEST_CASE("tbc status: Guardian Mantle's attached object gets the spell seen on its way") {
+  OrphanMap m;
+  // the spell's delayed effects arrive (parent SPWI704), then the attached object (no parent, timed)
+  std::vector<StatusEffect> fx = {{1, "SPWI704", 0, 30, true, true, 11}};
+  AttributeOrphans(5, &fx, 1000, &m);
+  fx = {{0, "", 0, 1200, true, false, 0xABC0}};
+  AttributeOrphans(5, &fx, 1040, &m);
+  CHECK(fx[0].parent == "SPWI704" && fx[0].parent_type == 1);
+  const auto icons = CollectStatus(5, fx, 1040, 100, nullptr, 8);
+  CHECK(icons.size() == 1 && icons[0].parent == "SPWI704" && icons[0].rounds == 12);
 }
 
 TEST_CASE("tbc status: the drained frame and fitted icons") {

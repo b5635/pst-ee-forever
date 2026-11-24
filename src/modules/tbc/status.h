@@ -90,7 +90,9 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
   if (round_ticks <= 0) round_ticks = 100;
   for (const StatusEffect& e : fx) {
     if (!e.timed || e.parent.empty() || (e.parent_type != 1 && e.parent_type != 2)) continue;
-    if (e.left < round_ticks / 2) continue;  // flashes, sounds: not a status
+    // flashes, sounds: not a status. A quarter round, not half: Globe of Invulnerability's sphere re-applies
+    // its 3 s (45 tick) protections while the caster stands in it.
+    if (e.left < round_ticks / 4) continue;
     auto it = std::find_if(src.begin(), src.end(), [&](const Src& s) { return s.res == e.parent; });
     if (it == src.end()) {
       src.push_back({e.parent, e.parent_type, e.parent_flags, e.left});

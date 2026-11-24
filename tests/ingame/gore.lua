@@ -3,7 +3,7 @@
 -- Run: tools\launch.ps1 -Save 000000126 -Lua tests\ingame\gore.lua
 --      -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'gore: ok|TEST FAIL' -Close -Timeout 300
 -- 1. Injected hits (PSTF_GoreHit) on the party pick the material from RESDATA armor + hitmat.2da: Morte BONE,
---    Dak'kon LEATHER, Ignus FIRE, the Nameless One FLESH; blood lands as stains (decals) that stay.
+--    Dak'kon LEATHER, Ignus FLESH (he bleeds: hitmat.2da ANIM36), the Nameless One FLESH; blood lands as stains (decals) that stay.
 -- 2. A fight against the nearest Hive thug (as tbc_fight.lua: the protagonist walks up, party AI fights):
 --    the engine's own AddBlood calls arrive and are swallowed.
 -- Shots: pst_forever/logs/gore_{hits,stains,fight}.bmp
@@ -12,7 +12,7 @@ local function name(id)
   local _, _, _, _, ref = PSTF_SpritePos(id, 1)
   return ref and Infinity_FetchString(ref) or ''
 end
-local want = {Morte = 'BONE', ["Dak'kon"] = 'LEATHER', Ignus = 'FIRE'}
+local want = {Morte = 'BONE', ["Dak'kon"] = 'LEATHER', Ignus = 'FLESH'}
 local n, party, enemy, fight_at = 0, {}, -1, -1
 
 function pstfTestTick()

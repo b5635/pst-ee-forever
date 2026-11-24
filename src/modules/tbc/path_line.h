@@ -24,6 +24,12 @@ inline Pt CellCentre(int32_t c, const Grid& g) {
   return {cx * g.sx + g.sx / 2, cy * g.sy + g.sy / 2};
 }
 
+// The movement line is for walking: none while the creature casts (its own action is a cast, also the walk
+// into range of a touch spell) and none for enemies' and allies' turns.
+inline bool ShowPathLine(bool party_turn, uint16_t current_action) {
+  return party_turn && !IsCastAction(current_action);
+}
+
 struct Dot {
   Pt p;
   bool reachable;

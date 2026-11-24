@@ -20,6 +20,14 @@ void ShiftEffectClock(int32_t id, int32_t ticks);
 // PST attached spell objects on the creature (symbols.h kOffSpriteAttached): count; `left` gets ticks to
 // each one's end (0 = no end). The round clock moves their ends with the effects.
 int AttachedLeft(int32_t id, std::vector<int32_t>* left);
+// The same objects with an identity while they live (the object's address): status icons give each the
+// spell seen on its way (Guardian Mantle is only its attached object, no timed effect). Ended ones (end 0
+// or past) are left out.
+struct AttachedView {
+  uint64_t key = 0;
+  int32_t left = 0;
+};
+std::vector<AttachedView> AttachedObjects(int32_t id);
 // Delayed effects that `resolves_now(ticks to onset)` says are part of the spell resolving keep running
 // on world time (never shifted) until they fire; ResolvingOnsets counts those still pending.
 // resolves_now(ticks to onset, opcode): 0 = round-clocked, 1 = the spell resolving (world time, the

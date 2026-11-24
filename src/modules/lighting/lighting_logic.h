@@ -280,14 +280,38 @@ Rgb TimeOfDayAmbient(const Rgb& day, float n, const DayNight& d);
 float NightLightGain(float n, const DayNight& d);
 // Scene pixel with the engine tint taken out (composite): c / max(tint, 0.2), capped at 1.
 Rgb UndoTint(const Rgb& c, const Rgb& tint);
-// Where a spell effect is drawn (its capture fx): the engine adds effects untinted (a white Spiritual Hammer stays
-// white at night) and the softened capture is fainter than what it added, so dividing there blew the effect up to
-// an opaque yellow blob under a blue night tint. The pixel keeps the engine's own colour by the effect's coverage
-// (EffectCover: 0 below 0.01, 1 from 0.12 of the capture's brightest channel).
+// Where a spell effect is drawn (its capture fx): EffectCover is 0 below 0.01, 1 from 0.12 of the capture's
+// brightest channel (the composite keeps those pixels unlit).
 float EffectCover(const Rgb& fx);
+// The unlit cover of a pixel: EffectCover of the capture, or its alpha, written only by a self-lit creature
+// (Ignus, hand light with glow=): all of him keeps his own (tint-free) colour at night, the dark parts too.
+inline float FxCover(const Rgb& fx, float self_lit_alpha) {
+  const float e = EffectCover(fx);
+  return e > self_lit_alpha ? e : self_lit_alpha;
+}
 // fx_soften (normal-alpha effect draws in the screen blend) only by day: nightness below 0.5.
 inline bool SoftenAt(float nightness) { return nightness < 0.5f; }
-Rgb UndoTintFx(const Rgb& c, const Rgb& tint, const Rgb& fx);
+// The engine tints a cell's palette with the global (time-of-day) tint only when its draw flags have 0x10000
+// (CVidPalette::GetTint lin 690700: 0x10000 global tint, 0x20000 the cell's own tint; creatures 0x30000).
+// Most spell BAMs (A010SPIN, A009NECR, S083*: flags 0x40/0x41) are drawn untinted: dividing the night tint
+// (0xC86464 = r g 0.39, b 0.78) out of those pixels raised red and green 2.5x: a white Spiritual Hammer went
+// yellow, dark layers became visible copies. An FX-surface blit is untinted when every cell in it is.
+inline bool UntintedCell(uint32_t cell_flags) { return (cell_flags & 0x10000u) == 0; }
+// How an untinted draw marks the effect mask: 1 = colour and alpha (normal blend; FX blits are premultiplied,
+// glow pixels have alpha 0), 2 = colour only (additive blend: black adds nothing, so only the light counts),
+// 0 = not at all (multiply: a darkening layer).
+// A softened draw (fx_soften: normal blend turned into the screen blend) keeps kind 1: its dark parts are part
+// of the effect too (Elysium's Fires' ring has dark spokes; marked by colour only they were relit, darker).
+inline int FxMaskKind(uint32_t blit_flags, bool softened) {
+  (void)softened;
+  if (blit_flags & 0x20000000u) return 0;
+  return (blit_flags & 0x208u) ? 2 : 1;
+}
+// Untinted cover of a pixel from the effect mask (the colour untinted draws added, their alpha; sqrt: with a
+// SRC_ALPHA blend one layer writes a^2): the share of the pixel the engine drew without its tint.
+float UntintedCover(const Rgb& add, float alpha_sq);
+// The composite's albedo: the engine tint taken out except by the untinted cover k (kept as drawn).
+Rgb UndoTintFx(const Rgb& c, const Rgb& tint, float k);
 Rgb TintRgb(uint32_t bbggrr);
 // Night light of the area lightmap (LM, painted light pools): what a LM texel holds above the area's
 // mean LM luma, scaled by k (0 where it is at or below the mean).
@@ -312,6 +336,8 @@ enum class DebugMode : int {
   Off = 4,        // no pass at all (the hooks just call through)
   Emissive = 5,   // the emissive mask (red) and the bloom (green) of the glow draws
   Sprites = 6,    // creatures violet, coverage-only (engine shadow blobs) green, buffer-only red, key shadows yellow
+  EmisRaw = 7,    // the emissive capture as drawn (colour), over the scene dimmed to a quarter
+  Untinted = 8,   // the untinted effect cover (red) and the unlit effect cover (green) over the dimmed scene
 };
 const char* DebugName(DebugMode m);
 

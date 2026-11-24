@@ -515,6 +515,23 @@ inline constexpr uint8_t kWorldStStoreBytes[] = {0x0F, 0x11, 0x15, 0xED, 0x69, 0
 constexpr uint32_t kRvaDrawFlush = 0x4B51E0, kRvaBeginScaledFlushCall = 0x4B4405;
 constexpr uint32_t kRvaEndScaledFlushCall = 0x4B4E64, kRvaWorldStStore = 0x4B4394;
 constexpr uint64_t kVaWorldSt = 0x14601AD88ull;
+// The draw colour (vertex colour multiplied into every textured quad) of the GL path: DrawColor(uint) win
+// 14049C2C0 -> 1404B4720 (DrawColor_GL, lin 63C1F0: qword_371DB98[16397]) stores the argument as is
+// (0xAABBGGRR) at dword_14601ADE0 (mov [rip], ecx at 1404B4726). Probe only (draw trace).
+inline constexpr uint8_t kDrawColorStoreBytes[] = {0x89, 0x0D, 0xB4, 0x66, 0xB6, 0x05};  // -> 14601ADE0
+constexpr uint32_t kRvaDrawColorStore = 0x4B4726;
+constexpr uint64_t kVaDrawColor = 0x14601ADE0ull;
+// Scratch surfaces (DrawLockSurface_GL lin 63B8B0 / win 1404B6BB0: lea rax, dword_14601AEC0 at 1404B6BDB;
+// nearest filter at +0, linear (9729) at +48): ints [0] pitch, [2]/[3] the last locked region's x/y (what
+// the next textured quad samples), [4] cursor x, [5] row y, [6] row height. Every cell draw (FXRender3d,
+// Render3d) is decoded into a locked region; the flush (sub_63A370 / win 1404B51E0) uploads rows [5]+[6],
+// zeroes the CPU copy and resets [2]..[6]. A second draw of the same quad after a flush therefore samples
+// region (0,0): the first object of the batch (a creature inside Spiritual Hammer, an Ignus over Ignus).
+// Our re-draws put [2]/[3] back for their own quad (the uploaded texture still holds the region).
+inline constexpr uint8_t kScratchLeaBytes[] = {0x48, 0x8D, 0x05, 0xDE, 0x42, 0xB6, 0x05};  // -> 14601AEC0
+constexpr uint32_t kRvaScratchLea = 0x4B6BDB;
+constexpr uint64_t kVaScratch = 0x14601AEC0ull;
+constexpr uint32_t kScratchStride = 48, kOffScratchX = 8, kOffScratchY = 12;
 // Prologues (phase 2 replaces program handles after DrawInit_GL; listed now so a game update is caught):
 // DrawInit_GL lin 63CD40 / win 1404B6080, DrawCreateProgram_GL(slot, vs, fs) lin 63C990 / win 1404B4A60,
 // DrawBeginScaled_GL lin 63B330 / win 1404B4340, DrawEndScaled_GL lin 63C340 / win 1404B4E20,
@@ -1143,6 +1160,8 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CGameArea::Render.postRender", kRvaPostRenderCall, kPostRenderCallBytes,
              "lin 1BB560 L473 / win 14019EB95"),
     PSTF_SYM("DrawFlush (sub_63A370)", kRvaDrawFlush, kDrawFlushBytes, "lin 63A370 / win 1404B51E0"),
+    PSTF_SYM("DrawColor_GL.store", kRvaDrawColorStore, kDrawColorStoreBytes, "lin 63C1F0 / win 1404B4726"),
+    PSTF_SYM("DrawLockSurface_GL.scratch", kRvaScratchLea, kScratchLeaBytes, "lin 63B8B0 / win 1404B6BDB"),
     PSTF_SYM("DrawBeginScaled_GL.flush", kRvaBeginScaledFlushCall, kBeginScaledFlushCallBytes, "win 1404B4405"),
     PSTF_SYM("DrawEndScaled_GL.flush", kRvaEndScaledFlushCall, kEndScaledFlushCallBytes, "win 1404B4E64"),
     PSTF_SYM("DrawBeginScaled_GL.uST", kRvaWorldStStore, kWorldStStoreBytes, "lin 63B330 / win 1404B4394"),

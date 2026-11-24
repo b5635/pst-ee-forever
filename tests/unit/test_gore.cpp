@@ -11,7 +11,7 @@ using namespace pstf::gore;
 namespace {
 bool Near(double a, double b, double eps = 1e-4) { return std::fabs(a - b) <= eps; }
 const char* kHitmat =
-    "2DA V1.0\nFLESH\n        MATERIAL\nARMOR0  FLESH\nARMOR4  BONE\nARMOR10 FIRE\nANIM58  ARMORED_BONE\n"
+    "2DA V1.0\nFLESH\n        MATERIAL\nARMOR0  FLESH\nARMOR4  BONE\nARMOR10 FIRE\nANIM36  FLESH\nANIM58  ARMORED_BONE\n"
     "ANIM59  BONE\nANIM71  HOLLOW\nANIM98  HOLLOW\n";
 const char* kArmor = "# c\n2\t0\t# Annah\n13\t1\n36\t10\n46\t4\n52\t7\n57\t9\n58\t2\n59\t0\n71\t2\n558\t2\n";
 int Count(const Particles& ps, Kind k) {
@@ -27,7 +27,7 @@ TEST_CASE("gore: materials from RESDATA armor and hitmat.2da rows") {
   ParseArmorList(kArmor, &t);
   CHECK(t.Of(2) == Material::Flesh);         // Annah bleeds
   CHECK(t.Of(13) == Material::Leather);      // Dak'kon
-  CHECK(t.Of(36) == Material::Fire);         // Ignus: embers
+  CHECK(t.Of(36) == Material::Flesh);        // Ignus bleeds (ANIM36 over his armor 10 = fire)
   CHECK(t.Of(46) == Material::Bone);         // Morte: dust and chips
   CHECK(t.Of(52) == Material::Metal);        // Nordom: sparks
   CHECK(t.Of(57) == Material::Shadow);       // shadows smoke

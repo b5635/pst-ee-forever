@@ -63,6 +63,7 @@ add_library(pst_forever SHARED
   src/modules/smooth/smooth_module.cpp
   src/modules/tbc/tbc_module.cpp
   src/engine/gl_world.cpp
+  src/engine/soft_draw.cpp
   src/modules/lighting/lighting_module.cpp
   src/engine/blood.cpp
   src/modules/gore/gore_module.cpp

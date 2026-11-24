@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // SPDX-FileCopyrightText: 2026 Contributors to the GemRB project <https://gemrb.org> (parser cases from
 // gemrb/tests/core/Test_AreaSceneData.cpp)
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -68,6 +69,11 @@ TEST_CASE("lighting: manifest call sites reach the functions they name") {
   CHECK(sym::kImageBase + sym::kRvaWorldStStore + 7 + d == sym::kVaWorldSt);
   std::memcpy(&d, sym::kProgramTableLeaBytes + 3, 4);
   CHECK(sym::kImageBase + sym::kRvaProgramTableLea + 7 + d == sym::kVaProgramTable);
+  // lea rax, dword_14601AEC0 (scratch surfaces) at 1404B6BDB; mov dword_14601ADE0, ecx (draw colour) at 1404B4726
+  std::memcpy(&d, sym::kScratchLeaBytes + 3, 4);
+  CHECK(sym::kImageBase + sym::kRvaScratchLea + 7 + d == sym::kVaScratch);
+  std::memcpy(&d, sym::kDrawColorStoreBytes + 2, 4);
+  CHECK(sym::kImageBase + sym::kRvaDrawColorStore + 6 + d == sym::kVaDrawColor);
   CHECK(sym::kCellFrameStoreBytes[3] == 0x18 && sym::kCellSeqStoreBytes[3] == 0x1A);  // +0x118 / +0x11A
   CHECK(sym::kAreaTypeReadBytes[4] == sym::kOffAreaType);
 }
@@ -476,17 +482,31 @@ TEST_CASE("lighting: day / night (engine tint undone, our ambient, lightmap pool
   CHECK(ah.r > ah.b && Luma(ah) < Luma(a0) && Luma(ah) > Luma(a1));  // dusk: warm, in between
   CHECK(NightLightGain(0, d) == 1.0f && Near(NightLightGain(1, d), 1.5) && Near(NightLightGain(0.5f, d), 1.25));
   {
-    // night tint C86464 (r g 0.39, b 0.78): a white effect pixel added over the tinted ground stays white,
-    // the ground under a faint glow is undone; no effect = UndoTint
+    // night tint C86464 (r g 0.39, b 0.78): an untinted effect pixel stays as drawn, the ground is undone
     const Rgb t = TintRgb(0xC86464);
-    const Rgb w = UndoTintFx({0.7f, 0.7f, 0.75f}, t, {0.5f, 0.48f, 0.45f});  // the hammer: kept as drawn
+    const Rgb w = UndoTintFx({0.7f, 0.7f, 0.75f}, t, 1.0f);  // the hammer: kept as drawn
     CHECK(Near(w.r, 0.7) && Near(w.b, 0.75));
     CHECK(Near(EffectCover({0.005f, 0, 0}), 0.0) && Near(EffectCover({0.2f, 0.1f, 0}), 1.0));
     CHECK(Near(EffectCover({0.065f, 0, 0}), 0.5));
     CHECK(SoftenAt(0.0f) && SoftenAt(0.49f) && !SoftenAt(0.5f) && !SoftenAt(Nightness(0xC86464, 0.43f)));  // the Hive at 1 am
-    const Rgb n = UndoTintFx({0.2f, 0.2f, 0.4f}, t, {0, 0, 0});  // no effect: the plain undo
+    const Rgb n = UndoTintFx({0.2f, 0.2f, 0.4f}, t, 0.0f);  // no effect: the plain undo
     const Rgb o = UndoTint({0.2f, 0.2f, 0.4f}, t);
     CHECK(Near(n.r, o.r) && Near(n.b, o.b));
+    // Deathbolt's dark casting layer (A009NECR, flags 0x40: untinted, normal blend, alpha 0.6 -> mask 0.36):
+    // only 40 % of the pixel is the tinted ground behind it, so only that much is undone (r, g x2.55 at C86464)
+    const Rgb dark{0.12f, 0.14f, 0.18f};
+    const float k = UntintedCover({0, 0, 0}, 0.36f);
+    CHECK(Near(k, 0.6, 1e-5));
+    const Rgb d = UndoTintFx(dark, t, k);
+    CHECK(d.r < 0.2f && Near(d.r, 0.12 + (0.12 / (100 / 255.0) - 0.12) * 0.4, 1e-4));
+    CHECK(Near(d.b, 0.18 + (0.18 / (200 / 255.0) - 0.18) * 0.4, 1e-4));
+    CHECK(Near(UntintedCover({0.3f, 0.2f, 0.1f}, 0.0f), 1.0));  // an additive glow: by its light
+    CHECK(Near(UntintedCover({0.0f, 0.0f, 0.0f}, 0.0f), 0.0));  // the black of an additive BAM: not covered
+    CHECK(Near(FxCover({0.05f, 0.04f, 0.03f}, 1.0f), 1.0));   // Ignus' dark body: covered by his alpha
+    CHECK(Near(FxCover({0.05f, 0.04f, 0.03f}, 0.0f), EffectCover({0.05f, 0.04f, 0.03f})));
+    CHECK(UntintedCell(0x40) && UntintedCell(0x41) && !UntintedCell(0x300C0) && !UntintedCell(0x10000));
+    CHECK(FxMaskKind(0x1, false) == 1 && FxMaskKind(0x8, false) == 2 && FxMaskKind(0x200, false) == 2);
+    CHECK(FxMaskKind(0x1, true) == 1 && FxMaskKind(0x20000001, false) == 0);  // softened: still its alpha
   }
   const Rgb u = UndoTint({0.2f, 0.3f, 0.6f}, TintRgb(0x80A0FF));  // tint r 1.0, g 160/255, b 128/255
   CHECK(Near(u.r, 0.2) && Near(u.g, 0.3 / (160 / 255.0), 1e-4) && Near(u.b, 1.0));  // b capped at 1

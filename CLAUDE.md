@@ -303,6 +303,20 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `pstfHammerRuns = {{'night','lit'},{'night','x','fx_soften',0},...}` for A/B). `DayNight(12)` does not change the tint
   in a running area. Engine facts: effects are added untinted; `fx_soften`'s screen blend ignores the night tint, so it is
   day-only (`SoftenAt`).
+- Spell visuals lit vs vanilla, night and day: `tests\ingame\lighting_spellfx.lua` (save 000000990; a generated copy with a
+  prefix `pstfFxList = {{'Nameless','SPWI803',2803,'foe',260},...}`, `pstfFxModes = {{'night','alt'},{'day','alt'}}`,
+  `pstfFxEvery`, `pstfFxTrace = 'A0,SP2'`, `pstfFxSets = {nomask={'untinted_fx',0,1}}`); mode `alt` shoots each tick lit
+  and the next drawn frame with our pass off (same animation frame), `raw` = debug 7 (emissive capture), `untint` =
+  debug 8 (red untinted cover, green unlit cover). `python -I tools/fx_sheet.py [--crop L,T,R,B] [--scale K]
+  [--ticks ..] [--only RES]` -> `logs\fx_sheet_<RES>.png` (columns lit/off). `PSTF_LightTrace('A0,SP2')` takes a
+  comma list and logs each draw's colour (DrawColor, `kVaDrawColor`) too.
+  Engine facts: every cell draw decodes into a scratch-surface region (`kVaScratch`); the batch flush uploads and
+  resets it, so a re-draw after a flush must put the region back (gl_world `redraw`), or it samples another object
+  (was: a creature inside Spiritual Hammer, an Ignus over Ignus). Palettes get the night tint only with draw flag
+  0x10000 (creatures 0x300C0); most spell BAMs are 0x40/0x41: untinted, so the composite keeps them as drawn
+  (`[lighting] untinted_fx`, effect mask buffer). FX blits are premultiplied (glow pixels alpha 0).
+  `[lighting] self_lit`: Ignus (vfxlight `glow=`) is unlit at night (capture alpha). `[tbc] ground_fx`: Run/Withdraw
+  rings, dust, smoke drawn soft at the floor point (`engine/soft_draw.h`), under the creatures.
 - All-spells save: `tools\make_spell_save.ps1 -Keep` re-teaches from the save as it is (Nameless One, Ignus, Dak'kon all
   mage spells; Grace priest), rests and puts the hour back (`DayNight`). The save is at night (hour 1).
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):

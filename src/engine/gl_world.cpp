@@ -12,6 +12,7 @@
 #include "core/log.h"
 #include "core/patch.h"
 #include "engine/sprite_ptr.h"
+#include "modules/lighting/lighting_logic.h"
 #include "engine/symbols.h"
 
 namespace pstf::engine {
@@ -64,7 +65,7 @@ struct Cb {
 };
 Cb g_cbs[6] = {};
 int g_cb_n = 0;
-Cb g_floor[4] = {};
+Cb g_floor[8] = {};
 int g_floor_n = 0;
 bool g_sites_installed = false, g_floor_installed = false;
 bool g_armed = false, g_floor_armed = false;
@@ -125,6 +126,7 @@ constexpr int kMaxGlow = 256;
 EngineGlowDraw g_glow[kMaxGlow];
 int g_glow_n = 0, g_glow_dropped = 0;
 uint64_t g_cell = 0;  // CVidCell of the Render3d / FXRender3d being run (0 outside)
+uint32_t g_cell_flags = 0;  // its draw flags (palette realize: 0x10000 = the global tint)
 // Effects draw in two steps: CInfinity::FXRender(cell) -> CVidCell::FXRender3d into the FX surface, then
 // CInfinity::FXBltFrom -> CVidMode::FXBltToBack -> RenderTexture without a cell (lin 3A86D0, 681150).
 // The last FX cell is the one that surface holds.
@@ -199,8 +201,10 @@ void Gather(int x, int y, const int* frame, uint32_t flags) {
 }
 
 EmitFn g_emit_fn = nullptr;
-CaptureBeginFn g_cap_begin = nullptr;
+EmisBeginFn g_cap_begin = nullptr;
 CaptureEndFn g_cap_end = nullptr;
+FxMaskBeginFn g_fxm_begin = nullptr;
+CaptureEndFn g_fxm_end = nullptr;
 
 // Probe counters (GlowStats): every RenderTexture call, those inside the armed world pass, OR of their flags.
 uint64_t g_rt_calls = 0, g_rt_world = 0, g_r3d_calls = 0;
@@ -208,11 +212,11 @@ uint32_t g_rt_flags_or = 0;
 
 // Draw trace (probe TraceDraws): logs each distinct (path, resref, flags) of cells whose resref starts with
 // the prefix, up to 96 lines.
-char g_trace[9] = {};
+char g_trace[64] = {};
 int g_trace_lines = 0;
 struct TraceKey {
   char path, res[9];
-  uint32_t flags;
+  uint32_t flags, colour;
 };
 TraceKey g_trace_seen[96];
 
@@ -227,17 +231,51 @@ void Trace(char path, uint64_t cell, uint32_t flags, int w, int h) {
   if (!g_trace[0] || g_trace_lines >= 96) return;
   char res[9];
   ReadRes(cell, res);
-  if (strcmp(g_trace, "*") != 0 && _strnicmp(res, g_trace, strlen(g_trace)) != 0) return;
+  if (strcmp(g_trace, "*") != 0) {  // one prefix, or several split by commas ("A0,SP2")
+    bool hit = false;
+    for (const char* p = g_trace; *p && !hit;) {
+      const char* e = strchr(p, ',');
+      const size_t n = e ? size_t(e - p) : strlen(p);
+      hit = n > 0 && _strnicmp(res, p, n) == 0;
+      p = e ? e + 1 : p + n;
+    }
+    if (!hit) return;
+  }
+  const uint32_t colour = R<uint32_t>(sym::kVaDrawColor);
   for (int i = 0; i < g_trace_lines; ++i)
-    if (g_trace_seen[i].path == path && g_trace_seen[i].flags == flags && !strcmp(g_trace_seen[i].res, res)) return;
+    if (g_trace_seen[i].path == path && g_trace_seen[i].flags == flags && g_trace_seen[i].colour == colour &&
+        !strcmp(g_trace_seen[i].res, res))
+      return;
   TraceKey& k = g_trace_seen[g_trace_lines++];
   k.path = path;
   k.flags = flags;
+  k.colour = colour;
   memcpy(k.res, res, 9);
-  Log("lighting: trace %c %-8s seq %u frame %u flags %08X %dx%d world %d", path, res,
-      cell ? R<uint16_t>(cell + sym::kOffCellSeq) : 0, cell ? R<uint16_t>(cell + sym::kOffCellFrame) : 0, flags, w,
+  Log("lighting: trace %c %-8s seq %u frame %u flags %08X colour %08X %dx%d world %d", path, res,
+      cell ? R<uint16_t>(cell + sym::kOffCellSeq) : 0, cell ? R<uint16_t>(cell + sym::kOffCellFrame) : 0, flags,
+      colour, w,
       h, (g_armed && WorldPassArea()) ? 1 : 0);
 }
+
+// Scratch-surface region of the quad being drawn (symbols.h kVaScratch): both surfaces' [2]/[3].
+struct ScratchRegion {
+  int v[4];
+};
+ScratchRegion ReadScratch() {
+  ScratchRegion r;
+  for (int i = 0; i < 2; ++i) {
+    r.v[2 * i] = R<int>(sym::kVaScratch + i * sym::kScratchStride + sym::kOffScratchX);
+    r.v[2 * i + 1] = R<int>(sym::kVaScratch + i * sym::kScratchStride + sym::kOffScratchY);
+  }
+  return r;
+}
+void WriteScratch(const ScratchRegion& r) {
+  for (int i = 0; i < 2; ++i) {
+    *reinterpret_cast<int*>(sym::kVaScratch + i * sym::kScratchStride + sym::kOffScratchX) = r.v[2 * i];
+    *reinterpret_cast<int*>(sym::kVaScratch + i * sym::kScratchStride + sym::kOffScratchY) = r.v[2 * i + 1];
+  }
+}
+bool g_scratch_ok = false;  // the scratch reference checked (InstallGlowGather); no re-draws without it
 
 void GatherFxCell(int x, int y, const int* frame, const FxCell& c, uint32_t flags, bool pure) {
   EngineGlowDraw* d = NewGlow();
@@ -258,6 +296,7 @@ void GatherFxCell(int x, int y, const int* frame, const FxCell& c, uint32_t flag
 uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t size, const int* clip,
                                         const int* clip2, uint32_t flags) {
   ++g_rt_calls;
+  const ScratchRegion region = ReadScratch();  // the region this quad samples (a flush resets it)
   const bool world = g_armed && WorldPassArea();
   if (world) {
     ++g_rt_world;
@@ -271,13 +310,14 @@ uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t
   if (world && frame && g_emit_fn) {
     if (fx_blit) {
       // Judge each cell of the FX surface: pure effect blits are drawn and captured per pixel.
-      int emit_cells = 0, pixel_cells = 0, soft_cells = 0, e[kMaxFxCells];
+      int emit_cells = 0, pixel_cells = 0, soft_cells = 0, whole_cells = 0, e[kMaxFxCells];
       for (int i = 0; i < g_fx_n; ++i) {
         const FxCell& c = g_fx_cells[i];
         e[i] = c.res[0] ? g_emit_fn(c.res, c.cyc, c.frm, flags) : 0;
         if (e[i] & 3) ++emit_cells;
         if (e[i] & 1) ++pixel_cells;
         if (e[i] & 4) ++soft_cells;
+        if (e[i] & 8) ++whole_cells;
       }
       pure = pixel_cells == g_fx_n;  // light-only cells (Ignus' hand light) never make a pixel capture
       ++g_fx_blits;
@@ -297,6 +337,7 @@ uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t
       if (pure) {
         emit = 1;
         if (soft_cells == g_fx_n) emit |= 4;
+        if (whole_cells == g_fx_n) emit |= 8;
       } else if (emit_cells) {
         emit = 2;  // a creature composite: lights per emitting cell, no pixels
       }
@@ -331,6 +372,16 @@ uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t
       sprite = true;
     }
   }
+  // Effect mask: a draw the engine made without its global tint (an FX blit when no cell in it is tinted).
+  bool untinted = false;
+  if (world && frame && g_fxm_begin) {
+    if (fx_blit) {
+      untinted = true;
+      for (int i = 0; i < g_fx_n && untinted; ++i) untinted = lighting::UntintedCell(g_fx_cells[i].flags);
+    } else if (g_cell) {
+      untinted = lighting::UntintedCell(g_cell_flags);
+    }
+  }
   if (fx_blit) g_fx_n = 0;  // the surface has been blitted; the next FXRender3d starts a new one
   const bool additive = (flags & 0x208u) && !(flags & 0x20000000u);
   const bool multiply = (flags & 0x20000000u) != 0;
@@ -342,27 +393,36 @@ uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t
     ++g_fx_soft;
   }
   const uint64_t r = g_render_texture(x, y, frame, size, clip, clip2, draw_flags);
-  // Emissive capture: the same quad again, normal blend (premultiplied over black), into the module's
-  // buffer. The engine's batch is flushed around it so each copy lands in its own target.
-  // Normal-blend blits of the FX surface that hold a creature (CInfinity::FXRender per object then one
-  // FXBltToBack) are composites: re-drawing one would capture the creature too. Those give lights per
-  // emitting cell (gathered above) but no pixels; additive blits, pure-effect blits and draws with
-  // their own cell (Render3d) are effect pixels only.
-  if (sprite && g_cov_begin) {  // coverage: the creature's pixels as drawn (wall clipping included)
+  // Each re-draw: the engine's batch is flushed so each copy lands in its own target, then the quad's
+  // scratch region is put back (the flush reset it to 0,0, which holds another object) for the copy.
+  auto redraw = [&](bool begun, uint32_t f, CaptureEndFn end) {
+    if (!begun) return;
+    const ScratchRegion after = ReadScratch();
+    WriteScratch(region);
+    g_render_texture(x, y, frame, size, clip, clip2, f);
     EngineFlushBatch();
-    if (g_cov_begin()) {
-      g_render_texture(x, y, frame, size, clip, clip2, flags & ~(0x208u | 0x20000000u));
+    WriteScratch(after);
+    end();
+  };
+  if (untinted && g_scratch_ok) {
+    const int kind = lighting::FxMaskKind(flags, (draw_flags & 8u) && !(flags & 8u));
+    if (kind) {
       EngineFlushBatch();
-      g_cov_end();
+      redraw(g_fxm_begin(kind), draw_flags, g_fxm_end);
     }
   }
-  if ((emit & 1) && g_cap_begin && (additive || g_cell || pure)) {
+  // Emissive capture: the same quad again, normal blend (premultiplied over black), into the module's
+  // buffer. Normal-blend blits of the FX surface that hold a creature (CInfinity::FXRender per object then
+  // one FXBltToBack) are composites: re-drawing one would capture the creature too. Those give lights per
+  // emitting cell (gathered above) but no pixels; additive blits, pure-effect blits and draws with
+  // their own cell (Render3d) are effect pixels only.
+  if (sprite && g_cov_begin && g_scratch_ok) {  // coverage: the creature's pixels as drawn (wall clipping included)
     EngineFlushBatch();
-    if (g_cap_begin()) {
-      g_render_texture(x, y, frame, size, clip, clip2, flags & ~(0x208u | 0x20000000u));
-      EngineFlushBatch();
-      g_cap_end();
-    }
+    redraw(g_cov_begin(), flags & ~(0x208u | 0x20000000u), g_cov_end);
+  }
+  if ((emit & 1) && g_cap_begin && g_scratch_ok && (additive || g_cell || pure)) {
+    EngineFlushBatch();
+    redraw(g_cap_begin((emit & 8) != 0), flags & ~(0x208u | 0x20000000u), g_cap_end);
   }
   return r;
 }
@@ -372,17 +432,22 @@ uint64_t __fastcall RenderTextureDetour(int x, int y, const int* frame, uint64_t
 uint64_t __fastcall Render3dDetour(uint64_t c, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6,
                                    uint64_t a7, uint64_t a8, uint64_t a9, uint64_t a10) {
   const uint64_t keep = g_cell;
+  const uint32_t keep_flags = g_cell_flags;
   g_cell = c;
+  g_cell_flags = uint32_t(a8);
   ++g_r3d_calls;
   if (g_trace[0]) Trace('3', c, uint32_t(a8), 0, 0);  // Render3d(x, y, rect, clip, poly, n, flags, alpha)
   const uint64_t r = g_render3d(c, a2, a3, a4, a5, a6, a7, a8, a9, a10);
   g_cell = keep;
+  g_cell_flags = keep_flags;
   return r;
 }
 uint64_t __fastcall FxRender3dDetour(uint64_t c, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6,
                                      uint64_t a7, uint64_t a8, uint64_t a9, uint64_t a10) {
   const uint64_t keep = g_cell;
+  const uint32_t keep_flags = g_cell_flags;
   g_cell = c;
+  g_cell_flags = uint32_t(a6);
   if (g_trace[0]) Trace('X', c, uint32_t(a6), 0, 0);  // FXRender3d(x, y, rect, clip, flags, alpha)
   FxCell* pushed = nullptr;
   if (g_armed && g_fx_n < kMaxFxCells && PlausiblePtr(c)) {
@@ -401,6 +466,7 @@ uint64_t __fastcall FxRender3dDetour(uint64_t c, uint64_t a2, uint64_t a3, uint6
   // The frame header may be loaded lazily inside FXRender3d (vtable +64 when +0x128 is null): retry after.
   if (pushed && pushed->w == 0) ReadFrameHeader(c, pushed);
   g_cell = keep;
+  g_cell_flags = keep_flags;
   g_fx_cell = c;
   return r;
 }
@@ -416,6 +482,9 @@ bool InstallGlowGather() {
   if (!rt || !r3 || !fx || !bl || !fh || !CheckSymbol(*rt) || !CheckSymbol(*r3) || !CheckSymbol(*fx) ||
       !CheckSymbol(*bl) || !CheckSymbol(*fh))
     return false;
+  const sym::Symbol* sc = Find(sym::kRvaScratchLea);
+  g_scratch_ok = sc && CheckSymbol(*sc);
+  if (!g_scratch_ok) Log("lighting: scratch surface reference changed: no emissive/coverage/mask re-draws");
   // Cell hooks first: RenderTexture only reads what they set.
   g_render3d = reinterpret_cast<Cell10Fn>(InlineHook(*r3, sym::kRender3dCopy, reinterpret_cast<void*>(&Render3dDetour)));
   g_fx_render3d =
@@ -436,6 +505,11 @@ const EngineGlowDraw* GlowDraws(int* n) {
 
 int GlowDrawsDropped() { return g_glow_dropped; }
 
+void SetFxMaskCallbacks(FxMaskBeginFn begin, CaptureEndFn end) {
+  g_fxm_begin = begin;
+  g_fxm_end = end;
+}
+
 void SetSpriteCallbacks(SpriteWantFn want, CaptureBeginFn cov_begin, CaptureEndFn cov_end) {
   g_sprite_want = want;
   g_cov_begin = cov_begin;
@@ -454,7 +528,7 @@ void FxSurfaceStats(uint64_t* blits, uint64_t* pure, uint64_t* softened, uint64_
   *cells = g_fx_cells_seen;
 }
 
-void SetEmissiveCallbacks(EmitFn emit, CaptureBeginFn begin, CaptureEndFn end) {
+void SetEmissiveCallbacks(EmitFn emit, EmisBeginFn begin, CaptureEndFn end) {
   g_emit_fn = emit;
   g_cap_begin = begin;
   g_cap_end = end;
@@ -462,7 +536,7 @@ void SetEmissiveCallbacks(EmitFn emit, CaptureBeginFn begin, CaptureEndFn end) {
 
 void TraceDraws(const char* prefix) {
   size_t n = 0;
-  for (; prefix && prefix[n] && n < 8; ++n) g_trace[n] = prefix[n];
+  for (; prefix && prefix[n] && n < sizeof(g_trace) - 1; ++n) g_trace[n] = prefix[n];
   g_trace[n] = 0;
   g_trace_lines = 0;
   Log("lighting: tracing draws of '%s'", g_trace);
@@ -677,7 +751,7 @@ uint64_t __fastcall TileRenderDetour(uint64_t a, uint64_t b, uint64_t c, uint64_
 }  // namespace
 
 bool InstallWorldFloor(CompositeFn fn) {
-  if (!fn || g_floor_n >= 4) return false;
+  if (!fn || g_floor_n >= 8) return false;
   if (!g_floor_installed) {
     if (!GlWorldAvailable()) return false;
     const sym::Symbol* s = Find(sym::kRvaTileRenderCall);

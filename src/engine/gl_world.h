@@ -137,14 +137,23 @@ bool HideBamShadows();
 // time with the normal blend into the module's emissive buffer: begin binds it (false = skip), end
 // restores the engine's target. Game thread, inside the world pass.
 // Returns 0 = nothing, 1 = emissive (gathered + captured), 2 = light only (gathered, not captured);
-// | 4 = soften: a normal-alpha draw of this effect is drawn with the screen blend (black = see-through).
+// | 4 = soften: a normal-alpha draw of this effect is drawn with the screen blend (black = see-through);
+// | 8 = whole: a self-lit creature (Ignus): its capture also writes alpha, so every pixel of it, the dark
+// ones too, shows unlit (begin(true)).
 // FX-surface blits (CInfinity::FXRender cells then one FXBltToBack) are judged per cell: when every cell
 // in the surface emits, the blit is an effect only and is captured per pixel (and softened); otherwise
 // (a creature with attached effects) only the emitting cells are gathered, each with its own frame rect.
 using EmitFn = int (*)(const char* resref, uint16_t cycle, uint16_t frame, uint32_t flags);
 using CaptureBeginFn = bool (*)();
 using CaptureEndFn = void (*)();
-void SetEmissiveCallbacks(EmitFn emit, CaptureBeginFn begin, CaptureEndFn end);
+using EmisBeginFn = bool (*)(bool whole);
+void SetEmissiveCallbacks(EmitFn emit, EmisBeginFn begin, CaptureEndFn end);
+// Effect mask: every world draw the engine made without the global tint (cell flags without 0x10000; an
+// FX-surface blit when all its cells are) is drawn a second time between begin(kind) and end into the
+// module's mask buffer: kind 1 = colour and alpha (normal blend), 2 = colour only (additive / screen).
+// Multiply draws are left out. lighting_logic UntintedCell / FxMaskKind decide.
+using FxMaskBeginFn = bool (*)(int kind);
+void SetFxMaskCallbacks(FxMaskBeginFn begin, CaptureEndFn end);
 // Draws gathered since the last ArmWorldComposite (cleared there). Game thread only.
 const EngineGlowDraw* GlowDraws(int* n);
 int GlowDrawsDropped();  // over the per-frame cap (256)

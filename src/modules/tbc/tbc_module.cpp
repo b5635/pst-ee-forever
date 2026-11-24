@@ -36,9 +36,11 @@
 #include "core/tick.h"
 #include "engine/combat.h"
 #include "engine/frame.h"
+#include "engine/gl_world.h"
 #include "engine/lua.h"
 #include "engine/menu.h"
 #include "engine/render.h"
+#include "engine/soft_draw.h"
 #include "engine/screens.h"
 #include "engine/sprites.h"
 #include "engine/symbols.h"
@@ -200,6 +202,7 @@ struct State {
   std::vector<std::string> sounds;   // queued from the swing hook (no Lua inside Swing)
   // Maneuver visuals in the world overlay (GetTickCount ms): rings, dust, smoke, block glow, sparks.
   enum class FxKind : uint8_t { RunRings, Dust, Smoke, Shield, Sparks };
+  bool ground_fx = false;  // ground effects drawn at the floor point (soft_draw), else over the sprites
   struct Fx {
     FxKind kind;
     int32_t id;  // follows this creature (-1: stays at x,y)
@@ -1291,49 +1294,99 @@ uint32_t Dim(uint32_t c, double k) {
   const auto ch = [&](int s) { return static_cast<uint32_t>(((c >> s) & 0xFF) * k) << s; };
   return ch(0) | ch(8) | ch(16);
 }
+// Ground effects of the maneuvers (Run rings, run dust, Withdraw smoke): soft translucent strips drawn at
+// the floor point, under every creature and lit like the ground (engine/soft_draw.h). Without the floor
+// hook they fall back to the engine's lines over the sprites, dimmer.
+void SoftEllipse(std::vector<engine::SoftSeg>* out, int cx, int cy, double r, uint32_t col, float alpha, float hw,
+                 double wave, double phase, int n = 28) {
+  for (int i = 0; i < n; ++i) {
+    const double a0 = 6.283185307 * i / n, a1 = 6.283185307 * (i + 1) / n;
+    const double r0 = r * (1.0 + wave * std::sin(6.0 * a0 + phase)), r1 = r * (1.0 + wave * std::sin(6.0 * a1 + phase));
+    out->push_back({float(cx + r0 * std::cos(a0)), float(cy + r0 * 0.75 * std::sin(a0)), float(cx + r1 * std::cos(a1)),
+                    float(cy + r1 * 0.75 * std::sin(a1)), col, alpha, hw});
+  }
+}
+bool IsGroundFx(State::FxKind k) {
+  return k == State::FxKind::RunRings || k == State::FxKind::Dust || k == State::FxKind::Smoke;
+}
+void GroundFxSegments(const State::Fx& f, int x, int y, double ms, std::vector<engine::SoftSeg>* out) {
+  switch (f.kind) {
+    case State::FxKind::RunRings:
+      // three faint wavy blue rings shrinking into the feet, one after the other
+      for (int k = 0; k < 3; ++k) {
+        const double u = (ms - 140.0 * k) / 650.0;
+        if (u < 0 || u > 1) continue;
+        const double r = 40.0 * (1.0 - u) + 2.0;
+        const float fade = static_cast<float>(std::sin(3.14159265 * u));  // in and out, no pop
+        SoftEllipse(out, x, y, r, 0xF0A040, 0.30f * fade, 3.0f, 0.06, ms / 70.0 + k);
+        SoftEllipse(out, x, y, r, 0xFFE0B0, 0.35f * fade, 1.0f, 0.06, ms / 70.0 + k);
+      }
+      break;
+    case State::FxKind::Dust: {
+      const double u = ms / 700.0;
+      if (u > 1) break;
+      const double r = 3.0 + 8.0 * u;
+      SoftEllipse(out, x, y - static_cast<int>(3 * u), r, 0x6890A8, static_cast<float>(0.28 * (1.0 - u)),
+                  static_cast<float>(1.8 * (1.0 - u) + 0.8), 0.18, f.seed % 7, 12);
+      break;
+    }
+    case State::FxKind::Smoke: {
+      // a soft puff of smoke out from the feet
+      const double u = ms / 800.0;
+      if (u > 1) break;
+      for (int k = 0; k < 9; ++k) {
+        const double a = 6.283185307 * k / 9 + (f.seed % 100) / 50.0;
+        const double d = 8.0 + 40.0 * std::sqrt(u);
+        const int px = x + static_cast<int>(d * std::cos(a));
+        const int py = y + static_cast<int>(d * 0.75 * std::sin(a)) - static_cast<int>(8 * u);
+        SoftEllipse(out, px, py, 4.0 + 9.0 * u, 0xB4B4B4, static_cast<float>(0.25 * (1.0 - u)),
+                    static_cast<float>(2.6 * (1.0 - u) + 1.0), 0.2, k, 12);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+int FxPos(const State::Fx& f, int* x, int* y) {
+  *x = f.x, *y = f.y;
+  if (f.id != -1) {
+    engine::SpriteInfo o;
+    if (engine::GetSprite(f.id, &o)) *x = o.x, *y = o.y, engine::InterpDrawPos(f.id, x, y);
+  }
+  return 0;
+}
+void DrawGroundFx() {  // floor draw point (gl_world.h InstallWorldFloor)
+  if (g.fx.empty()) return;
+  const uint32_t now = GetTickCount();
+  std::vector<engine::SoftSeg> segs;
+  for (const auto& f : g.fx) {
+    if (!IsGroundFx(f.kind)) continue;
+    int x, y;
+    FxPos(f, &x, &y);
+    GroundFxSegments(f, x, y, now - f.t0, &segs);
+  }
+  if (!segs.empty() && !engine::DrawSoftSegments(segs.data(), static_cast<int>(segs.size()))) g.ground_fx = false;
+}
+void FxPreDraw() { engine::ArmWorldComposite(); }  // the floor point runs only on armed frames
+
 void DrawManeuverFx() {
   const uint32_t now = GetTickCount();
   g.fx.erase(std::remove_if(g.fx.begin(), g.fx.end(), [&](const State::Fx& f) { return now - f.t0 > 1400; }), g.fx.end());
   for (auto& f : g.fx) {
-    int x = f.x, y = f.y;
-    if (f.id != -1) {
-      engine::SpriteInfo o;
-      if (engine::GetSprite(f.id, &o)) x = o.x, y = o.y, engine::InterpDrawPos(f.id, &x, &y);
-    }
+    int x, y;
+    FxPos(f, &x, &y);
     const double ms = now - f.t0;
+    if (IsGroundFx(f.kind)) {
+      if (g.ground_fx) continue;  // drawn at the floor point, under the creatures
+      std::vector<engine::SoftSeg> segs;
+      GroundFxSegments(f, x, y, ms, &segs);
+      for (const auto& q : segs)  // fallback: the engine's lines over the sprites, dimmed by the alpha
+        engine::DrawWorldLine(static_cast<int>(q.x1), static_cast<int>(q.y1), static_cast<int>(q.x2),
+                              static_cast<int>(q.y2), Dim(q.bgr, q.alpha), q.half_width * 0.5f);
+      continue;
+    }
     switch (f.kind) {
-      case State::FxKind::RunRings:
-        // three wavy blue rings shrinking into the feet, one after the other
-        for (int k = 0; k < 3; ++k) {
-          const double u = (ms - 140.0 * k) / 650.0;
-          if (u < 0 || u > 1) continue;
-          const double r = 46.0 * (1.0 - u) + 2.0;
-          const double fade = 1.0 - 0.6 * u;
-          Ellipse(x, y, r, Dim(0xF0A040, fade), 2.4f, 0.07, ms / 70.0 + k);
-          Ellipse(x, y, r, Dim(0xFFE0B0, fade), 0.9f, 0.07, ms / 70.0 + k);
-        }
-        break;
-      case State::FxKind::Dust: {
-        const double u = ms / 700.0;
-        if (u > 1) break;
-        const double r = 3.0 + 9.0 * u;
-        const uint32_t c = Dim(0x6890A8, 1.0 - 0.7 * u);  // dusty tan (BGR)
-        Ellipse(x, y - static_cast<int>(4 * u), r, c, static_cast<float>(1.6 * (1.0 - u) + 0.5), 0.18, f.seed % 7, 12);
-        break;
-      }
-      case State::FxKind::Smoke: {
-        // a puff of smoke blasting out from the feet
-        const double u = ms / 800.0;
-        if (u > 1) break;
-        for (int k = 0; k < 9; ++k) {
-          const double a = 6.283185307 * k / 9 + (f.seed % 100) / 50.0;
-          const double d = 8.0 + 44.0 * std::sqrt(u);
-          const int px = x + static_cast<int>(d * std::cos(a));
-          const int py = y + static_cast<int>(d * 0.75 * std::sin(a)) - static_cast<int>(10 * u);
-          Ellipse(px, py, 4.0 + 10.0 * u, Dim(0xB4B4B4, 1.0 - 0.75 * u), static_cast<float>(2.2 * (1.0 - u) + 0.6), 0.2, k, 12);
-        }
-        break;
-      }
       case State::FxKind::Shield: {
         const double u = ms / 900.0;
         if (u > 1) break;
@@ -1355,6 +1408,8 @@ void DrawManeuverFx() {
         }
         break;
       }
+      default:
+        break;
     }
   }
 }
@@ -1465,11 +1520,19 @@ void FillDice(HudView* v) {
   v->dice_sum = b;
 }
 
-// Parentless spell effects get the spell seen on its way to the creature (status.h AttributeOrphans).
-void TrackOrphans(int32_t id) {
+// A creature's status sources: its effects with their parent, and its PST attached spell objects
+// (parentless: AttributeOrphans gives them the spell seen on its way, e.g. Guardian Mantle).
+std::vector<StatusEffect> StatusSources(int32_t id) {
   std::vector<StatusEffect> fx;
   for (const auto& e : engine::ParentEffects(id))
     fx.push_back({e.parent_type, e.parent, e.parent_flags, e.left, e.timed, e.delayed, e.key});
+  for (const auto& a : engine::AttachedObjects(id)) fx.push_back({0, "", 0, a.left, true, false, a.key});
+  return fx;
+}
+
+// Parentless spell effects get the spell seen on its way to the creature (status.h AttributeOrphans).
+void TrackOrphans(int32_t id) {
+  std::vector<StatusEffect> fx = StatusSources(id);
   uint32_t now = 0;
   bool running = false;
   engine::WorldTime(&now, &running);
@@ -1480,9 +1543,7 @@ void TrackOrphans(int32_t id) {
 std::vector<StatusIconView> StatusIconsOf(int32_t id, int box, size_t max_icons) {
   std::vector<StatusIconView> out;
   if (!g.res) return out;
-  std::vector<StatusEffect> fx;
-  for (const auto& e : engine::ParentEffects(id))
-    fx.push_back({e.parent_type, e.parent, e.parent_flags, e.left, e.timed, e.delayed, e.key});
+  std::vector<StatusEffect> fx = StatusSources(id);
   uint32_t now = 0;
   bool running = false;
   engine::WorldTime(&now, &running);
@@ -1683,11 +1744,12 @@ void UpdateHud(uint32_t now) {
     for (const auto& p : engine::PathPoints(g.current)) nodes.push_back({p.first, p.second});
     g.line_preview = false;
     g.unreachable = false;
-    if (!v.party_turn) nodes.clear();  // enemies' and allies' paths are not shown
+    const bool show = ShowPathLine(v.party_turn, me.action);
+    if (!show) nodes.clear();  // enemies' and allies' paths, and a caster's (path_line.h ShowPathLine)
     // Aiming a spell, ability or item: no hover line (the engine's own path shows once the order
     // needs a walk, e.g. a touch spell out of reach).
     const bool aiming = engine::GameCursorState() != 0;
-    if (nodes.empty() && g.econ.party && g.econ.MoveLeft() && !g.econ.acting && !aiming) nodes = HoverPreview(me);
+    if (show && nodes.empty() && g.econ.party && g.econ.MoveLeft() && !g.econ.acting && !aiming) nodes = HoverPreview(me);
     const Pt from{me.x, me.y};
     g.line.clear();
     if (!nodes.empty()) {
@@ -2616,6 +2678,7 @@ int __cdecl LuaStatus(engine::LuaState* L) {
   std::string raw;
   for (const auto& e : engine::ParentEffects(id))
     raw += std::to_string(e.parent_type) + ":" + e.parent + ":" + std::to_string(e.parent_flags) + ":" + std::to_string(e.left) + " ";
+  for (const auto& a : engine::AttachedObjects(id)) raw += "attached:" + std::to_string(a.left) + " ";
   const auto icons = StatusIconsOf(id, kStatusPortraitPx, kStatusIcons);
   std::string out;
   for (const auto& v : icons)
@@ -2769,6 +2832,9 @@ bool InstallTbc(const IniMap& ini) {
       if (bg3) engine::AddMenuTransform(&Bg3Transform);
       g.hud = true;
       g.draw = engine::InstallWorldDraw(&DrawOverlay);
+      // maneuver ground effects under the creatures ([tbc] ground_fx=0: over them, engine lines)
+      g.ground_fx = g.draw && IniBool(ini, "tbc.ground_fx", true) && engine::InstallWorldPreDraw(&FxPreDraw) &&
+                    engine::InstallWorldFloor(&DrawGroundFx);
       g.rolls = engine::InstallRollHooks();
       if (!g.draw) Log("tbc: world overlay not installed; no movement line");
     } else {

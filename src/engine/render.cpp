@@ -21,7 +21,7 @@ using DrawLine2dFn = void(__fastcall*)(void* vid, int x1, int y1, int x2, int y2
 AreaRenderFn g_render = nullptr;
 WorldDrawFn g_fn = nullptr;    // after the world pass: the movement line, the HUD lines
 // Before the world pass: presentation that must land on this frame (the cameras).
-constexpr int kMaxPre = 4;
+constexpr int kMaxPre = 8;  // lighting, gore, tbc camera, tbc ground effects, smooth, ...;
 WorldDrawFn g_pre[kMaxPre] = {};
 bool g_pre_faulted[kMaxPre] = {};
 int g_pre_n = 0;
