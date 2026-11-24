@@ -265,5 +265,19 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   ROUND_LENGTH (DoAction); the round clock steps it at turn start (`StepCastAura`), else a caster casts every few turns.
   A cast with no casting time (Identify) never shows its action to the economy: its cast feedback spends the action.
   Long casts (Rune of Torment, speed 9) are not cut by the one-round attack limit (`IsCastAction`, 4-round cap).
+- Dialogue ability rolls (`[dialogue] rolls`, `src/modules/dlgroll/`, rules in `roll_logic.h`): a reply the engine hides only
+  because the Protagonist's STR/DEX/CON/INT/WIS/CHR is too low is listed obscured; clicking it opens the BG3 roll panel
+  (d20 + floor((ability-10)/2) vs max(10, (needed-10)*2), nat 20/1). A win re-evaluates the node's replies with the engine's
+  own `CGameDialogReply::Hold` and the ability set to the needed value (that node only). Hook: `CGameDialogEntry::Display`;
+  `Hold` is called directly (its only caller is Display). Panel timing follows `sounds/check_success.wav` (starts at the
+  throw: land 2.0 s, bonus 4.4 s, pop 5.3 s, banner 6.25 s; failure banner 7.0 s). Art: `python -I tools/make_dice_bams.py
+  [--only NAME,..] [--preview OUT.png]` -> `data/override/PFD*.BAM` (BAMC, palette alpha). DLG conditions:
+  `python -I tools/dlg_checks.py dump DLGNAME [REGEX]` / `scan [--start]`. Test: `tools\launch.ps1 -Save 000000126 -Lua
+  tests\ingame\dlgroll.lua -Env @{PSTF_DLG_TEST='1'; PSTF_TBC_NOFIGHT='1'} -Until 'dlgroll: ok|TEST FAIL' -Close -Timeout 200`
+  (DSKELW's STR-gated "pry out the joint bolts": fail, leave, re-enter, win, pick; shots `logs\dlg_*.bmp`). Env
+  `PSTF_DLG_TEST=1` runs Lua `pstfDlgTest()` every main-loop iteration (dialogue holds the world still). Probes:
+  `PSTF_DlgState()` (rolls, overrides, engine reply numbers, conditions, abilities), `PSTF_DlgNode()`, `PSTF_DlgForce(n)`
+  (next natural d20), Lua `pstfDlg.rows`, `pstfDr` (panel), `pstfDlgFakeMouse`. Engine facts: reply flags +0 (1 text, 2 cond,
+  8 end), number byte +0xA4 (-1 hidden), condition text +0xA8; CGameDialogSprite +0x54 = dialogue running.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

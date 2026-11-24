@@ -883,6 +883,36 @@ inline constexpr uint8_t kTileRenderCallBytes[] = {0xE8, 0x86, 0x7B, 0x16, 0x00}
 constexpr uint32_t kRvaTileRenderCall = 0x19E725;
 constexpr uint64_t kVaInfinityRender = 0x1403062B0ull;
 
+// Dialogue ability rolls (src/engine/dialog.*). CGameDialogEntry::Display (lin 6302B0 / win 1401AC580) writes
+// the NPC line and every reply whose CGameDialogReply::Hold (lin 62F530 / win 1401AE070, its only caller)
+// passes; a failing reply gets number byte -1. Display prologue: `mov [rsp+20h],rbx` (5 bytes) then pushes.
+inline constexpr uint8_t kDialogDisplayBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x20, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55,
+                                                  0x41, 0x56, 0x41, 0x57, 0x48, 0x8D, 0xAC, 0x24, 0x70, 0xFF, 0xFF, 0xFF};
+constexpr uint32_t kRvaDialogDisplay = 0x1AC580;
+constexpr size_t kDialogDisplayCopy = 5;
+inline constexpr uint8_t kDialogHoldBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x20, 0x55, 0x57, 0x41,
+                                               0x56, 0x48, 0x81, 0xEC, 0x70, 0x02, 0x00, 0x00};
+constexpr uint32_t kRvaDialogHold = 0x1AE070;
+// CGameDialogEntry: replies CGameDialogReply** +0x08, count i32 +0x10 (Display win L220-227, lin `a1+8`/`a1+16`).
+constexpr uint32_t kOffEntryReplies = 0x08, kOffEntryReplyCount = 0x10;
+// CGameDialogReply: flags u32 +0 (1 has text, 2 has condition, 0x20 = listed by Display's first loop), text
+// strref +4, display handle +0x98, selected +0xA0, number byte +0xA4 (-1 hidden), condition source CString
+// +0xA8 and its "parse again" flag +0xB0 (Hold win 1401AE0D0/1401AE0F1, lin L20-26).
+constexpr uint32_t kOffReplyFlags = 0x00, kOffReplyText = 0x04, kOffReplyNumber = 0xA4, kOffReplySelected = 0xA0,
+                   kOffReplyCond = 0xA8;
+// CScreenWorld (chitin +0x1148): in-dialogue byte +0xAA0, CGameDialogSprite* +0x898 (OnDialogReplyClick
+// win 14035B870 / lin 427E40). CGameDialogSprite: entries +0x10, count +0x18, current entry +0x50, the reply
+// number colour Display gets as its 3rd argument +0x5C (EnterDialog win 1401AD9AB..1401ADA23 / lin 631A00).
+constexpr uint32_t kOffWorldInDialog = 0xAA0, kOffWorldDialogSprite = 0x898;
+constexpr uint32_t kOffDlgEntries = 0x10, kOffDlgEntryCount = 0x18, kOffDlgCurrent = 0x50, kOffDlgNumColor = 0x5C;
+// CGameDialogSprite +0x54: 1 while a dialogue runs (EnterDialog `+84 = 1` win 1401AD9C6; EndDialog lin 62E050 sets 0).
+constexpr uint32_t kOffDlgActive = 0x54;
+// Stats the CheckStat triggers read: sprite + (dword +0x4BBC ? 0xFE8 : 0x1C98) (kOffSpriteStats*,
+// EvaluateStatusTrigger win case 0x4045), abilities as shorts: STR +0x4E, INT +0x52, WIS +0x54, DEX +0x56,
+// CON +0x58, CHR +0x5A (CDerivedStats::GetAtOffset cases 36..42, win 14015F1F0).
+constexpr uint32_t kOffStatStr = 0x4E, kOffStatInt = 0x52, kOffStatWis = 0x54, kOffStatDex = 0x56, kOffStatCon = 0x58,
+                   kOffStatChr = 0x5A;
+
 inline constexpr Symbol kAll[] = {
     PSTF_SYM("entry", kEntryRva, kEntryBytes, "PE AddressOfEntryPoint"),
     PSTF_SYM("CTlkTable::Fetch", kRvaTlkFetch, kTlkFetchBytes, "lin 673C70 / win 1404A0840"),
@@ -1098,6 +1128,8 @@ inline constexpr Symbol kAll[] = {
              kShadowKeepRangedBytes, "lin 68E2D0 / win 14049882C"),
     PSTF_SYM("CVidCellFade::Blt8To32TranslucentFade.shadowKeep", kRvaShadowKeepFade, kShadowKeepFadeBytes,
              "lin 68D9D0 / win 140498E8E"),
+    PSTF_SYM("CGameDialogEntry::Display", kRvaDialogDisplay, kDialogDisplayBytes, "lin 6302B0 / win 1401AC580"),
+    PSTF_SYM("CGameDialogReply::Hold", kRvaDialogHold, kDialogHoldBytes, "lin 62F530 / win 1401AE070"),
 };
 
 // Data-section entries (vtable slots): checked like kAll but not required to be executable.

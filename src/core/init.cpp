@@ -7,6 +7,7 @@
 #include "core/log.h"
 #include "core/version_guard.h"
 #include "modules/dev/autoload.h"
+#include "modules/dlgroll/dlgroll_module.h"
 #include "modules/lighting/lighting_module.h"
 #include "modules/gore/gore_module.h"
 #include "modules/party/party_module.h"
@@ -32,7 +33,7 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   }
   // The tbc HUD and End Turn button call PSTF_* functions, so tbc needs the Lua bridge too.
   if (pstf::IniBool(ini, "dev.lua", false) || pstf::IniBool(ini, "tbc.enabled", false) ||
-      pstf::IniBool(ini, "smooth.interpolation", false)) {
+      pstf::IniBool(ini, "smooth.interpolation", false) || pstf::IniBool(ini, "dialogue.rolls", false)) {
     pstf::dev::InstallLuaBridge();
   } else {
     pstf::Log("dev: Lua bridge disabled in ini");
@@ -42,6 +43,7 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   pstf::tbc::InstallTbc(ini);
   pstf::lighting::InstallLighting(ini);
   pstf::gore::InstallGore(ini);
+  pstf::dlgroll::InstallDialogueRolls(ini);
   return 0;
 }
 
