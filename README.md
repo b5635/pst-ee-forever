@@ -32,6 +32,8 @@ one action and 31 ft of movement, BG3-style.
 
 There are probably some broken stuff as I have barely tested but please make an issue / repro and I can look into it.
 
+<p align="center"><img src="docs/media/combat.gif" alt="Close-up of a turn-based melee: Morte runs in, swings land, an enemy is cut down" width="640"></p>
+
 <p align="center">
 <img src="docs/media/tbc_path.png" alt="Movement preview: a gold line for the walkable part, red past this turn's 31 ft" width="49%">
 <img src="docs/media/tbc_aoo.png" alt="An attack of opportunity as a Hive thug runs past" width="49%">
@@ -47,10 +49,7 @@ those replies are listed, obscured, and clicking one opens a roll: **d20 + your 
 difficulty class**. Natural 20s and natural 1s count. Win, and the reply opens up for that conversation.
 The die is a real 3D d20 that tumbles, lands and shows the total.
 
-<p align="center">
-<img src="docs/media/dialogue_roll.gif" alt="A hidden Strength reply, the roll panel, the d20 tumbling and landing on a success" width="380">
-<img src="docs/media/die3d.gif" alt="The 3D d20 tumbling and landing" width="280">
-</p>
+<p align="center"><img src="docs/media/dialogue_roll.gif" alt="The Strength check panel: the 3D d20 tumbles, lands on 15, the bonus is added and SUCCESS opens the hidden reply" width="420"></p>
 
 ### Lock picking and door bashing
 
@@ -79,8 +78,6 @@ after installing it.
 - **8-member party**: the Nameless One and all seven companions at once. Joining, leaving, saves and scripts all go through the engine's own code.
 - **Smooth motion**: creatures and projectiles glide between the engine's steps instead of hopping. Game timing doesn't change.
 - **Examine voice-over**: with PST Revoiced installed, the "examine" (?) text you click in the world is read aloud too, and a new line or a dialogue cuts the old one off.
-
-<p align="center"><img src="docs/media/gore.png" alt="Blood from a melee hit in the Hive" width="520"></p>
 
 ---
 
@@ -140,7 +137,9 @@ copies the build into the game folder and `tools\launch.ps1` starts the game str
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how it fits together and [`CLAUDE.md`](CLAUDE.md) for the
 full list of tools, in-game tests and probes.
 
-The pictures in this README come from those in-game tests; `python -I tools/readme_media.py` rebuilds them.
+The pictures in this README come from those in-game tests: `tools\record.ps1` records a scenario
+(ffmpeg Desktop Duplication), `python -I tools/readme_gifs.py` cuts the GIFs (ffmpeg + gifski) and
+`python -I tools/readme_media.py` makes the stills.
 
 If you still have trouble, feel free to contact me or point your favorite LLM at it.
 

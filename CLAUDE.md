@@ -85,6 +85,12 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 
 - Installing tools is allowed (debuggers, analyzers, Python packages): ask nothing, note them here.
   Installed: WinDbg + `cdb` (`winget install Microsoft.WinDbg`; `%LOCALAPPDATA%\Microsoft\WindowsApps\cdbX64.exe`).
+  Also ffmpeg (`C:\ffmpeg\bin`, Gyan full build) and gifski 1.34 (copied there from the GitHub release; winget's MSI hangs).
+- README media: `tools\record.ps1 -Out build\rec\X.mp4 -Width 1920 -Launch @{Save=..; Lua=..; Env=@{..}; Until=..}` records the
+  screen with ffmpeg ddagrab while launch.ps1 runs (ffmpeg starts at `autoload: world ready`: the full-screen switch kills
+  Desktop Duplication before that). Discord/NVIDIA overlay toasts show for ~15 s after launch: the scenarios in
+  `tools\showcase\` wait that long. `python -I tools/readme_gifs.py [--only X.gif]` cuts docs/media GIFs (clip times in
+  its table), `tools/readme_media.py` the stills. Blood clip: set `[tbc] start_radius=0`/`join_radius=0` while recording (real-time melee).
 - The engine writes a full minidump per crash to `Documents\Infinity Engine - Enhanced Edition\crash\dump.3.2.2.0.NNNN.dmp`.
   First step on any crash report: `tools\dbg.ps1` (newest dump; `-Dump FILE`, `-Extra "cdb cmds"`): exception, registers,
   faulting code, stack with `pst_forever.pdb` names. `python -I tools/crash.py [DUMP] [--all]` (or `--va RVA ...` for the addresses in our log's CRASH block) names Torment.exe frames

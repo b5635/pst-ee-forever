@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Builds the README pictures in docs/media from in-game screenshots (BMPs the tests write).
+"""Builds the README stills in docs/media (GIFs: tools/readme_gifs.py) from in-game screenshots (BMPs the tests write).
 
     python -I tools/readme_media.py [--logs DIR] [--fight DIR] [--config DIR]
 
@@ -60,15 +60,6 @@ def save_png(im, name):
     print(f"{name}: {im.width}x{im.height}, {os.path.getsize(path) // 1024} KB")
 
 
-def save_gif(frames, name, ms, colors=200):
-    path = os.path.join(OUT, name)
-    pal = [f.quantize(colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE) for f in frames]
-    durations = ms if isinstance(ms, list) else [ms] * len(frames)
-    pal[0].save(path, save_all=True, append_images=pal[1:], duration=durations, loop=0, optimize=True,
-                disposal=1)
-    print(f"{name}: {len(frames)} frames {frames[0].width}x{frames[0].height}, {os.path.getsize(path) // 1024} KB")
-
-
 def have(*paths):
     missing = [p for p in paths if not os.path.exists(p)]
     for p in missing:
@@ -85,12 +76,8 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     L = lambda n: os.path.join(a.logs, n)
 
-    # Turn-based fight: GIF of the run + two stills (movement preview, attack of opportunity).
+    # Turn-based fight stills (movement preview, attack of opportunity). GIFs: tools/readme_gifs.py.
     if a.fight:
-        shots = sorted(f for f in os.listdir(a.fight) if f.startswith("shot_") and f.endswith(".bmp"))
-        frames = [load(os.path.join(a.fight, f), width=600) for f in shots[3:61]]
-        if frames:
-            save_gif(frames, "tbc_fight.gif", 450, colors=96)
         for src, dst in (("shot_011.bmp", "tbc_path.png"), ("shot_027.bmp", "tbc_aoo.png")):
             if have(os.path.join(a.fight, src)):
                 save_png(load(os.path.join(a.fight, src), width=960), dst)
@@ -100,32 +87,8 @@ def main():
         if have(L(off), L(lit)):
             save_png(side_by_side(load(L(off), crop, 640), load(L(lit), crop, 640), ("Vanilla", "PST Forever")), dst)
 
-    hammer = [f"hammer_night_{{}}_{t}.bmp" for t in range(20, 81, 6)]
-    if have(*[L(h.format(m)) for h in hammer for m in ("lit", "off")]):
-        crop = (380, 140, 1000, 560)
-        frames = [side_by_side(load(L(h.format("off")), crop, 450), load(L(h.format("lit")), crop, 450),
-                               ("Vanilla", "PST Forever")) for h in hammer]
-        save_gif(frames, "lighting_spell.gif", [160] * (len(frames) - 1) + [900])
-
-    # Dialogue ability roll: the hidden reply, the panel, the throw, the result.
-    seq = [("dlg_list_1.bmp", 1800), ("dlg_panel_1.bmp", 1200), ("dlg_tumble.bmp", 500),
-           ("dlg_natural_ok.bmp", 900), ("dlg_bonus_ok.bmp", 900), ("dlg_pop_ok.bmp", 700),
-           ("dlg_banner_ok_ok.bmp", 1800), ("dlg_won.bmp", 2200)]
-    if have(*[L(n) for n, _ in seq]):
-        crop = (320, 0, 960, 720)
-        save_gif([load(L(n), crop, 480) for n, _ in seq], "dialogue_roll.gif", [ms for _, ms in seq])
-        save_png(load(L("dlg_banner_ok_ok.bmp"), (420, 60, 860, 680)), "dialogue_success.png")
-
-    die = ["die3d_idle.bmp", "die3d_0300.bmp", "die3d_0700.bmp", "die3d_1100.bmp", "die3d_1500.bmp",
-           "die3d_2100.bmp", "die3d_4250.bmp", "die3d_4600.bmp", "die3d_6400.bmp"]
-    if have(*[L(n) for n in die]):
-        crop = (440, 40, 840, 520)
-        save_gif([load(L(n), crop, 360) for n in die], "die3d.gif", [700, 250, 250, 250, 400, 600, 600, 900, 1500])
-
     if have(L("lock_bash_ok.bmp")):
         save_png(load(L("lock_bash_ok.bmp"), (420, 60, 860, 680)), "lock_roll.png")
-    if have(L("gore_fight.bmp")):
-        save_png(load(L("gore_fight.bmp"), (360, 80, 980, 480)), "gore.png")
     if have(L("bar2_desc.bmp")):
         save_png(load(L("bar2_desc.bmp"), (230, 0, 1030, 720), 640), "maneuver_run.png")
     if a.config and have(os.path.join(a.config, "cfg2.bmp")):
