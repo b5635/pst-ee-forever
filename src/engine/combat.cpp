@@ -181,6 +181,33 @@ void ShiftEffectClock(int32_t id, int32_t ticks) {
     W<uint32_t>(eff + sym::kOffEffTick, t + static_cast<uint32_t>(ticks));
   });
   W<uint32_t>(p + sym::kOffSpriteRegenStamp, R<uint32_t>(p + sym::kOffSpriteRegenStamp) + static_cast<uint32_t>(ticks));
+  // PST attached spell objects (Submerge the Will, shields) end on their own world-time stamp.
+  static const int att_ok = AllOk({sym::kRvaAttachedCount, sym::kRvaAttachedList, sym::kRvaAttachedEnd}) ? 1 : 0;
+  if (att_ok) {
+    const int n = std::min<int>(R<uint8_t>(p + sym::kOffSpriteAttachedCount), sym::kMaxAttached);
+    for (int i = 0; i < n; ++i) {
+      const uint64_t o = R<uint64_t>(p + sym::kOffSpriteAttached + 8ull * i);
+      if (!PlausiblePtr(o)) continue;
+      const uint32_t end = R<uint32_t>(o + sym::kOffAttachedEnd);
+      if (end == 0 || end >= 0xF0000000u) continue;
+      W<uint32_t>(o + sym::kOffAttachedEnd, end + static_cast<uint32_t>(ticks));
+    }
+  }
+}
+
+int AttachedLeft(int32_t id, std::vector<int32_t>* out) {
+  const uint64_t p = LookupSprite(id);
+  const uint64_t g = GameObject();
+  if (!p || !g || !AllOk({sym::kRvaAttachedCount, sym::kRvaAttachedList, sym::kRvaAttachedEnd})) return 0;
+  const uint32_t now = R<uint32_t>(g + 0x7820);
+  const int n = std::min<int>(R<uint8_t>(p + sym::kOffSpriteAttachedCount), sym::kMaxAttached);
+  for (int i = 0; i < n; ++i) {
+    const uint64_t o = R<uint64_t>(p + sym::kOffSpriteAttached + 8ull * i);
+    if (!PlausiblePtr(o)) continue;
+    const uint32_t end = R<uint32_t>(o + sym::kOffAttachedEnd);
+    if (out) out->push_back(end ? static_cast<int32_t>(end - now) : 0);
+  }
+  return n;
 }
 
 void StepEffectClock(int32_t id, uint32_t ticks) {
@@ -238,7 +265,9 @@ std::vector<ParentEffectView> ParentEffects(int32_t id) {
     ParentEffectView v;
     const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
     v.timed = type == 4096;  // absolute: running now (delayed types have not started)
-    if (!v.timed) return;
+    v.delayed = type >= 6 && type <= 8;
+    if (!v.timed && !v.delayed) return;
+    v.key = eff;
     v.left = static_cast<int32_t>(R<uint32_t>(eff + sym::kOffEffTick) - now);
     v.parent_type = R<uint32_t>(eff + sym::kOffEffParentType);
     v.parent_flags = R<uint32_t>(eff + sym::kOffEffParentFlags);
@@ -385,7 +414,16 @@ void ForceRun(int32_t id, bool run, uint8_t run_scale_other) {
     using SetRunningFn = int64_t(__fastcall*)(uint64_t, int, int);
     const auto set_running = reinterpret_cast<SetRunningFn>(R<uint64_t>(R<uint64_t>(a) + sym::kVtblAnimSetRunning));
     if (rs >= 1.0) {
-      if (run != running) set_running(a, run ? 1 : 0, 0);
+      if (run != running) {
+        set_running(a, run ? 1 : 0, 0);
+        // The walk/run cycle is picked by the animation's SetSequence only (symbols.h AnimPst.vtbl.SetSequence):
+        // mid-walk, set the walk sequence again so the frames match the new speed (Withdraw walks).
+        static const int seq_ok = AllOk({sym::kRvaSlotAnimSetSeq}) ? 1 : 0;
+        if (seq_ok && R<uint16_t>(p + sym::kOffSpriteSequence) == sym::kSeqWalk) {
+          using SetSeqFn = int64_t(__fastcall*)(uint64_t, int16_t);
+          reinterpret_cast<SetSeqFn>(R<uint64_t>(R<uint64_t>(a) + sym::kVtblAnimSetSeq))(a, static_cast<int16_t>(sym::kSeqWalk));
+        }
+      }
       return;
     }
     // No run sequence: walk frames, run speed.
@@ -896,4 +934,143 @@ std::string ActionBarHex(int slot, int bytes) {
   return s;
 }
 
+}  // namespace pstf::engine
+
+namespace pstf::engine {
+// --- sprite update, poses, bumping ---------------------------------------------------------------------
+namespace {
+SpriteUpdateFn g_update = nullptr;
+void(__fastcall* g_update_orig)(void*) = nullptr;
+BumpGuardFn g_bump = nullptr;
+using BumpFn = int64_t(__fastcall*)(void*);
+BumpFn g_bump_orig = nullptr;
+
+void OrigUpdate(void* sprite) { g_update_orig(sprite); }
+void __fastcall HookSpriteUpdate(void* sprite) {
+  if (!g_update) return g_update_orig(sprite);
+  g_update(sprite, R<int32_t>(reinterpret_cast<uint64_t>(sprite) + sym::kOffSpriteId), &OrigUpdate);
+}
+int64_t __fastcall HookBumpable(void* sprite) {
+  if (g_bump && sprite && g_bump(R<int32_t>(reinterpret_cast<uint64_t>(sprite) + sym::kOffSpriteId))) return 0;
+  return g_bump_orig(sprite);
+}
+bool PoseOk() {
+  static const int ok = AllOk({sym::kRvaSlotAnimSetSeq, sym::kRvaFrameSet, sym::kRvaSeqLength, sym::kRvaSetSequence}) ? 1 : 0;
+  return ok != 0;
+}
+uint64_t PstAnim(uint64_t p) {
+  const uint64_t a = p ? R<uint64_t>(p + sym::kOffSpriteAnim) : 0;
+  return PlausiblePtr(a) && R<uint64_t>(a) == sym::kVaAnimPstVtable ? a : 0;
+}
+}  // namespace
+
+bool InstallSpriteUpdate(SpriteUpdateFn fn) {
+  if (g_update_orig) {
+    g_update = fn;
+    return true;
+  }
+  const sym::Symbol* slot = Find(sym::kRvaSlotAIUpdate);
+  if (!slot || !CheckSymbol(*slot) || !AllOk({sym::kRvaAIUpdate})) return false;
+  const uint64_t was = ReplacePointer(*slot, reinterpret_cast<void*>(&HookSpriteUpdate));
+  if (was != sym::kImageBase + sym::kRvaAIUpdate) return false;
+  g_update_orig = reinterpret_cast<void(__fastcall*)(void*)>(was);
+  g_update = fn;
+  Log("combat: sprite update hook installed (CGameSprite::AIUpdate slot)");
+  return true;
+}
+
+bool InstallBumpGuard(BumpGuardFn guard) {
+  if (g_bump_orig) {
+    g_bump = guard;
+    return true;
+  }
+  const sym::Symbol* a = Find(sym::kRvaBumpCall1);
+  const sym::Symbol* b = Find(sym::kRvaBumpCall2);
+  if (!a || !b || !CheckSymbol(*a) || !CheckSymbol(*b)) return false;
+  const uint64_t t1 = RedirectCall(*a, reinterpret_cast<void*>(&HookBumpable));
+  const uint64_t t2 = RedirectCall(*b, reinterpret_cast<void*>(&HookBumpable));
+  if (t1 != sym::kVaCheckBumpable || t2 != sym::kVaCheckBumpable) return false;
+  g_bump_orig = reinterpret_cast<BumpFn>(t1);
+  g_bump = guard;
+  Log("combat: bump guard installed (2 CheckBumpable calls)");
+  return true;
+}
+
+int16_t SpriteSequence(int32_t id) {
+  const uint64_t p = LookupSprite(id);
+  return p ? R<int16_t>(p + sym::kOffSpriteSequence) : -1;
+}
+
+bool InAttackRound(int32_t id) {
+  static const int ok = AllOk({sym::kRvaAttackFudge}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  return p && R<int32_t>(p + sym::kOffSpriteAttackFudge) != 0;
+}
+
+int AttackRoundPos(int32_t id) {
+  static const int ok = AllOk({sym::kRvaAttackRound}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  return p ? R<int16_t>(p + sym::kOffSpriteAttackRound) : -2;
+}
+
+void NewAttackRound(int32_t id) {
+  static const int ok = AllOk({sym::kRvaAttackRound}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (p) W<uint16_t>(p + sym::kOffSpriteAttackRound, 0xFFFF);
+}
+
+void KeepAttackRound(int32_t id) {
+  static const int ok = AllOk({sym::kRvaAttackFudge}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (p) W<int32_t>(p + sym::kOffSpriteAttackFudge, 1);
+}
+
+bool SetSpriteSequence(int32_t id, int16_t seq) {
+  const uint64_t p = PoseOk() ? LookupSprite(id) : 0;
+  if (!p) return false;
+  reinterpret_cast<void(__fastcall*)(uint64_t, int16_t)>(Va(sym::kRvaSetSequence))(p, seq);
+  return true;
+}
+
+int PoseLying(int32_t id, int back) {
+  const uint64_t p = PoseOk() ? LookupSprite(id) : 0;
+  const uint64_t a = PstAnim(p);
+  if (!a) return 0;
+  const int16_t cyc = R<int16_t>(a + sym::kOffAnimCycle);
+  if (cyc < 10 || cyc > 12) {  // not the die cycle (a hit, a new order): lie down again
+    using SetSeqFn = int64_t(__fastcall*)(uint64_t, int16_t);
+    reinterpret_cast<SetSeqFn>(R<uint64_t>(R<uint64_t>(a) + sym::kVtblAnimSetSeq))(a, sym::kSeqDie);
+  }
+  const uint64_t cell = R<uint64_t>(a + sym::kOffAnimCell);
+  if (!PlausiblePtr(cell)) return 0;
+  using LenFn = int16_t(__fastcall*)(uint64_t, uint16_t);
+  const int len = reinterpret_cast<LenFn>(Va(sym::kRvaSeqLength))(cell, R<uint16_t>(cell + sym::kOffCellSeq));
+  if (len <= 0) return 0;
+  const int f = std::max(0, len - 1 - std::max(0, back));
+  reinterpret_cast<int64_t(__fastcall*)(uint64_t, uint16_t)>(Va(sym::kRvaFrameSet))(cell, static_cast<uint16_t>(f));
+  return len;
+}
+
+bool PlayArmorHitSound(int32_t id) {
+  static const int ok = AllOk({sym::kRvaHitSound, sym::kRvaHitSoundPst}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  const uint64_t pst = R<uint64_t>(sym::kVaPlanescape);
+  if (!p || !PlausiblePtr(pst)) return false;
+  reinterpret_cast<void(__fastcall*)(uint64_t, uint32_t, uint64_t)>(Va(sym::kRvaHitSound))(pst, sym::kHitSoundPiercing, p);
+  return true;
+}
+
+std::string AnimProbe(int32_t id) {
+  const uint64_t p = LookupSprite(id);
+  const uint64_t a = PstAnim(p);
+  char b[96];
+  if (!a) {
+    std::snprintf(b, sizeof b, "-1 -1 -1 %d", p ? R<int16_t>(p + sym::kOffSpriteSequence) : -1);
+    return b;
+  }
+  const uint64_t cell = R<uint64_t>(a + sym::kOffAnimCell);
+  std::snprintf(b, sizeof b, "%d %d %d %d", R<int32_t>(a + sym::kOffAnimRunFlag), R<int16_t>(a + sym::kOffAnimCycle),
+                PlausiblePtr(cell) ? R<int16_t>(cell + sym::kOffCellFrame) : -1, R<int16_t>(p + sym::kOffSpriteSequence));
+  return b;
+}
 }  // namespace pstf::engine

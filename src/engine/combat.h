@@ -17,6 +17,9 @@ bool EffectClockInstalled();
 // Keeps a creature's own timers where they are while `ticks` of world time pass: absolute and
 // delayed effect ticks and the natural-regeneration stamp move forward by `ticks`.
 void ShiftEffectClock(int32_t id, int32_t ticks);
+// PST attached spell objects on the creature (symbols.h kOffSpriteAttached): count; `left` gets ticks to
+// each one's end (0 = no end). The round clock moves their ends with the effects.
+int AttachedLeft(int32_t id, std::vector<int32_t>* left);
 // Delayed effects that `resolves_now(ticks to onset)` says are part of the spell resolving keep running
 // on world time (never shifted) until they fire; ResolvingOnsets counts those still pending.
 // resolves_now(ticks to onset, opcode): 0 = round-clocked, 1 = the spell resolving (world time, the
@@ -48,8 +51,10 @@ std::vector<EffectView> TimedEffects(int32_t id);
 struct ParentEffectView {
   uint32_t parent_type = 0, parent_flags = 0;
   char parent[9] = {};
-  int32_t left = 0;  // ticks to expiry
+  int32_t left = 0;  // ticks to expiry (delayed: to onset)
   bool timed = false;
+  bool delayed = false;  // delayed types 6/7/8: not running yet (their parent names a spell on its way)
+  uint64_t key = 0;      // identity of the effect while it lives (compare only)
 };
 std::vector<ParentEffectView> ParentEffects(int32_t id);
 // The creature's colour glow effects (opcodes 8, 9, 52, 61, 353 tint screen; symbols.h "Colour effects").
@@ -76,6 +81,28 @@ void WatchProjectiles();  // call per frame: hooks the vtables of new projectile
 // the run speed on their move scale. `restore` puts the walk speed back.
 void ForceRun(int32_t id, bool run, uint8_t run_scale_other);
 uint8_t MoveScale(int32_t id);  // current move scale (GetMoveScale)
+
+// --- sprite update, poses, bumping (symbols.h "Per-tick sprite update", "AnimPst.vtbl.SetSequence") -----
+// CGameSprite::AIUpdate (vtable slot 3) goes through `fn(sprite, id, orig)`: it calls orig 0, 1 or more times.
+using SpriteUpdateFn = void (*)(void* sprite, int32_t id, void (*orig)(void*));
+bool InstallSpriteUpdate(SpriteUpdateFn fn);
+// Bumping: `guard(id)` true = a walker may not push this creature aside (as the engine never pushes enemies).
+using BumpGuardFn = bool (*)(int32_t id);
+bool InstallBumpGuard(BumpGuardFn guard);
+int16_t SpriteSequence(int32_t id);              // CGameSprite sequence word (-1: none)
+bool InAttackRound(int32_t id);                  // its melee reach has the engine's RANGE_FUDGE (+1 cell) now
+void KeepAttackRound(int32_t id);                // sets that flag again (after a ClearAI that cleared it)
+int AttackRoundPos(int32_t id);                  // ticks into its attack round (-1 = a new one at the next swing)
+void NewAttackRound(int32_t id);                 // its next swing starts a fresh attack round (swings soon, not next round)
+bool SetSpriteSequence(int32_t id, int16_t seq); // CGameSprite::SetSequence (sounds and all, as the engine)
+inline bool IsAttackSequence(int16_t s) { return s == 0 || s == 8 || s == 11 || s == 12 || s == 13; }
+// Lying down: a PST character animation shows its die cycle at `back` frames before the last one (0 = on the
+// ground; more = on the way up or down). Returns the cycle's frame count (0: not a PST animation).
+int PoseLying(int32_t id, int back);
+// The engine's armour hit sound at the creature (HIT_02<armor>, as a piercing hit plays it).
+bool PlayArmorHitSound(int32_t id);
+// Anim probe: run flag, cycle word, frame, sprite sequence (-1s when not a PST animation).
+std::string AnimProbe(int32_t id);
 
 // Keeps the battle song playing in the area the creature is in (the engine's own counter).
 void KeepBattleMusic(int32_t id, int ticks);

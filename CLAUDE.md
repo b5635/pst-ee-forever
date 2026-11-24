@@ -226,10 +226,31 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   Withdraw (party side only), Block, Trip/Knockdown on the hotbar (Block wears the engine's Guard icon; Guard is left out),
   directed AI (`DirectedAi`: run to close, block when hurt and surrounded, 20 % takedowns), attacks of opportunity.
   Melee swings are Swing's Hit call **site 3** on Windows (Ignus' fire = site 1; roll log `(site N)`): the THAC0 / outcome
-  filter sits there. Prone = engine op 39 (save vs death) via `engine::ApplyEffect` (DecodeEffect + vtable AddEffect),
-  stood up with op 337/2 at its next turn. Test: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\tbc_moves.lua
-  -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_moves: ok|TEST FAIL' -Close -Timeout 400`. Probes: `PSTF_Maneuver(name)`,
-  `PSTF_Stance(id)`, `PSTF_Aoo()`, `PSTF_Class(id)` (CLASS/SPECIFIC.IDS), `PSTF_MoveStats()`; combat.log `MOVE`/`AOO`/`AI` lines.
-  Sounds `data/override/PFSND*.WAV` (Ogg in WAV, from the GemRB fork), played with `Infinity_PlaySound`.
+  filter sits there. Knocked down = op 0 AC -4 for 5 s (save vs death; +4 to hit it, gone with its round clock at its
+  next turn start) via `engine::ApplyEffect` (DecodeEffect + vtable AddEffect); no op 39 (its sleep overlay). The pose
+  is ours: `engine::PoseLying` holds the PST animation's die cycle (anim SetSequence vtable +0x170, cell frame +0x118),
+  played backwards to get up, from the CGameSprite::AIUpdate slot hook (`InstallSpriteUpdate`), which also paces the
+  trip swing (half speed to the hit, 1.5x after; `TripPace`). A trip hit plays the engine's armour hit sound
+  (`PlayArmorHitSound`) and the target's damage sequence. Engine melee reach = Chebyshev cells (CAIUtil::CountSquares)
+  + RANGE_FUDGE 1 while sprite+0x49BC is set; a reaction starts a new attack round (+0x48B2 = 0xFFFF) or it waits a
+  whole round to swing. Withdraw walks: the walk/run cycle is chosen only in the anim's SetSequence (re-set on a flip).
+  Path points are sparse waypoints; Ignus floats (no walk path: AoO caught a tick late, his update paused for the swing).
+  `[tbc] no_push` = CheckBumpable redirected (2 call sites): combatants are never pushed in a fight.
+  Tests: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\tbc_moves.lua -Env @{PSTF_TEST_TICK='1'} -Until
+  'tbc_moves: ok|TEST FAIL' -Close -Timeout 400` and `tbc_moves2.lua` (same, `-Until 'tbc_moves2: ok|TEST FAIL' -Timeout 600`:
+  withdraw walk cycle, AoO swing, knock-down AC +4 / fall / get up, Submerge the Will icon + shield on the round clock,
+  no walking in place). Probes: `PSTF_Maneuver(name)`, `PSTF_Stance(id)`, `PSTF_Aoo()`, `PSTF_Class(id)` (CLASS/SPECIFIC.IDS),
+  `PSTF_MoveStats()` (13th = AI short runs), `PSTF_AnimProbe(id)` (run flag, cycle, frame, sequence), `PSTF_Pose(id)`,
+  `PSTF_Attached(id)` (PST attached spell objects: ticks to each end); env `PSTF_AOO_TRACE=N` (reach checks + reaction
+  ticks); combat.log `MOVE`/`AOO`/`AI`/`PUSH` lines. Sounds `data/override/PFSND*.WAV` (Ogg in WAV, from the GemRB fork).
+- Buffs: PST attached spell objects (op 375: Submerge the Will, shields) end on their own world-time stamp (+0x3FC),
+  outside the effect lists: `ShiftEffectClock` moves them too. Their effects (and Power of One's) have no parent
+  resref: `AttributeOrphans` (status.h) gives them the spell seen on its way (a delayed effect with a parent).
+- All spells: `tools\make_spell_save.ps1` builds `tests\saves\000000990-PSTF-AllSpells` (Grace joins, 3M XP, TNO knows
+  every mage spell, Grace every priest spell; `C:AddSpell`) and copies it to the save folder; `tools\install_test_saves.ps1`
+  copies `tests\saves\*` there on a new machine. `tools\spell_suite.ps1 [-Only SPWI119,...]` casts every spell in a fight
+  (`tests\ingame\tbc_spells_all.lua`, ~15 min) and writes `tests\unit\spell_results.h`; `test_spells.cpp` needs a non-stall
+  result for every spell in `tests\unit\spell_table.h` (`python -I tools/spell_list.py`, also `tests\ingame\spell_list.lua`).
+  A new spell (mod) = re-run both. Grace's level 5+ priest spells fizzle (her caster level).
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

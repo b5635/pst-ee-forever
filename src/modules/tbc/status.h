@@ -18,7 +18,47 @@ struct StatusEffect {
   uint32_t parent_flags = 0; // the SPL/ITM flags (0x9C); bit 10 = hostile
   int32_t left = 0;          // ticks to expiry; <= 0 or not timed: not a status
   bool timed = false;
+  bool delayed = false;      // not running yet (a spell on its way)
+  uint64_t key = 0;          // the effect's identity while it lives
 };
+
+// Effects a spell adds through the engine's own code carry no parent: Submerge the Will's AC and saves
+// (opcode 375, CGameEffectAddAttachedObject builds them with DecodeEffect and no source), Power of One's
+// strength (projectile 287). They belong to the spell last seen on its way to that creature: a delayed
+// effect with a parent, seen within kOrphanWindowTicks. Once given, an effect keeps its parent.
+struct OrphanMap {
+  struct Parent {
+    std::string res;
+    uint32_t type = 0, flags = 0;
+    int64_t seen = 0;
+  };
+  std::map<int32_t, Parent> recent;                      // creature -> last spell on its way
+  std::map<int32_t, std::map<uint64_t, Parent>> given;   // creature -> effect key -> its parent
+};
+constexpr int64_t kOrphanWindowTicks = 150;
+inline void AttributeOrphans(int32_t id, std::vector<StatusEffect>* fx, int64_t now, OrphanMap* m) {
+  for (const StatusEffect& e : *fx)
+    if (e.delayed && !e.parent.empty() && (e.parent_type == 1 || e.parent_type == 2))
+      m->recent[id] = {e.parent, e.parent_type, e.parent_flags, now};
+  std::map<uint64_t, OrphanMap::Parent>& mine = m->given[id];
+  std::map<uint64_t, OrphanMap::Parent> keep;
+  const auto rec = m->recent.find(id);
+  for (StatusEffect& e : *fx) {
+    if (!e.timed || !e.parent.empty() || !e.key) continue;
+    const auto it = mine.find(e.key);
+    OrphanMap::Parent p;
+    if (it != mine.end()) {
+      p = it->second;
+    } else if (rec != m->recent.end() && now - rec->second.seen <= kOrphanWindowTicks) {
+      p = rec->second;
+    } else {
+      continue;
+    }
+    keep[e.key] = p;
+    e.parent = p.res, e.parent_type = p.type, e.parent_flags = p.flags;
+  }
+  mine.swap(keep);  // effects that are gone forget their parent (their keys may be reused)
+}
 
 struct StatusIcon {
   std::string parent;

@@ -161,13 +161,20 @@ struct State {
   int party_max = 6;                 // [party] size: portrait slots (6 vanilla, 8 with the party module)
   std::unique_ptr<GameRes> res;      // game resources: icon sizes, spell icons/names (status icons)
   StatusSpans status_spans;          // first-seen length of each buff on each creature
+  OrphanMap orphans;                 // parentless spell effects -> the spell they came with (status.h)
   std::vector<std::vector<StatusIconView>> status_party;
   uint32_t status_t0 = 0;            // GetTickCount of the last party status collection
   // Maneuvers (maneuvers.h): Run, Withdraw, Block, Trip/Knockdown, attacks of opportunity.
   bool maneuvers = true;             // [tbc] maneuvers
   bool opportunity = true;           // [tbc] opportunity_attacks
+  bool no_push = true;               // [tbc] no_push: walkers never push combatants aside in a fight
+  int aoo_trace = 0;                 // env PSTF_AOO_TRACE=N: log the first N reach checks of each turn
+  int aoo_trace_react = 0;           // ... and the ticks of a reaction
   std::map<int32_t, Stance> stance;  // every combatant, from its turn start to the next
   Reaction aoo;                      // the attack of opportunity in progress
+  std::map<int32_t, bool> aoo_was_in;  // this turn: the mover stood in this foe's reach last tick
+  bool aoo_freeze = false;           // the mover (no walk path) pauses its sprite update for the swing
+  bool aoo_fudge = false;            // the reactor keeps the engine's RANGE_FUDGE reach for this reaction
   bool aoo_swing = false;            // the reactor swung (TakeRolls)
   bool takedown_swung = false;       // the armed takedown's first swing came
   bool ai_moved = false;             // the directed AI chose its maneuver this turn
@@ -175,8 +182,11 @@ struct State {
     int32_t target, attacker;
     Takedown kind;
     int wait;  // ticks until the outcome is read (the save comes as the effect applies)
+    int before = 0;  // its running AC effects (opcode 0) before ours
   };
   std::vector<Trip> trips, trip_checks;
+  TripPace trip_pace;                // the armed takedown swing: slow wind-up, quick follow-through
+  std::map<int32_t, PronePose> poses;  // knocked down: lying / getting up (die cycle, backwards to rise)
   std::vector<std::string> sounds;   // queued from the swing hook (no Lua inside Swing)
   // Maneuver visuals in the world overlay (GetTickCount ms): rings, dust, smoke, block glow, sparks.
   enum class FxKind : uint8_t { RunRings, Dust, Smoke, Shield, Sparks };
@@ -193,7 +203,7 @@ struct State {
   // Counters for tests (PSTF_MoveStats): since install.
   struct MoveStats {
     int runs = 0, withdraws = 0, blocks = 0, block_tries = 0, blocked = 0, takedowns = 0, takedown_hits = 0, prone = 0;
-    int aoo = 0, aoo_swung = 0, ai_moves = 0, stood = 0;
+    int aoo = 0, aoo_swung = 0, ai_moves = 0, stood = 0, short_runs = 0;
   } ms;
 } g;
 
@@ -232,6 +242,7 @@ bool Contains(const std::vector<int32_t>& v, int32_t id) {
 bool Held(int32_t id) { return g.running && id != g.current && id != g.aoo.reactor && Contains(g.in, id); }
 
 void ManeuverTurnStart(int32_t id);
+bool StepProvokes(int32_t cur);
 void ManeuverFightEnd();
 
 // Projectiles move in their caster's turn; a landed cloud or swarm also stops once it has used this
@@ -242,8 +253,13 @@ bool ProjectileRuns(int32_t caster, int32_t proj, bool lingers) {
   return !lingers || g.pulses.Run(proj);
 }
 
+bool Rising(int32_t id) {
+  const auto it = g.poses.find(id);
+  return it != g.poses.end() && it->second.phase == PronePose::Phase::Rising;
+}
+
 void __fastcall HookProcessAI(void* sprite) {
-  if (Held(engine::SpriteIdOf(sprite))) {
+  if (Held(engine::SpriteIdOf(sprite)) || (g.running && Rising(engine::SpriteIdOf(sprite)))) {
     // No scripts or actions while it waits, but spells cast on it land now (round clock frozen).
     if (g.round_effects) engine::HeldEffectsTick(sprite);
     return;
@@ -253,8 +269,9 @@ void __fastcall HookProcessAI(void* sprite) {
 void __fastcall HookWalk(void* sprite) {
   const int32_t id = engine::SpriteIdOf(sprite);
   if (Held(id)) return;
-  if (g.running && id == g.current && (g.hold_current || g.aoo.Active())) return;  // spent / held at the edge
+  if (g.running && id == g.current && (g.hold_current || g.aoo.Active() || Rising(id))) return;  // spent / at the edge / getting up
   if (g.running && id == g.aoo.reactor) return;  // its attack of opportunity is a swing, never a chase
+  if (g.running && id == g.current && StepProvokes(id)) return;  // this step leaves a reach: the reaction first (OnTick)
   if (g.running && id == g.current && g.stance[id].withdrawn) {
     engine::ForceRun(id, false, g.run_scale_other);  // Withdraw: walk animation and walking speed
   } else if (g.running && g.run && id == g.current) {
@@ -802,7 +819,6 @@ bool UseManeuver(int32_t id, AiMove m) {
     case AiMove::Trip:
       ok = ToggleTrip(g.econ, &st, MayTripId(id));
       what = st.takedown == Takedown::Trip ? "will trip with its first attack" : "cancels the trip";
-      if (ok && st.takedown == Takedown::Trip) FloatText(id, "Trip", 1200);
       break;
     case AiMove::Knockdown:
       ok = ArmKnockdown(g.econ, &st, MayKnockdownId(id)), what = "will knock down with its first attack";
@@ -837,14 +853,14 @@ uint8_t __cdecl MeleeOutcome(int32_t attacker, int32_t target, bool hit, int rol
       a.takedown = Takedown::None;
       g.takedown_swung = true;
       ++g.ms.takedowns;
-      QueueSound("PFSNDTRP");
+      g.trip_pace.Resolved();  // the rest of the swing plays quicker
       if (!hit) {
         FloatText(target, std::string(TakedownName(k)) + ": Failure");
         CLog("MOVE", Name(attacker) + " " + TakedownName(k) + " misses " + Name(target));
         return 0;
       }
       ++g.ms.takedown_hits;
-      g.trips.push_back({target, attacker, k, 0});
+      g.trips.push_back({target, attacker, k, 0, 0});
       return 2;  // a hit with no damage: the target saves or falls
     }
   }
@@ -870,19 +886,31 @@ uint8_t __cdecl MeleeOutcome(int32_t attacker, int32_t target, bool hit, int rol
   return 1;
 }
 
-// Prone: the engine's own unconsciousness (op 39, wake on damage) with a save vs death, from the attacker.
+// Knocked down: a save vs death against opcode 0 (AC -4 for kProneSeconds of its own round clock: +4 to hit
+// it), from the attacker, the engine's own roll. A hit, saved or not, plays the armour hit sound and the
+// target's pain (its damage sequence, with its own sound); a failed save knocks it down (die cycle, held).
+int RunningAcEffects(int32_t id) {
+  int n = 0;
+  for (const auto& e : engine::TimedEffects(id)) n += e.opcode == 0 && e.type == 4096 && e.left > 0;
+  return n;
+}
 void ApplyTrips() {
-  for (const auto& tr : g.trips) {
+  for (auto tr : g.trips) {
+    engine::PlayArmorHitSound(tr.target);
+    engine::SetSpriteSequence(tr.target, sym::kSeqDamage);
     engine::EffectSpec e;
-    e.opcode = 39;   // State: Unconsciousness
-    e.param2 = 0;    // wakes on damage
-    e.timing = 0;    // duration in seconds: one combat round; we stand it up at its next turn anyway
-    e.duration = 6;
+    e.opcode = 0;  // Stat: AC vs. Damage Type Modifier
+    e.param1 = static_cast<uint32_t>(-kProneAcPenalty);
+    e.param2 = 0;  // all weapons
+    e.timing = 0;  // duration in seconds
+    e.duration = kProneSeconds;
     e.save_type = 4;  // save vs death
+    tr.before = RunningAcEffects(tr.target);
     const bool ok = engine::ApplyEffect(tr.target, tr.attacker, e);
     CLog("MOVE", Name(tr.attacker) + " " + TakedownName(tr.kind) + " hits " + Name(tr.target) +
-                     (ok ? ": save vs death or prone" : ": effect could not be applied"));
-    if (ok) g.trip_checks.push_back({tr.target, tr.attacker, tr.kind, 2});
+                     (ok ? ": save vs death or knocked down" : ": effect could not be applied"));
+    tr.wait = 2;
+    if (ok) g.trip_checks.push_back(tr);
   }
   g.trips.clear();
   for (auto it = g.trip_checks.begin(); it != g.trip_checks.end();) {
@@ -890,31 +918,70 @@ void ApplyTrips() {
       ++it;
       continue;
     }
-    bool down = false;
-    for (const auto& e : engine::TimedEffects(it->target)) down = down || e.opcode == 39;
+    const bool down = RunningAcEffects(it->target) > it->before;
     g.stance[it->target].prone = down;
-    if (down) ++g.ms.prone;
+    if (down) {
+      ++g.ms.prone;
+      g.poses[it->target].Fall();
+      engine::ClearAI(it->target);
+      engine::DropPath(it->target);
+    }
     FloatText(it->target, std::string(TakedownName(it->kind)) + (down ? ": Success" : ": Failure"));
-    CLog("MOVE", Name(it->target) + (down ? " falls prone until its next turn" : " keeps its footing (saved)"));
-    Log("tbc: %s: %s %s", Who(it->target).c_str(), TakedownName(it->kind), down ? "success, prone" : "failure (saved)");
+    CLog("MOVE", Name(it->target) + (down ? " is knocked down until its next turn (+4 to hit it)" : " keeps its footing (saved)"));
+    Log("tbc: %s: %s %s", Who(it->target).c_str(), TakedownName(it->kind), down ? "success, knocked down" : "failure (saved)");
     it = g.trip_checks.erase(it);
   }
 }
+// Gets up: the die cycle backwards (its AC penalty ends with its round clock at this turn start).
 void StandUp(int32_t id) {
-  engine::EffectSpec rm;
-  rm.opcode = 337;  // Remove: Opcode
-  rm.param2 = 39;
-  rm.timing = 1;
-  engine::ApplyEffect(id, -1, rm);
-  engine::EffectSpec cure;
-  cure.opcode = 2;  // Cure: Sleep
-  cure.timing = 1;
-  engine::ApplyEffect(id, -1, cure);
   g.stance[id].prone = false;
+  auto it = g.poses.find(id);
+  if (it != g.poses.end()) it->second.Rise();
 }
 
+// Every sprite's per-tick update (CGameSprite::AIUpdate): the trip swing's pace and the prone poses.
+void SpriteUpdate(void* sprite, int32_t id, void (*orig)(void*)) {
+  int n = 1;
+  if (g.trip_pace.Active() && id == g.trip_pace.id) n = g.trip_pace.Updates(engine::IsAttackSequence(engine::SpriteSequence(id)));
+  // A mover caught one tick late (it floats: no walk path to hold) waits where it is for the swing.
+  if (g.aoo_freeze && g.aoo.Active() && id == g.aoo.mover) n = 0;
+  // The reactor's attack round runs at kReactionPace until it swings: its swing slot (weapon speed, rolled at the
+  // round start) may be late in the round, and a reaction must not hold the mover for a whole round.
+  if (g.aoo.Active() && id == g.aoo.reactor && !g.aoo.swung) n = kReactionPace;
+  for (int i = 0; i < n; ++i) orig(sprite);
+  if (g.poses.empty()) return;
+  const auto it = g.poses.find(id);
+  if (it == g.poses.end()) return;
+  PronePose& p = it->second;
+  const int64_t state = engine::SpriteState(id);
+  if (state < 0 || (state & sym::kStateDead)) {  // died on the ground: the engine's own death pose stays
+    g.poses.erase(it);
+    return;
+  }
+  const int back = p.Back();
+  if (back < 0) {
+    engine::SetSpriteSequence(id, sym::kSeqReady);
+    g.poses.erase(it);
+    return;
+  }
+  p.Tick(engine::PoseLying(id, back));
+}
+
+bool BumpGuard(int32_t id) { return g.running && g.no_push && Contains(g.in, id); }
+
 void ManeuverTurnStart(int32_t id) {
+  static const int trace = [] {
+    char* v = nullptr;
+    size_t n = 0;
+    const int t = _dupenv_s(&v, &n, "PSTF_AOO_TRACE") == 0 && v ? std::atoi(v) : 0;
+    free(v);
+    return t;
+  }();
+  g.aoo_trace = trace;
+  g.aoo_trace_react = trace ? 80 : 0;
+  g.aoo_was_in.clear();
   g.takedown_swung = false;
+  g.trip_pace.Stop();
   g.ai_moved = false;
   g.aoo = Reaction{};
   if (!g.maneuvers) return;
@@ -936,12 +1003,13 @@ void ManeuverFightEnd() {
   g.stance.clear();
   g.trips.clear();
   g.trip_checks.clear();
+  g.trip_pace.Stop();
   g.aoo = Reaction{};
   g.fx.clear();
 }
 
 // Start an attack of opportunity: the mover waits at the edge of the reach, the reactor swings once.
-void StartReaction(int32_t reactor, int32_t mover) {
+void StartReaction(int32_t reactor, int32_t mover, bool fudge) {
   g.stance[reactor].reaction_used = true;
   ++g.ms.aoo;
   g.aoo = Reaction{};
@@ -950,22 +1018,49 @@ void StartReaction(int32_t reactor, int32_t mover) {
   std::string order = "Attack(NearestEnemyOf(Myself))";
   const int slot = PartySlot(mover);
   if (slot >= 0) order = "Attack(Player" + std::to_string(slot + 1) + ")";
+  // ClearAI (SetCurrAction) clears the engine's attack-round flag: the reach it had when the mover left stays.
+  const bool engaged = engine::InAttackRound(reactor);
   engine::ClearAI(reactor);
   const bool ok = engine::EvalAs(reactor, order);
+  if (engaged || fudge) engine::KeepAttackRound(reactor);
+  engine::NewAttackRound(reactor);  // a reaction swings now, not at its next round's slot
+  g.aoo_freeze = fudge;
+  g.aoo_fudge = engaged || fudge;  // its reach included RANGE_FUDGE: kept until it swings
   engine::SetNoInterrupt(reactor);
   FloatText(reactor, "Attack of Opportunity!", 2200);
   CLog("AOO", Name(reactor) + " gets an attack of opportunity on " + Name(mover) + " (" + order + (ok ? ")" : ", failed)"));
   Log("tbc: %s: attack of opportunity on %s (%s)", Who(reactor).c_str(), Who(mover).c_str(), ok ? "ordered" : "order failed");
 }
 
+// The walk step about to run (HookWalk, before the engine moves it) leaves a foe's reach that would react.
+bool StepProvokes(int32_t cur) {
+  if (!g.running || !g.opportunity || !g.maneuvers || g.aoo.Active()) return false;
+  const auto sit = g.stance.find(cur);
+  if (sit != g.stance.end() && sit->second.withdrawn) return false;
+  engine::SpriteInfo me;
+  if (!engine::GetSprite(cur, &me) || !me.has_path) return false;
+  const auto path = engine::PathPoints(cur);
+  if (path.empty()) return false;
+  const int ps_me = PersonalSpace(cur);
+  for (int32_t id : g.in) {
+    if (id == cur || !Foes(id, cur)) continue;
+    engine::SpriteInfo o;
+    if (!engine::GetSprite(id, &o) || !o.alive || o.area != me.area || !CanReact(engine::SpriteState(id))) continue;
+    const auto st = g.stance.find(id);
+    if (st != g.stance.end() && (st->second.reaction_used || st->second.prone)) continue;
+    const int reach = ReachCells(kMeleeRangeField, PersonalSpace(id), ps_me);
+    if (StepLeavesReach(o.x, o.y, me.x, me.y, path, reach, kAooLookAheadPx)) return true;
+  }
+  return false;
+}
+
 // Per tick while the current creature walks: who did it just walk out of reach of?
 void CheckOpportunity(int32_t cur, const engine::SpriteInfo& me) {
   if (!g.opportunity || !g.maneuvers) return;
-  // The step it is about to take (the next path cell it has not reached) leaves the reach: the reactor
-  // swings while the mover still stands in its reach (the engine's Attack swings without walking).
-  if (!me.has_path) return;
-  const auto path = engine::PathPoints(cur);
-  if (path.empty()) return;
+  // The steps it is about to take along its path leave the reach: the reactor swings while the mover still
+  // stands in its reach (the engine's Attack swings without walking). Creatures that move without a walk
+  // path (Ignus floats: AIUpdateFly) are caught one tick late: in reach last tick, just outside it now.
+  const auto path = me.has_path ? engine::PathPoints(cur) : std::vector<std::pair<int, int>>{};
   const bool withdrawn = g.stance[cur].withdrawn;
   const int ps_me = PersonalSpace(cur);
   for (int32_t id : g.in) {
@@ -976,16 +1071,28 @@ void CheckOpportunity(int32_t cur, const engine::SpriteInfo& me) {
     if (!CanReact(state)) {
       continue;
     }
+    // The engine's plain reach: its swing re-checks range at the hit frame without RANGE_FUDGE (Swing clears it).
     const int reach = ReachCells(kMeleeRangeField, PersonalSpace(id), ps_me);
     const bool in = InReach(o.x, o.y, me.x, me.y, reach);
-    bool next_in = in;
-    for (const auto& p : path) {  // the first path cell that is not the one it stands in
-      if (p.first / 16 == me.x / 16 && p.second / 12 == me.y / 12) continue;
-      next_in = InReach(o.x, o.y, p.first, p.second, reach);
-      break;
+    // Within the next few cells of its path (a running step covers more than one cell). HookWalk holds the step
+    // that would leave (StepProvokes), so the mover is still in reach here.
+    const bool leaves = !path.empty() && StepLeavesReach(o.x, o.y, me.x, me.y, path, reach, kAooLookAheadPx);
+    bool& was = g.aoo_was_in[id];
+    const bool late = path.empty() && LeftReachLate(was, in, InReach(o.x, o.y, me.x, me.y, reach + kRangeFudge));
+    was = in;
+    if (g.aoo_trace > 0) {
+      --g.aoo_trace;
+      Log("tbc: aoo check %X at %d,%d vs %X at %d,%d: reach %d, d2 %d, in %d, leaves %d, path %zu (%d,%d), withdrawn %d, used %d",
+          static_cast<unsigned>(cur), me.x, me.y, static_cast<unsigned>(id), o.x, o.y, reach, CellDist2(o.x, o.y, me.x, me.y), in,
+          leaves, path.size(), path.empty() ? -1 : path[0].first, path.empty() ? -1 : path[0].second, withdrawn,
+          g.stance[id].reaction_used);
     }
-    if (ProvokesNow(in, next_in, withdrawn, g.stance[id])) {
-      StartReaction(id, cur);
+    if (ProvokesNow(in, !leaves, withdrawn, g.stance[id])) {
+      StartReaction(id, cur, false);
+      return;
+    }
+    if (late && !withdrawn && !g.stance[id].reaction_used && !g.stance[id].prone) {
+      StartReaction(id, cur, true);  // one cell out: the engine's RANGE_FUDGE lets it swing from there
       return;
     }
   }
@@ -997,8 +1104,19 @@ bool ReactionTick(uint32_t dt) {
   engine::SpriteInfo r;
   const bool alive = engine::GetSprite(g.aoo.reactor, &r) && r.alive;
   if (alive && r.has_path) engine::DropPath(g.aoo.reactor);  // out of reach now: no chase
+  // Reach with the engine's RANGE_FUDGE (engaged, or caught a cell late): SetCurrAction clears it as the Attack starts.
+  if (alive && g.aoo_fudge && !g.aoo.swung) engine::KeepAttackRound(g.aoo.reactor);
   const bool swung = g.aoo_swing;
   g.aoo_swing = false;
+  if (g.aoo_trace_react > 0 && alive) {
+    --g.aoo_trace_react;
+    engine::SpriteInfo m;
+    engine::GetSprite(g.aoo.mover, &m);
+    Log("tbc: aoo react %X: action %u path %d seq %d round %d fudge %d, mover at %d,%d d2 %d reach %d", static_cast<unsigned>(g.aoo.reactor),
+        r.action, r.has_path ? 1 : 0, engine::SpriteSequence(g.aoo.reactor), engine::AttackRoundPos(g.aoo.reactor),
+        engine::InAttackRound(g.aoo.reactor) ? 1 : 0, m.x, m.y, CellDist2(r.x, r.y, m.x, m.y),
+        ReachCells(kMeleeRangeField, PersonalSpace(g.aoo.reactor), PersonalSpace(g.aoo.mover)));
+  }
   if (alive && !g.aoo.Feed(dt, swung)) return true;
   engine::ClearAI(g.aoo.reactor);
   engine::DropPath(g.aoo.reactor);
@@ -1241,15 +1359,28 @@ void FillDice(HudView* v) {
   v->dice_sum = b;
 }
 
+// Parentless spell effects get the spell seen on its way to the creature (status.h AttributeOrphans).
+void TrackOrphans(int32_t id) {
+  std::vector<StatusEffect> fx;
+  for (const auto& e : engine::ParentEffects(id))
+    fx.push_back({e.parent_type, e.parent, e.parent_flags, e.left, e.timed, e.delayed, e.key});
+  uint32_t now = 0;
+  bool running = false;
+  engine::WorldTime(&now, &running);
+  AttributeOrphans(id, &fx, now, &g.orphans);
+}
+
 // Status icons (buffs/debuffs) of a creature: one per spell or item with timed effects on it.
 std::vector<StatusIconView> StatusIconsOf(int32_t id, int box, size_t max_icons) {
   std::vector<StatusIconView> out;
   if (!g.res) return out;
   std::vector<StatusEffect> fx;
-  for (const auto& e : engine::ParentEffects(id)) fx.push_back({e.parent_type, e.parent, e.parent_flags, e.left, e.timed});
+  for (const auto& e : engine::ParentEffects(id))
+    fx.push_back({e.parent_type, e.parent, e.parent_flags, e.left, e.timed, e.delayed, e.key});
   uint32_t now = 0;
   bool running = false;
   engine::WorldTime(&now, &running);
+  AttributeOrphans(id, &fx, now, &g.orphans);
   const int round = engine::RoundLengthTicks() ? engine::RoundLengthTicks() : kRoundTicksPst;
   for (const StatusIcon& s : CollectStatus(id, fx, now, round, &g.status_spans, max_icons * 2)) {
     std::string bam;
@@ -1540,13 +1671,19 @@ void OnTick(uint64_t frame) {
     engine::KeepVisible(foes);
   }
   if (g.no_bored) engine::ResetBoredTimer();
-  // A waiting combatant that was bumped (pushed aside by a walker) must not walk in place: no path.
+  // A waiting combatant is never pushed aside (BumpGuard); should it still walk (a path or the walk
+  // sequence left over), it stops: no walking in place.
   for (int32_t id : g.in) {
+    TrackOrphans(id);
     if (!Held(id)) continue;
     engine::SpriteInfo o;
-    if (engine::GetSprite(id, &o) && o.has_path) {
+    if (!engine::GetSprite(id, &o)) continue;
+    if (o.has_path) {
       engine::DropPath(id);
       CLog("PUSH", Name(id) + " was pushed while waiting: path dropped");
+    } else if (engine::SpriteSequence(id) == sym::kSeqWalk && !g.poses.count(id)) {
+      engine::SetSpriteSequence(id, sym::kSeqReady);
+      CLog("PUSH", Name(id) + " walked in place while waiting: back to its ready stance");
     }
   }
   if (g.round_effects) engine::WatchProjectiles();
@@ -1580,7 +1717,17 @@ void OnTick(uint64_t frame) {
     CLog("ACTION", Name(cur) + " " + ActionName(s.action) + (s.has_path ? " (walking)" : ""));
     g.clog_action = s.action;
   }
-  if (g.maneuvers) ApplyTrips();
+  if (g.maneuvers) {
+    ApplyTrips();
+    // The armed takedown's swing begins: its sound now, a slow wind-up (SpriteUpdate).
+    const auto sit = g.stance.find(cur);
+    if (sit != g.stance.end() && sit->second.takedown != Takedown::None && !g.takedown_swung && !g.trip_pace.Active() &&
+        engine::IsAttackSequence(engine::SpriteSequence(cur))) {
+      g.trip_pace.Start(cur);
+      QueueSound("PFSNDTRP");
+      CLog("MOVE", Name(cur) + " " + TakedownName(sit->second.takedown) + " swing starts (slow wind-up)");
+    }
+  }
   if (ReactionTick(dt)) {
     // An attack of opportunity: the mover waits at the edge of the reach, its turn does not run.
     if (g.rolls) TakeRolls();
@@ -1595,7 +1742,16 @@ void OnTick(uint64_t frame) {
   g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
   // A quick item used between two frames still takes the action (UseItem = 34).
   const uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
-  const EconomyStep st = g.econ.Feed(dt, moved, s.has_path, fed);
+  EconomyStep st = g.econ.Feed(dt, moved, s.has_path, fed);
+  if (st.stop == Stop::OutOfMove && g.maneuvers && AiRunsWhenShort(g.econ, IsAttackAction(s.action), true) &&
+      UseManeuver(cur, AiMove::Run)) {
+    // Stopped short of its target with the action free: it runs the rest of the way (the action goes).
+    ++g.ms.ai_moves;
+    ++g.ms.short_runs;
+    CLog("AI", Name(cur) + " would stop short of its target: runs instead");
+    st.stop = Stop::None;
+    st.hold_walk = false;
+  }
   if (!g.econ.party && s.has_path && !g.steady_ai) {
     // Sure of itself: its script does not re-plan the walk every pass (stop-and-go); it walks there in
     // one go, then acts. The engine lifts SetInterrupt(FALSE) when its action queue runs empty.
@@ -2132,14 +2288,42 @@ int __cdecl LuaStance(engine::LuaState* L) {
   engine::LuaPushString(L, b);
   return 1;
 }
-// PSTF_MoveStats() -> "runs withdraws blocks block_tries blocked takedowns takedown_hits prone aoo aoo_swung ai_moves stood".
+// PSTF_MoveStats() -> "runs withdraws blocks block_tries blocked takedowns takedown_hits prone aoo aoo_swung ai_moves stood
+// short_runs" (short_runs: AI runs instead of stopping short of its target).
 int __cdecl LuaMoveStats(engine::LuaState* L) {
   const auto& m = g.ms;
-  char b[128];
-  std::snprintf(b, sizeof b, "%d %d %d %d %d %d %d %d %d %d %d %d", m.runs, m.withdraws, m.blocks, m.block_tries, m.blocked,
-                m.takedowns, m.takedown_hits, m.prone, m.aoo, m.aoo_swung, m.ai_moves, m.stood);
+  char b[160];
+  std::snprintf(b, sizeof b, "%d %d %d %d %d %d %d %d %d %d %d %d %d", m.runs, m.withdraws, m.blocks, m.block_tries, m.blocked,
+                m.takedowns, m.takedown_hits, m.prone, m.aoo, m.aoo_swung, m.ai_moves, m.stood, m.short_runs);
   engine::LuaPushString(L, b);
   return 1;
+}
+// PSTF_AnimProbe(id) -> "run_flag cycle frame sequence" of a PST character animation (-1s otherwise).
+int __cdecl LuaAnimProbe(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const std::string s = engine::AnimProbe(id);
+  engine::LuaPushString(L, s.c_str());
+  return 1;
+}
+// PSTF_Attached(id) -> number of PST attached spell objects; logs ticks to each one's end.
+int __cdecl LuaAttached(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  std::vector<int32_t> left;
+  const int n = engine::AttachedLeft(id, &left);
+  std::string t;
+  for (int32_t v : left) t += " " + std::to_string(v);
+  Log("lua: PSTF_Attached(%X) -> %d:%s", static_cast<unsigned>(id), n, t.c_str());
+  engine::LuaPushNumber(L, n);
+  engine::LuaPushNumber(L, left.empty() ? 0 : left[0]);
+  return 2;
+}
+// PSTF_Pose(id) -> phase (0 standing, 1 falling, 2 down, 3 rising), frames back from the last die frame.
+int __cdecl LuaPose(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const auto it = g.poses.find(id);
+  engine::LuaPushNumber(L, it == g.poses.end() ? 0 : static_cast<int>(it->second.phase));
+  engine::LuaPushNumber(L, it == g.poses.end() ? -1 : it->second.Back());
+  return 2;
 }
 // PSTF_State(id) -> general state of its derived stats (STATE.IDS bits), -1 none.
 int __cdecl LuaSpriteState(engine::LuaState* L) {
@@ -2296,6 +2480,7 @@ bool InstallTbc(const IniMap& ini) {
   g.no_bored = IniBool(ini, "tbc.no_bored", true);
   g.maneuvers = IniBool(ini, "tbc.maneuvers", true);
   g.opportunity = IniBool(ini, "tbc.opportunity_attacks", true);
+  g.no_push = IniBool(ini, "tbc.no_push", true);
   g.party_max = IniInt(ini, "party.size", 6) >= 8 && IniBool(ini, "party.enabled", false) ? 8 : 6;
   {
     const int feet = IniInt(ini, "tbc.move_feet", 31);
@@ -2393,17 +2578,23 @@ bool InstallTbc(const IniMap& ini) {
     }
   }
   if (g.maneuvers) {
-    // Trip, knockdown and block live in the engine's melee swing; prone is the engine's op 39.
+    // Trip, knockdown and block live in the engine's melee swing; knocked down = opcode 0 AC -4 (+4 to hit it).
     if (!g.rolls) g.rolls = engine::InstallRollHooks();
     if (g.rolls && engine::EffectsAvailable()) {
       engine::SetMeleeHitFilter(&MeleeThac0, &MeleeOutcome);
+      // The trip swing's pace and the knocked-down poses live in every sprite's per-tick update.
+      if (!engine::InstallSpriteUpdate(&SpriteUpdate)) Log("tbc: sprite update hook differs; trip pacing and prone poses off");
     } else {
       Log("tbc: maneuver hooks differ from the manifest (rolls %d, effects %d); maneuvers off", g.rolls ? 1 : 0,
           engine::EffectsAvailable() ? 1 : 0);
       g.maneuvers = false;
     }
   }
+  if (g.no_push && !engine::InstallBumpGuard(&BumpGuard)) Log("tbc: bump calls differ from the manifest; pushing stays on");
   dev::AddLuaFunction("PSTF_Maneuver", &LuaManeuver);
+  dev::AddLuaFunction("PSTF_AnimProbe", &LuaAnimProbe);
+  dev::AddLuaFunction("PSTF_Attached", &LuaAttached);
+  dev::AddLuaFunction("PSTF_Pose", &LuaPose);
   dev::AddLuaFunction("PSTF_Stance", &LuaStance);
   dev::AddLuaFunction("PSTF_Aoo", &LuaAoo);
   dev::AddLuaFunction("PSTF_State", &LuaSpriteState);

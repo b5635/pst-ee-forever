@@ -707,7 +707,64 @@ inline constexpr uint8_t kAddEffectCallBytes[] = {0x44, 0x0F, 0xB6, 0x05, 0x69, 
                                                   0x53, 0x10, 0x48, 0x8B, 0x01, 0xC7, 0x44, 0x24, 0x20, 0x01,
                                                   0x00, 0x00, 0x00, 0xFF, 0x90, 0xF0, 0x00, 0x00, 0x00};
 constexpr uint32_t kRvaDecodeEffect = 0x1FE380, kRvaAddEffectCall = 0x233237, kVtblAddEffect = 0xF0;
+// Melee range fudge: CGameSprite::Attack (lin 4ED490 L354 this+4713 dword, win sub_1403FD990 at 1403FE107
+// `cmp [rbx+49BCh], r14d`): set by CGameSprite::Swing (lin 4EAC10 L476/486), cleared by SetCurrAction; while
+// set the attacker reaches RANGE_FUDGE (1) cell further.
+inline constexpr uint8_t kAttackFudgeBytes[] = {0x44, 0x39, 0xB3, 0xBC, 0x49, 0x00, 0x00};
+constexpr uint32_t kRvaAttackFudge = 0x3FE107, kOffSpriteAttackFudge = 0x49BC;
+// Attack-round position: word sprite+0x48B2 (lin this+9293 word = +18586): ticks into its attack round, read with
+// the weapon-speed attack-frame table to time the swing; 0xFFFF = a new round starts at the next Swing (it rolls
+// its speed again). CGameSprite::Swing win 1404338D6 `cmp word [rbx+48B2h], 0FFFFh` (lin 4EAC10 L377).
+inline constexpr uint8_t kAttackRoundBytes[] = {0x66, 0x83, 0xBB, 0xB2, 0x48, 0x00, 0x00, 0xFF};
+constexpr uint32_t kRvaAttackRound = 0x4338D6, kOffSpriteAttackRound = 0x48B2;
 constexpr uint8_t kEffectListTimed = 1;
+// PST attached spell objects (Submerge the Will, shields, armors: opcode 375 CGameEffectAddAttachedObject lin
+// 212920 / win 1401BEAA0): CGameSprite::UpdateSpriteEffect (lin 50F9C0, win 1403F97A0) walks a count byte at
+// sprite+0x5120 (1403F97D2 `movzx r12d, byte [rcx+5120h]`) and CProjectilePSTSpriteAttachedObject* slots at
+// sprite+0x50D0 (1403F9800 `mov r14, [r15+50D0h]`; lin +20744 / +20664). Each object ends at an absolute world
+// time at +0x3FC, 0 = none (CProjectilePSTSpriteAttachedObject::AIUpdate lin 2E7070 L498 this+253, win
+// 140264A0D `mov edx, [rsi+3FCh]` then `cmp [rcx+7820h], edx`); at the end it clears the sprite's spell state
+// (Submerge the Will: sprite+1508 bit 0). That timer is outside the effect lists: the round clock shifts it too.
+inline constexpr uint8_t kAttachedCountBytes[] = {0x44, 0x0F, 0xB6, 0xA1, 0x20, 0x51, 0x00, 0x00};
+inline constexpr uint8_t kAttachedListBytes[] = {0x4D, 0x8B, 0xB7, 0xD0, 0x50, 0x00, 0x00};
+inline constexpr uint8_t kAttachedEndBytes[] = {0x8B, 0x96, 0xFC, 0x03, 0x00, 0x00};
+constexpr uint32_t kRvaAttachedCount = 0x3F97D2, kRvaAttachedList = 0x3F9800, kRvaAttachedEnd = 0x264A0D;
+constexpr uint32_t kOffSpriteAttachedCount = 0x5120, kOffSpriteAttached = 0x50D0, kOffAttachedEnd = 0x3FC;
+constexpr int kMaxAttached = 10;
+// Bumping: CGameSprite::CheckBumpable (lin 505B10, win 1403BC870) answers whether a creature may be pushed
+// aside by a walker (EA_ENEMY never is). Called from CGameSprite::AIUpdate (1403B539B) and
+// CGameSprite::ClearBumpPath (lin 50B260 / win 1403BFB50, at 1403BFB82); both `call` rel32.
+inline constexpr uint8_t kBumpCall1Bytes[] = {0xE8, 0xD0, 0x74, 0x00, 0x00};
+inline constexpr uint8_t kBumpCall2Bytes[] = {0xE8, 0xE9, 0xCC, 0xFF, 0xFF};
+constexpr uint32_t kRvaBumpCall1 = 0x3B539B, kRvaBumpCall2 = 0x3BFB82;
+constexpr uint64_t kVaCheckBumpable = 0x1403BC870ull;
+// Per-tick sprite update: CGameSprite vtable slot 3 (+0x18, VA 140649340) = CGameSprite::AIUpdate 1403B4330
+// (lin 53A510): Animate (frames), effects, walking. Turn-based pacing (Trip swing) and the prone frames hook it.
+inline constexpr uint8_t kSlotAIUpdateBytes[] = {0x30, 0x43, 0x3B, 0x40, 0x01, 0x00, 0x00, 0x00};
+inline constexpr uint8_t kAIUpdateBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x55, 0x41};
+constexpr uint32_t kRvaSlotAIUpdate = 0x649340, kRvaAIUpdate = 0x3B4330;
+// CGameAnimationTypePlanescapeCharacter::SetSequence(short) lin 47C040 / win 1403AB4F0, vtable +0x170
+// (140647220): picks the cycle word +0x1CE8 (walk: 4 = run cycle while IsRunning, else 5; die 1/5 -> 10..12)
+// and the current CVidCell* +0xCD0 (`CVidCell::FrameSet(*(a1+3280), 0)`). The run/walk cycle is chosen here
+// only: flipping SetRunning mid-walk keeps the old frames until the sequence is set again.
+inline constexpr uint8_t kSlotAnimSetSeqBytes[] = {0xF0, 0xB4, 0x3A, 0x40, 0x01, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaSlotAnimSetSeq = 0x647220, kVtblAnimSetSeq = 0x170, kOffAnimCycle = 0x1CE8, kOffAnimCell = 0xCD0;
+// CVidCell::FrameSet(ushort) lin 68B710 / win 140499B90 `mov [rcx+118h], dx`: frame word +0x118, sequence
+// word +0x11A (CVidCell::SequenceSet); CVidCell::GetSequenceLength(ushort) lin 68B4E0 / win 14049A4E0.
+inline constexpr uint8_t kFrameSetBytes[] = {0x66, 0x89, 0x91, 0x18, 0x01, 0x00, 0x00, 0xB8};
+inline constexpr uint8_t kSeqLengthBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B};
+constexpr uint32_t kRvaFrameSet = 0x499B90, kRvaSeqLength = 0x49A4E0;  // frame/sequence words: kOffCellFrame, kOffCellSeq above
+// Sprite sequences (CGameSprite::SEQ_*): attack 0, damage 4, die 5, ready 7, shoot 8, twitch 9, walk 10,
+// attack slash/backslash/jab 11/12/13 (the PST animation's SetSequence switch, win 1403AB4F0).
+constexpr int16_t kSeqAttack = 0, kSeqDamage = 4, kSeqDie = 5, kSeqShoot = 8, kSeqSlash = 11, kSeqBackslash = 12, kSeqJab = 13;
+// Hit sound by the target's RESDATA armour: CPlanescape::EffectDamageDecodeHitSound(uint damage type,
+// CGameSprite*) lin 5AC450 / win 1402503F0 (HIT_02<A+armor> for 0x100000), called by CGameEffectDamage::ApplyEffect
+// with rcx = g_PST (1401C92AB `mov rcx, cs:14072C8F0`).
+inline constexpr uint8_t kHitSoundBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89};
+inline constexpr uint8_t kHitSoundPstBytes[] = {0x48, 0x8B, 0x0D, 0x3E, 0x36, 0x56, 0x00};
+constexpr uint32_t kRvaHitSound = 0x2503F0, kRvaHitSoundPst = 0x1C92AB;
+constexpr uint64_t kVaPlanescape = 0x14072C8F0ull;
+constexpr uint32_t kHitSoundPiercing = 0x100000;
 // CAIObjectType of a creature at sprite +0x30 (EA +0x38 = kOffSpriteEa): EA +8, general +9, race +10, class +11
 // (CAIObjectType::GetClass lin 5E4DE0), instance id dword +12, special cases +16..20, specifics +21, gender +22,
 // alignment +23 (CAIObjectType::Set lin 5E1A20, FlushToString lin 5E4960). SPECIFIC.IDS: 2 Nameless One, 9 Morte;
@@ -947,6 +1004,19 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("Hit.thac0ac", kRvaThac0Ac, kThac0AcBytes, "lin 4C29F0 / win 140414888"),
     PSTF_SYM("CGameEffect::CheckSave", kRvaCheckSave, kCheckSaveBytes, "lin 1FBED0 / win 1401EC460"),
     PSTF_SYM("CGameEffect::DecodeEffect", kRvaDecodeEffect, kDecodeEffectBytes, "lin 2012B0 / win 1401FE380"),
+    PSTF_SYM("CGameSprite::UpdateSpriteEffect.count", kRvaAttachedCount, kAttachedCountBytes, "lin 50F9C0 / win 1403F97D2"),
+    PSTF_SYM("CGameSprite::UpdateSpriteEffect.list", kRvaAttachedList, kAttachedListBytes, "lin 50F9C0 / win 1403F9800"),
+    PSTF_SYM("CProjectilePSTSpriteAttachedObject::AIUpdate.end", kRvaAttachedEnd, kAttachedEndBytes,
+             "lin 2E7070 L498 / win 140264A0D"),
+    PSTF_SYM("CGameSprite::AIUpdate.CheckBumpable", kRvaBumpCall1, kBumpCall1Bytes, "lin 53A510 / win 1403B539B"),
+    PSTF_SYM("CGameSprite::ClearBumpPath.CheckBumpable", kRvaBumpCall2, kBumpCall2Bytes, "lin 50B260 / win 1403BFB82"),
+    PSTF_SYM("CGameSprite::AIUpdate", kRvaAIUpdate, kAIUpdateBytes, "lin 53A510 / win 1403B4330"),
+    PSTF_SYM("CGameSprite::Attack.rangeFudge", kRvaAttackFudge, kAttackFudgeBytes, "lin 4ED490 L354 / win 1403FE107"),
+    PSTF_SYM("CGameSprite::Swing.roundPos", kRvaAttackRound, kAttackRoundBytes, "lin 4EAC10 L377 / win 1404338D6"),
+    PSTF_SYM("CVidCell::FrameSet", kRvaFrameSet, kFrameSetBytes, "lin 68B710 / win 140499B90"),
+    PSTF_SYM("CVidCell::GetSequenceLength", kRvaSeqLength, kSeqLengthBytes, "lin 68B4E0 / win 14049A4E0"),
+    PSTF_SYM("CPlanescape::EffectDamageDecodeHitSound", kRvaHitSound, kHitSoundBytes, "lin 5AC450 / win 1402503F0"),
+    PSTF_SYM("CGameEffectDamage::ApplyEffect.g_PST", kRvaHitSoundPst, kHitSoundPstBytes, "win 1401C92AB"),
     PSTF_SYM("CMessageAddEffect::Run.AddEffect", kRvaAddEffectCall, kAddEffectCallBytes, "lin 2941E0 / win 140233237"),
     PSTF_SYM("tolua.GetButtonArray", kRvaButtonArray, kButtonArrayBytes, "win 14046102E"),
     PSTF_SYM("PostRenderButton.icon", kRvaBarIcon, kBarIconBytes, "lin 3602F0 / win 1402C82F5"),
@@ -1030,6 +1100,8 @@ inline constexpr Symbol kData[] = {
     PSTF_SYM("CVisibilityMap flags/masks/square", kRvaVisMasks, kVisMaskBytes, "rdata win 14063976C"),
     PSTF_SYM("AnimPst.vtbl.SetRunning", kRvaSlotSetRunning, kSlotSetRunningBytes,
              "vtable win 1406470B0 +0x1F0 / lin slot 63"),
+    PSTF_SYM("AnimPst.vtbl.SetSequence", kRvaSlotAnimSetSeq, kSlotAnimSetSeqBytes, "vtable win 1406470B0 +0x170"),
+    PSTF_SYM("CGameSprite.vtbl.AIUpdate", kRvaSlotAIUpdate, kSlotAIUpdateBytes, "vtable win 140649328 slot 3"),
     PSTF_SYM("CBaldurChitin.vtbl.AsyncUpdate", kRvaSlotChitinAsync, kSlotChitinAsyncBytes,
              "vtable win 140620308 slot 29 / lin E44D78 slot 29"),
 };

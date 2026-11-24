@@ -77,7 +77,7 @@ target_compile_options(pst_forever PRIVATE /Zi)
 # L0 unit tests
 add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp tests/unit/test_lighting.cpp
   tests/unit/test_sprite_depth.cpp tests/unit/test_gore.cpp tests/unit/test_gameres.cpp
-  tests/unit/test_party.cpp tests/unit/test_maneuvers.cpp)
+  tests/unit/test_party.cpp tests/unit/test_maneuvers.cpp tests/unit/test_spells.cpp)
 target_link_libraries(pstf_tests PRIVATE pstf_logic)
 target_include_directories(pstf_tests PRIVATE tests/unit)
 

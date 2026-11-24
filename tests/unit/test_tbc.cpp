@@ -779,3 +779,34 @@ TEST_CASE("tbc preview: a creature is dear ground, the path goes round it and st
   CHECK(p.size() >= 3);  // not a straight cut through it
   for (size_t i = 1; i < p.size(); ++i) CHECK(LineWalkable(p[i - 1], p[i], cost, 5));
 }
+
+TEST_CASE("tbc status: parentless spell effects take the spell seen on its way (Submerge the Will, Power of One)") {
+  using namespace pstf::tbc;
+  OrphanMap m;
+  // Submerge the Will as the probe saw it: delayed op375 (parent SPWI119) first, then op0/op33..37 with no parent.
+  std::vector<StatusEffect> fx{{1, "SPWI119", 0, 25, false, true, 0x10}};
+  AttributeOrphans(0x870087, &fx, 1000, &m);
+  std::vector<StatusEffect> later{{0, "", 0, 1680, true, false, 0x20}, {0, "", 0, 1680, true, false, 0x28}};
+  AttributeOrphans(0x870087, &later, 1030, &m);
+  CHECK(later[0].parent == "SPWI119" && later[0].parent_type == 1);
+  CHECK(later[1].parent == "SPWI119");
+  // They keep it long after the window, and the icon shows: one source, 1600 ticks left = 16 rounds of 100.
+  std::vector<StatusEffect> much_later{{0, "", 0, 1600, true, false, 0x20}};
+  AttributeOrphans(0x870087, &much_later, 5000, &m);
+  CHECK(much_later[0].parent == "SPWI119");
+  const auto icons = CollectStatus(0x870087, much_later, 5000, 100, nullptr, 8);
+  CHECK(icons.size() == 1 && icons[0].parent == "SPWI119" && icons[0].rounds == 16);
+  // A new orphan long after the window is not guessed; another creature's spell is not borrowed.
+  std::vector<StatusEffect> stray{{0, "", 0, 900, true, false, 0x30}};
+  AttributeOrphans(0x870087, &stray, 5000, &m);
+  CHECK(stray[0].parent.empty());
+  std::vector<StatusEffect> other{{0, "", 0, 900, true, false, 0x40}};
+  AttributeOrphans(0x880088, &other, 1030, &m);
+  CHECK(other[0].parent.empty());
+  // Effects that went away forget their parent (a reused key gets a fresh look).
+  std::vector<StatusEffect> none;
+  AttributeOrphans(0x870087, &none, 6000, &m);
+  std::vector<StatusEffect> reused{{0, "", 0, 900, true, false, 0x20}};
+  AttributeOrphans(0x870087, &reused, 6000, &m);
+  CHECK(reused[0].parent.empty());
+}

@@ -12,14 +12,20 @@
 //             become block stacks until its next turn. Each melee hit on it uses one stack: a d20 with its
 //             own THAC0 vs AC 4 (1 fails, 20 succeeds) that also comes up at least the attack's d20 stops it.
 //   Trip      fighters (not the Nameless One): the first melee swing of the attack round gets -2 to hit
-//             (THAC0 + 2); a hit does no damage, the target saves vs death or falls prone (op 39) until
-//             its next turn, when it stands up and loses that turn's action.
+//             (THAC0 + 2); a hit does no damage, the target saves vs death or is knocked down until its
+//             next turn (AC -4 = +4 to hit it, opcode 0; it falls with its die cycle and gets up with it
+//             played backwards), when it stands up and loses that turn's action. Armed by the button,
+//             cancelled by clicking it again (then the swing is an ordinary attack).
 //   Knockdown the same for AI creatures outside the party with THAC0 15 or better, without the -2.
 //   AoO       a creature walking out of an enemy's melee reach (the engine's own Attack range test, in
 //             search-map cells) without Withdraw gets one swing from it. One per reactor until its own
 //             next turn, a single swing whatever its APR; prone (asleep) reactors do not react.
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <utility>
+#include <vector>
 
 #include "modules/tbc/economy.h"
 
@@ -33,7 +39,7 @@ struct Stance {
   bool withdrawn = false;  // immune to attacks of opportunity; walks
   int block_stacks = 0;
   Takedown takedown = Takedown::None;  // armed for the first swing of the next attack round
-  bool prone = false;                  // knocked down (op 39 applied by us)
+  bool prone = false;                  // knocked down (AC -4 = +4 to hit it, lying in its die cycle)
   bool reaction_used = false;          // its attack of opportunity until its next turn
 };
 
@@ -124,17 +130,22 @@ inline bool BlockStops(int block_roll, int defender_thac0, int attack_roll) {
   return BlockRollHits(block_roll, defender_thac0) && block_roll >= attack_roll;
 }
 
-// --- melee reach: CGameSprite::Attack (lin 4ED490 L304-353, win twin of the same) -----------------------
+// --- melee reach: CGameSprite::Attack (lin 4ED490 L290-353, win sub_1403FD990 L261-294) -------------------
 // Cells are search-map squares (16 x 12 px). range = the weapon ability's range field + 1 (melee 1 -> 2),
-// personal spaces of both: reach = range + ((ps_a - 1) >> 1) + ((ps_b - 1) >> 1) - 1 cells, in reach when
-// reach^2 >= dx^2 + dy^2 (cell deltas of x/16, y/12).
+// personal spaces of both (the animation's GetPersonalSpace): reach = range + ((ps_a - 1) >> 1) +
+// ((ps_b - 1) >> 1) - 1 cells. Melee distance is CAIUtil::CountSquares: the larger of the cell deltas
+// (Chebyshev), in reach when reach^2 >= that^2; an attacker already in its attack round (sprite+0x49BC, set
+// by Swing) gets RANGE_FUDGE = 1 more cell.
 constexpr int kMeleeRangeField = 1;
+constexpr int kRangeFudge = 1;
 inline int ReachCells(int range_field, int ps_a, int ps_b) {
   return range_field + 1 + ((ps_a - 1) >> 1) + ((ps_b - 1) >> 1) - 1;
 }
 inline int CellDist2(int ax, int ay, int bx, int by) {
-  const int dx = ax / 16 - bx / 16, dy = ay / 12 - by / 12;
-  return dx * dx + dy * dy;
+  int dx = ax / 16 - bx / 16, dy = ay / 12 - by / 12;
+  dx = dx < 0 ? -dx : dx, dy = dy < 0 ? -dy : dy;
+  const int d = dx > dy ? dx : dy;
+  return d * d;
 }
 inline bool InReach(int ax, int ay, int bx, int by, int reach) { return reach * reach >= CellDist2(ax, ay, bx, by); }
 
@@ -143,15 +154,45 @@ inline bool ProvokesNow(bool was_in_reach, bool in_reach, bool mover_withdrawn, 
   return was_in_reach && !in_reach && !mover_withdrawn && !reactor.reaction_used && !reactor.prone;
 }
 
+// The mover's next steps along its path (path points in world px, from the next one it has not reached;
+// the engine keeps waypoints, so a straight stretch is one point far away): does it leave the reactor's
+// reach within `ahead_px` of walking? Walked along the segments in 4 px steps. A running step covers more
+// than one search cell, so looking only at where it stands lets a runner jump out of reach between checks.
+inline bool StepLeavesReach(int rx, int ry, int mx, int my, const std::vector<std::pair<int, int>>& path, int reach,
+                            double ahead_px) {
+  if (!InReach(rx, ry, mx, my, reach)) return false;
+  double walked = 0;
+  double px = mx, py = my;
+  for (const auto& p : path) {
+    const double dx = p.first - px, dy = p.second - py;
+    const double len = std::sqrt(dx * dx + dy * dy * 16.0 / 9.0);  // 16 x 12 px cells: y counts 4/3
+    const int steps = std::max(1, static_cast<int>(len / 4.0));
+    for (int i = 1; i <= steps; ++i) {
+      const double t = static_cast<double>(i) / steps;
+      if (!InReach(rx, ry, static_cast<int>(px + dx * t), static_cast<int>(py + dy * t), reach)) return true;
+      if (walked + len * t >= ahead_px) return false;
+    }
+    walked += len;
+    px = p.first, py = p.second;
+  }
+  return false;
+}
+// Movers without a walk path (floating) are seen one tick late: in reach last tick, out now but still within
+// one more cell (the reactor swings with the engine's RANGE_FUDGE).
+inline bool LeftReachLate(bool was_in, bool in_now, bool in_fudge_reach) { return was_in && !in_now && in_fudge_reach; }
+constexpr double kAooLookAheadPx = 48.0;  // three cells: more than one running step (15 move scale)
+
 // A reactor in one of these states cannot swing (STATE.IDS: sleeping, panic, stunned, helpless, frozen, stone,
 // dead), as GemRB ThreatsTo skips helpless, sleeping and panicked reactors.
 constexpr uint32_t kNoReactionStates = 0x1 | 0x4 | 0x8 | 0x20 | 0x40 | 0x80 | 0x800;
 inline bool CanReact(int64_t state) { return state >= 0 && (static_cast<uint32_t>(state) & kNoReactionStates) == 0; }
 
+// Sprite updates per tick for a reactor until its swing (presentation pace: the engine still times the swing).
+constexpr int kReactionPace = 3;
 // The AoO swing in progress: the reactor attacks once, then gives the turn back.
 struct Reaction {
   static constexpr uint32_t kTailTicks = 10;   // after its swing, the animation finishes
-  static constexpr uint32_t kCapTicks = 60;    // no swing in 4 s (it could not attack): give up
+  static constexpr uint32_t kCapTicks = 90;    // no swing in 6 s (at kReactionPace: a whole attack round): give up
   int32_t reactor = -1, mover = -1;
   uint32_t ticks = 0, since_swing = 0;
   bool swung = false;
@@ -164,6 +205,77 @@ struct Reaction {
     return (swung && since_swing >= kTailTicks) || ticks >= kCapTicks;
   }
 };
+
+// --- the trip swing's pace -------------------------------------------------------------------------------
+// The armed swing starts (the attacker's sequence turns into an attack): the trip sound plays, the wind-up
+// runs at half speed (its sprite updates every other tick) up to the hit; then the follow-through runs 1.5x
+// (two updates every other tick) until the attack sequence ends. Presentation only: the engine's own roll
+// decides, and the slowed wind-up shifts the swing in time, not its rules.
+struct TripPace {
+  enum class Phase : uint8_t { None, Windup, Follow } phase = Phase::None;
+  int32_t id = -1;
+  uint32_t ticks = 0;
+  static constexpr uint32_t kCapTicks = 90;  // never more than 6 s of slowed time
+  bool Active() const { return phase != Phase::None; }
+  void Start(int32_t who) { phase = Phase::Windup, id = who, ticks = 0; }
+  void Resolved() {
+    if (phase == Phase::Windup) phase = Phase::Follow, ticks = 0;
+  }
+  void Stop() { *this = TripPace{}; }
+  // Sprite updates for this world tick (0, 1 or 2), and whether the pace is over (attack sequence gone).
+  int Updates(bool attacking) {
+    if (!Active()) return 1;
+    ++ticks;
+    if (!attacking || ticks > kCapTicks) {
+      Stop();
+      return 1;
+    }
+    if (phase == Phase::Windup) return (ticks & 1) ? 0 : 1;  // half speed
+    return (ticks & 1) ? 2 : 1;                                // 1.5x
+  }
+};
+
+// --- prone pose: the die cycle, held on its last frame, played backwards to stand up -------------------
+// `back` = frames before the last one of the die cycle (engine::PoseLying).
+struct PronePose {
+  enum class Phase : uint8_t { None, Falling, Down, Rising } phase = Phase::None;
+  uint32_t ticks = 0;
+  int len = 0;                       // the die cycle's frames (0 until known)
+  static constexpr int kTicksPerFrame = 1;
+  void Fall() { phase = Phase::Falling, ticks = 0; }
+  void Rise() {
+    if (phase != Phase::None) phase = Phase::Rising, ticks = 0;
+  }
+  bool Busy() const { return phase == Phase::Falling || phase == Phase::Rising; }
+  // Frames back from the last one for this tick; -1 = no pose (standing).
+  int Back() const {
+    const int n = len > 0 ? len : 1;
+    const int f = static_cast<int>(ticks) / kTicksPerFrame;
+    switch (phase) {
+      case Phase::Falling: return std::max(0, n - 1 - f);
+      case Phase::Down: return 0;
+      case Phase::Rising: return f >= n ? -1 : f;
+      default: return -1;
+    }
+  }
+  void Tick(int frames) {
+    if (frames > 0) len = frames;
+    ++ticks;
+    if (phase == Phase::Falling && static_cast<int>(ticks) / kTicksPerFrame >= std::max(1, len)) phase = Phase::Down;
+    if (phase == Phase::Rising && static_cast<int>(ticks) / kTicksPerFrame > std::max(1, len)) phase = Phase::None;
+  }
+};
+
+// Knocked down: attackers get +4 to hit (the target's AC worsens by 4: opcode 0 AC modifier -4, all weapon
+// types), as long as it lies there (until its next turn start: kProneSeconds of its own round clock).
+constexpr int kProneAcPenalty = 4;
+constexpr uint32_t kProneSeconds = 5;  // the round clock steps 75 ticks = 5 s at its turn start
+
+// An AI creature walking to attack that runs out of movement with its action still free runs (spends the
+// action on the extra movement) instead of stopping short.
+inline bool AiRunsWhenShort(const Economy& e, bool attack_intent, bool may_run) {
+  return may_run && !e.party && attack_intent && ActionFree(e) && !e.MoveLeft();
+}
 
 // --- directed AI: which maneuver an AI creature takes this turn (GemRB ChooseAIManeuvers, extended) ------
 enum class AiMove : uint8_t { None, Run, Withdraw, Block, Trip, Knockdown };
