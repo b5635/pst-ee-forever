@@ -200,12 +200,21 @@ pstfBarRows = {{'Weapons', 'ACTIONBAR_STATE_WEAPONS'}, {'Spells', 'ACTIONBAR_STA
 -- Block wears the icon of the engine's own Guard button, which the hotbar leaves out (Block replaces it).
 pstfMv = pstfMv or {}
 pstfGuardIcon = pstfGuardIcon or nil
+-- Hover shows the name; right-click opens the description (pstfMoveDesc, PSTF_DESC), written as the game's
+-- own spell and item descriptions are, by the 2nd Edition rules the maneuvers follow (maneuvers.h).
 pstfMoves = {
-	{id = 'run', icon = 'PFSPRINT', tip = 'Run: uses your action; adds your full movement again (31/31 becomes 62/31).'},
-	{id = 'withdraw', icon = 'PFWITHDR', tip = 'Withdraw: uses your action; halves your remaining movement. You walk away without provoking attacks of opportunity.'},
-	{id = 'trip', icon = 'PFTRIP', tip = 'Trip (fighters): your first melee swing this round is at -2. A hit does no damage: the target saves vs. death or falls prone until its next turn, then loses its action standing up. Click again to cancel.'},
-	{id = 'block', icon = 'PFTRIP', guard = true, tip = 'Block (fighters, not Morte): uses your action. Your attacks left this round become blocks: each melee hit on you until your next turn rolls d20 + AC 4 against your THAC0, and must also match the attack roll, to stop it.'},
+	{id = 'run', icon = 'PFSPRINT', tip = 'Run', desc = 'Run\n\nAction: 1 (the round\'s action)\nRange: Personal\nDuration: Until the start of the next turn\n\nThe character gives up attacking and spellcasting for the round to cover ground at speed. The full movement allowance is added again to whatever remains this round (31 of 31 becomes 62 of 31), so the character may move up to twice the normal rate. As with any running character, no attack may be made and no spell cast in the same round.'},
+	{id = 'withdraw', icon = 'PFWITHDR', tip = 'Withdraw', desc = 'Withdraw\n\nAction: 1 (the round\'s action)\nRange: Personal\nDuration: Until the start of the next turn\n\nThe character backs carefully out of melee, keeping a guard toward every foe in reach. Only one third of the movement left this round remains, and the character moves at a walk, but no opponent may make an attack of opportunity as the character leaves its reach. A character who simply turns and walks away from melee instead allows each foe in reach one free attack.'},
+	{id = 'trip', icon = 'PFTRIP', tip = 'Trip', desc = 'Trip\n\nRequirements: Warrior (fighter, ranger, paladin or a multi-class warrior); not the Nameless One\nAction: The first melee attack of the round\nSaving Throw: Death negates\n\nRather than seeking to wound, the warrior strikes at an opponent\'s legs and balance. The first melee attack this round is made at a -2 penalty to the attack roll and inflicts no damage. If it hits, the target must save vs. death or be knocked down. A prone creature suffers a 4-point penalty to its Armor Class (+4 to hit it) until its next turn, when it must spend its action regaining its feet. Selecting Trip again before the attack gives up the attempt, and the blow is struck normally.'},
+	{id = 'block', icon = 'PFTRIP', guard = true, tip = 'Block', desc = 'Block\n\nRequirements: Warrior (fighter, ranger, paladin or a multi-class warrior); not the Nameless One or Morte\nAction: 1 (the round\'s action)\nDuration: Until the start of the next turn\n\nThe warrior forgoes the attacks remaining this round to parry. Each such attack becomes one block. When a melee attack would hit the warrior, a block is spent: the warrior rolls 1d20 + 4 against its own THAC0, as an attack against Armor Class 4. If that roll succeeds and the die equals or exceeds the attacker\'s own roll, the blow is turned aside harmlessly. A natural 1 always fails and a natural 20 always succeeds.'},
 }
+-- the description panel of a maneuver (right-click on its hotbar button)
+pstfDesc = {icon = '', name = '', text = ''}
+function pstfMoveDesc(m)
+	local name, rest = string.match(m.desc, '^([^\n]*)\n\n(.*)$')
+	pstfDesc = {icon = m.guard and pstfGuardIcon or m.icon, name = name or m.tip, text = rest or m.desc}
+	Infinity_PushMenu('PSTF_DESC')
+end
 local function isGuard(tip)
 	return type(tip) == 'string' and (string.find(tip, 'Guard') ~= nil or string.find(tip, 'Protect') ~= nil)
 end
@@ -223,26 +232,49 @@ function pstfBarCollect()
 		local st = const and const[row[2]]
 		if st then
 			ba:SetState(st)
-			local i = 0
-			for icon, on in string.gmatch(PSTF_BarSlots(), '([^:;]*):(%d);') do
-				if icon ~= '' then
-					local tip = actionBarTooltip and actionBarTooltip[i]
-					if pstfMv.on and isGuard(tip) then
-						pstfGuardIcon = icon  -- Block takes its place and its icon
-					else
-						local w, h = iconSize(icon)
-						table.insert(engineBar, {row = r, state = st, slot = i, icon = icon, on = on == '1', tip = tip, w = w, h = h})
-					end
+			-- the engine shows 10 of a list longer than 12 at a time (scroll arrows in slots 0 and 11): every
+			-- part of it, scrolled there (PSTF_BarScroll), each entry remembering its scroll index and slot
+			local n = PSTF_BarCount and PSTF_BarCount() or 0
+			local scrolls = {{nil, 0, 11}}
+			if n > 12 and PSTF_BarScroll then
+				scrolls = {}
+				local idx = 0
+				while idx < n do
+					local first, last = PSTF_BarScroll(idx)
+					if not first or first < 0 then break end
+					table.insert(scrolls, {idx, first, math.min(last, first + n - idx - 1)})
+					idx = idx + (last - first + 1)
 				end
-				i = i + 1
 			end
+			for _, sc in ipairs(scrolls) do
+				if sc[1] then PSTF_BarScroll(sc[1]) end
+				local i = 0
+				for icon, on in string.gmatch(PSTF_BarSlots(), '([^:;]*):(%d);') do
+					if icon ~= '' and i >= sc[2] and i <= sc[3] then
+						local tip = actionBarTooltip and actionBarTooltip[i]
+						-- the engine's Guard button (weapons / abilities rows; a spell such as Protection from Evil is no Guard)
+						if pstfMv.on and (r == 1 or r == 4) and isGuard(tip) then
+							pstfGuardIcon = icon  -- Block takes its place and its icon
+						else
+							local w, h = iconSize(icon)
+							table.insert(engineBar, {row = r, state = st, slot = i, scroll = sc[1], icon = icon, on = on == '1', tip = tip, w = w, h = h})
+						end
+					end
+					i = i + 1
+				end
+			end
+			if scrolls[1] and scrolls[1][1] then PSTF_BarScroll(0) end
 		end
 	end
 	if pstfMv.on then
 		for _, m in ipairs(pstfMoves) do
-			local icon = m.guard and pstfGuardIcon or m.icon
-			local w, h = iconSize(icon)
-			table.insert(bar, {row = 0, move = true, id = m.id, icon = icon, on = true, tip = m.tip, w = w, h = h})
+			-- who cannot trip or block (not a warrior, the Nameless One, Morte) does not get the button
+			local hidden = (m.id == 'trip' and pstfMv.mayTrip == false) or (m.id == 'block' and pstfMv.mayBlock == false)
+			if not hidden then
+				local icon = m.guard and pstfGuardIcon or m.icon
+				local w, h = iconSize(icon)
+				table.insert(bar, {row = 0, move = true, id = m.id, m = m, icon = icon, on = true, tip = m.tip, w = w, h = h})
+			end
 		end
 	end
 	for _, e in ipairs(engineBar) do table.insert(bar, e) end
@@ -293,8 +325,23 @@ function pstfBarClick(k)
 		if pstfTbc.on and pstfMv[e.id] then PSTF_Maneuver(e.id) end
 		return
 	end
-	game:GetButtonArray():SetState(e.state)
-	game:GetButtonArray():OnLButtonPressed(e.slot)
+	local ba = game:GetButtonArray()
+	ba:SetState(e.state)
+	if e.scroll then PSTF_BarScroll(e.scroll) end
+	ba:OnLButtonPressed(e.slot)
+end
+-- Right-click: the description, as the engine's own bar shows it (spell / item description), or ours (maneuvers).
+function pstfBarRClick(k)
+	local e = pstfBarEntry(k)
+	if not e then return end
+	if e.move then
+		if e.m then pstfMoveDesc(e.m) end
+		return
+	end
+	local ba = game:GetButtonArray()
+	ba:SetState(e.state)
+	if e.scroll then PSTF_BarScroll(e.scroll) end
+	ba:OnRButtonPressed(e.slot)
 end
 function pstfBarPagesOn() return pstfBg3 and pstfBarShown() and pstfBarPages() > 1 end
 function pstfBarCanPrev() return pstfBarPage > 1 end
@@ -594,7 +641,7 @@ std::string BuildHudMenu(bool bg3, int party_max) {
          ")\"\n\t\tbam lua \"pstfBarIcon(" + n + ")\"\n\t\tgreyscale lua \"not pstfBarUsable(" + n + ")\"\n\t\tignoreEvents\n\t}\n";
     m += "\tbutton\n\t{\n\t\tname \"pstfBarHit" + n + "\"\n\t\tarea 0 0 1 1\n\t\tenabled \"pstfBarOn(" + n +
          ")\"\n\t\ttooltip lua \"pstfBarTip(" + n + ")\"\n\t\tclickable lua \"fullActionbarClickable == nil or fullActionbarClickable()\"\n"
-         "\t\taction \"pstfBarClick(" + n + ")\"\n\t}\n";
+         "\t\taction \"pstfBarClick(" + n + ")\"\n\t\tactionAlt \"pstfBarRClick(" + n + ")\"\n\t}\n";
   }
   m += "}\n";
   // --- status icons next to the portraits and the hover card ---
@@ -646,6 +693,18 @@ std::string BuildHudMenu(bool bg3, int party_max) {
   m += Label("pstfMsg", "pstfMsgOn()",
              "\t\ttext lua \"pstfMsg()\"\n\t\ttext style \"label\"\n\t\talign center center\n");
   m += "}\n";
+  // --- a maneuver's description (right-click on its hotbar button): the game's SPELL_DESCRIPTION panel ---
+  m += "menu\n{\n\tname 'PSTF_DESC'\n\talign center center\n\tmodal\n\tpopupSound 1\n"
+       "\tlabel\n\t{\n\t\tarea 0 0 750 580\n\t\tmosaic popup1\n\t}\n"
+       "\tlabel\n\t{\n\t\tarea 140 136 88 88\n\t\ticon lua \"pstfDesc.icon\"\n\t}\n"
+       "\tlabel\n\t{\n\t\tarea 137 132 94 98\n\t\tmosaic \"ITMVIG\"\n\t}\n"
+       "\tlabel\n\t{\n\t\tarea 606 74 51 50\n\t\tmosaic \"ITMVIGSM\"\n\t}\n"
+       "\tlabel\n\t{\n\t\tarea 609 77 46 46\n\t\ticon lua \"pstfDesc.icon\"\n\t}\n"
+       "\tlabel\n\t{\n\t\tarea 284 79 266 42\n\t\ttext lua \"pstfDesc.name\"\n\t\ttext style \"label\"\n\t}\n"
+       "\ttext\n\t{\n\t\tarea 294 140 412 336\n\t\ttext lua \"pstfDesc.text\"\n\t\ttext style \"normal_parchment\"\n"
+       "\t\tscrollbar 'cgscrl1'\n\t}\n"
+       "\tbutton\n\t{\n\t\ton escape\n\t\tarea 577 497 138 56\n\t\ttext \"DONE_BUTTON\"\n\t\ttext style \"button\"\n"
+       "\t\tbam normbutt\n\t\taction \"Infinity_PopMenu('PSTF_DESC')\"\n\t}\n}\n";
   return m;
 }
 

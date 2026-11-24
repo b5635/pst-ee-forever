@@ -95,6 +95,14 @@ void KeepAttackRound(int32_t id);                // sets that flag again (after 
 int AttackRoundPos(int32_t id);                  // ticks into its attack round (-1 = a new one at the next swing)
 void NewAttackRound(int32_t id);                 // its next swing starts a fresh attack round (swings soon, not next round)
 bool SetSpriteSequence(int32_t id, int16_t seq); // CGameSprite::SetSequence (sounds and all, as the engine)
+bool SetSpriteDirection(int32_t id, int dir);
+int GameCursorMode();                            // CInfGame +0x78B8 (20 = a hovering missile waits for a target)
+bool SetCursorMode(int mode);                     // writes it (a player's Missile of Patience ends itself off 20)
+bool MopClickTarget(int32_t caster, int32_t target);  // test probe: a target click for a hovering missile
+bool MopUp();                                     // a hovering Missile of Patience is up (g_PST +0x6B4)
+// Every Missile of Patience shot (its TransferEffects call): fn(missile) false = the shot does not go.
+using MopShotFn = bool (*)(uint64_t missile);
+bool InstallMopShotHook(MopShotFn fn);    // CGameSprite::SetDirection: turns there (0..15, 0 south)
 inline bool IsAttackSequence(int16_t s) { return s == 0 || s == 8 || s == 11 || s == 12 || s == 13; }
 // Lying down: a PST character animation shows its die cycle at `back` frames before the last one (0 = on the
 // ground; more = on the way up or down). Returns the cycle's frame count (0: not a PST animation).
@@ -201,6 +209,11 @@ struct BarButton {
 // The 12 slots of the engine's action bar as they are now (after CInfButtonArray::SetState).
 std::vector<BarButton> ActionBarButtons();
 std::string ActionBarHex(int slot, int bytes);  // probe
+// The engine's whole list behind the bar (CInfButtonArray::pList, after a SetState): entries (0 = none).
+int ActionBarListCount();
+// Scroll the engine's list to `index` and refill the 12 slots (UpdateButtons); false if not available.
+bool ActionBarScroll(int index);
+int ActionBarStateId();  // the state the bar is in (+0x1FE4)
 std::string ActiveFlags(int32_t id);
 std::string ScanBarStrings();                    // probe: resref-like strings in the button array
 bool SetHpForTest(int32_t id, int hp);          // test probe only (PSTF_SetHp)            // probe: sprite +0x3904..+0x3910 (Spell's target check)

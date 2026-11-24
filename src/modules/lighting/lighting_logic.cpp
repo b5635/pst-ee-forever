@@ -172,6 +172,17 @@ Rgb UndoTint(const Rgb& c, const Rgb& t) {
           std::min(1.0f, c.b / std::max(t.b, 0.2f))};
 }
 
+float EffectCover(const Rgb& fx) {
+  const float m = std::max(fx.r, std::max(fx.g, fx.b));
+  const float t = std::max(0.0f, std::min(1.0f, (m - 0.01f) / 0.11f));
+  return t * t * (3.0f - 2.0f * t);  // smoothstep(0.01, 0.12, m)
+}
+Rgb UndoTintFx(const Rgb& c, const Rgb& t, const Rgb& fx) {
+  const Rgb u = UndoTint(c, t);
+  const float k = EffectCover(fx);
+  return {u.r + (c.r - u.r) * k, u.g + (c.g - u.g) * k, u.b + (c.b - u.b) * k};
+}
+
 Rgb LightmapPool(const Rgb& lm, float mean_luma, float k) {
   const float over = Luma(lm) - mean_luma;
   if (over <= 0.0f || k <= 0.0f) return {};

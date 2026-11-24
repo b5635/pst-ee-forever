@@ -475,6 +475,19 @@ TEST_CASE("lighting: day / night (engine tint undone, our ambient, lightmap pool
   CHECK(Near(a1.r, 0.86 * 0.45 * 0.66, 1e-4) && Near(a1.b, 0.86 * 0.45 * 1.28, 1e-4));  // moonlight: cool, dark
   CHECK(ah.r > ah.b && Luma(ah) < Luma(a0) && Luma(ah) > Luma(a1));  // dusk: warm, in between
   CHECK(NightLightGain(0, d) == 1.0f && Near(NightLightGain(1, d), 1.5) && Near(NightLightGain(0.5f, d), 1.25));
+  {
+    // night tint C86464 (r g 0.39, b 0.78): a white effect pixel added over the tinted ground stays white,
+    // the ground under a faint glow is undone; no effect = UndoTint
+    const Rgb t = TintRgb(0xC86464);
+    const Rgb w = UndoTintFx({0.7f, 0.7f, 0.75f}, t, {0.5f, 0.48f, 0.45f});  // the hammer: kept as drawn
+    CHECK(Near(w.r, 0.7) && Near(w.b, 0.75));
+    CHECK(Near(EffectCover({0.005f, 0, 0}), 0.0) && Near(EffectCover({0.2f, 0.1f, 0}), 1.0));
+    CHECK(Near(EffectCover({0.065f, 0, 0}), 0.5));
+    CHECK(SoftenAt(0.0f) && SoftenAt(0.49f) && !SoftenAt(0.5f) && !SoftenAt(Nightness(0xC86464, 0.43f)));  // the Hive at 1 am
+    const Rgb n = UndoTintFx({0.2f, 0.2f, 0.4f}, t, {0, 0, 0});  // no effect: the plain undo
+    const Rgb o = UndoTint({0.2f, 0.2f, 0.4f}, t);
+    CHECK(Near(n.r, o.r) && Near(n.b, o.b));
+  }
   const Rgb u = UndoTint({0.2f, 0.3f, 0.6f}, TintRgb(0x80A0FF));  // tint r 1.0, g 160/255, b 128/255
   CHECK(Near(u.r, 0.2) && Near(u.g, 0.3 / (160 / 255.0), 1e-4) && Near(u.b, 1.0));  // b capped at 1
   CHECK(Near(UndoTint({0.1f, 0.1f, 0.1f}, {0.0f, 0.0f, 0.0f}).r, 0.5));            // tint floor 0.2

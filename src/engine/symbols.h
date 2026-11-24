@@ -755,6 +755,7 @@ constexpr uint32_t kRvaSlotAIUpdate = 0x649340, kRvaAIUpdate = 0x3B4330;
 // only: flipping SetRunning mid-walk keeps the old frames until the sequence is set again.
 inline constexpr uint8_t kSlotAnimSetSeqBytes[] = {0xF0, 0xB4, 0x3A, 0x40, 0x01, 0x00, 0x00, 0x00};
 constexpr uint32_t kRvaSlotAnimSetSeq = 0x647220, kVtblAnimSetSeq = 0x170, kOffAnimCycle = 0x1CE8, kOffAnimCell = 0xCD0;
+constexpr int16_t kAnimCycleRun = 4, kAnimCycleWalk = 5;  // SetSequence(10): 4 while IsRunning (and a run cell), else 5
 // CVidCell::FrameSet(ushort) lin 68B710 / win 140499B90 `mov [rcx+118h], dx`: frame word +0x118, sequence
 // word +0x11A (CVidCell::SequenceSet); CVidCell::GetSequenceLength(ushort) lin 68B4E0 / win 14049A4E0.
 inline constexpr uint8_t kFrameSetBytes[] = {0x66, 0x89, 0x91, 0x18, 0x01, 0x00, 0x00, 0xB8};
@@ -792,6 +793,38 @@ inline constexpr uint8_t kBarIconBytes[] = {0x48, 0x8D, 0x9E, 0x28, 0x01, 0x00, 
 inline constexpr uint8_t kBarDisabledBytes[] = {0x8B, 0x86, 0x9C, 0x02, 0x00, 0x00};
 constexpr uint32_t kRvaBarIcon = 0x2C82F5, kRvaBarDisabled = 0x2C8097, kOffBarIcon = 0x128, kOffBarDisabled = 0x29C;
 constexpr uint32_t kOffBarCount = 0x294;
+// The engine's full button list (static CInfButtonArray::pList, a CPtrList: count at +0x18) and its scroll index
+// (button array +0x2264): with more than 12 entries UpdateButtons (lin 3588B0 L900-960, win 1402CA5F0) shows 10
+// of them from FindIndex(pList, [this+0x2264]) in slots 1..10 (2..10 in states 113/114) and puts the scroll
+// arrows in slots 0 and 11 (win 1402CD29F `mov rcx,cs:qword_14072D848`, 1402CD2CC `mov edx,[r14+2264h]`).
+// UpdateButtons refills the slots from the list at the index. State dword at +0x1FE4 (1402CA8FA).
+inline constexpr uint8_t kBarListBytes[] = {0x48, 0x8B, 0x0D, 0xA2, 0x05, 0x46, 0x00};
+inline constexpr uint8_t kBarScrollBytes[] = {0x41, 0x8B, 0x96, 0x64, 0x22, 0x00, 0x00};
+inline constexpr uint8_t kUpdateButtonsBytes[] = {0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x10, 0x48, 0x89, 0x70, 0x18,
+                                                  0x48, 0x89, 0x78, 0x20, 0x55, 0x41, 0x54, 0x41, 0x55};
+constexpr uint32_t kRvaBarList = 0x2CD29F, kRvaBarScroll = 0x2CD2CC, kRvaUpdateButtons = 0x2CA5F0;
+constexpr uint64_t kVaButtonList = 0x14072D848ull;
+constexpr uint32_t kOffBarScroll = 0x2264, kOffBarState = 0x1FE4, kOffPtrListCount = 0x18;
+// CGameSprite::SetDirection(short) lin 509880 / win 1403E6F90: the direction it turns to (+0x446C, the
+// sprite turns there in its own update). 16 directions, 0 south, 4 west, 8 north, 12 east.
+inline constexpr uint8_t kSetDirectionBytes[] = {0x44, 0x0F, 0xBF, 0x89, 0x6E, 0x44, 0x00, 0x00, 0x4C, 0x8B, 0xC1};
+constexpr uint32_t kRvaSetDirection = 0x3E6F90;
+// Missile of Patience (CPsSpellMissileOfPatience, caster level 11+: it hovers and waits for targets). AIUpdate lin
+// 3090B0 / win 1402756D0: a player's missile ends itself (RemoveSelf, vtable +0xE0 on Windows: 140275765) once the
+// game's cursor mode byte CInfGame +0x78B8 is no longer 20 (140275748 `cmp byte [rbx+78B8h],14h`); a target click
+// puts the target's object id + 1 into the caster at +0x5124 (14027579D `mov ecx,[rax+5124h]`); each shot is one
+// call of TransferEffects (lin 2DA020 / win 140294DA0) at 14027581B, then AIUpdate re-arms the cursor (SetState 2,
+// mode 20) and clears the target (-1, 140275838).
+inline constexpr uint8_t kMopCursorBytes[] = {0x80, 0xBB, 0xB8, 0x78, 0x00, 0x00, 0x14};
+inline constexpr uint8_t kMopTargetBytes[] = {0x8B, 0x88, 0x24, 0x51, 0x00, 0x00};
+inline constexpr uint8_t kMopShotCallBytes[] = {0xE8, 0x80, 0xF5, 0x01, 0x00};
+constexpr uint32_t kRvaMopCursor = 0x275748, kRvaMopTarget = 0x27579D, kRvaMopShotCall = 0x27581B, kRvaMopTransfer = 0x294DA0;
+constexpr uint32_t kOffGameCursorMode = 0x78B8, kOffSpriteMopTarget = 0x5124;
+// g_PST (kVaPlanescape) +0x6B4: a hovering Missile of Patience is up (Fire sets 1, RemoveSelf 0; AIUpdate 140275758
+// `mov dword [rax+6B4h], 0`).
+inline constexpr uint8_t kMopFlagBytes[] = {0xC7, 0x80, 0xB4, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaMopFlag = 0x275758, kOffPstMopUp = 0x6B4;
+constexpr uint8_t kCursorModeTarget = 20;
 // Projectiles are objects of type 0 (CGameObject +8) with the caster at +0x68 (DeliverEffects win
 // 140282F3F `mov eax,[rbx+68h]`); every projectile class has AIUpdate at vtable slot 3 (+0x18, e.g.
 // CProjectileAdder::AIUpdate 140261CA0 in vtable 140631510) and CGameObject::GetObjectType
@@ -1058,6 +1091,14 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("tolua.GetButtonArray", kRvaButtonArray, kButtonArrayBytes, "win 14046102E"),
     PSTF_SYM("PostRenderButton.icon", kRvaBarIcon, kBarIconBytes, "lin 3602F0 / win 1402C82F5"),
     PSTF_SYM("PostRenderButton.disabled", kRvaBarDisabled, kBarDisabledBytes, "win 1402C8097"),
+    PSTF_SYM("UpdateButtons.pList", kRvaBarList, kBarListBytes, "lin 3588B0 / win 1402CD29F"),
+    PSTF_SYM("UpdateButtons.scroll", kRvaBarScroll, kBarScrollBytes, "win 1402CD2CC"),
+    PSTF_SYM("CInfButtonArray::UpdateButtons", kRvaUpdateButtons, kUpdateButtonsBytes, "lin 3588B0 / win 1402CA5F0"),
+    PSTF_SYM("CGameSprite::SetDirection", kRvaSetDirection, kSetDirectionBytes, "lin 509880 / win 1403E6F90"),
+    PSTF_SYM("MissileOfPatience::AIUpdate.cursor", kRvaMopCursor, kMopCursorBytes, "lin 3090B0 / win 140275748"),
+    PSTF_SYM("MissileOfPatience::AIUpdate.target", kRvaMopTarget, kMopTargetBytes, "win 14027579D"),
+    PSTF_SYM("MissileOfPatience::AIUpdate.TransferEffects", kRvaMopShotCall, kMopShotCallBytes, "lin 3090B0 / win 14027581B"),
+    PSTF_SYM("MissileOfPatience::AIUpdate.flag", kRvaMopFlag, kMopFlagBytes, "win 140275758"),
     PSTF_SYM("CGameObject::GetObjectType", kRvaGetObjectType, kGetObjectTypeBytes, "lin 176FB0 / win 140173050"),
     PSTF_SYM("CGameSprite::Render.vismap", kRvaVisMapLea, kVisMapLeaBytes, "lin 562A10 / win 1403DD9D5"),
     PSTF_SYM("CGameArea::ShowMonstersInArea.visible", kRvaShowMonstersVis, kShowMonstersVisBytes, "lin 1B8460 / win 1401A108C"),

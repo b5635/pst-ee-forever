@@ -6,7 +6,7 @@
 // maneuver runs and what a blocked or tripping hit does.
 //
 //   Run       spends the action; remaining movement += max movement (31/31 -> 62/31, 0/31 -> 31/31).
-//   Withdraw  the party side only (enemies never withdraw); spends the action; remaining movement halves; walks (walk animation and speed); no attacks
+//   Withdraw  the party side only (enemies never withdraw); spends the action; a third of the remaining movement is left (2/3 go); walks (walk animation and speed); no attacks
 //             of opportunity until its next turn. Refused with no movement left (a wasted action).
 //   Block     fighters (not the Nameless One, not Morte); spends the action; the attacks left this round
 //             become block stacks until its next turn. Each melee hit on it uses one stack: a d20 with its
@@ -17,8 +17,10 @@
 //             played backwards), when it stands up and loses that turn's action. Armed by the button,
 //             cancelled by clicking it again (then the swing is an ordinary attack).
 //   Knockdown the same for AI creatures outside the party with THAC0 15 or better, without the -2.
-//   AoO       a creature walking out of an enemy's melee reach (the engine's own Attack range test, in
-//             search-map cells) without Withdraw gets one swing from it. One per reactor until its own
+//   AoO       a creature that starts a walk in an enemy's melee reach (the engine's own Attack range test,
+//             in search-map cells) along a path that leaves it, without Withdraw, first turns toward its way
+//             and waits: every such enemy swings once, one after the other, then it walks. A walker that only
+//             passes through a reach later on its way provokes nothing. One per reactor until its own
 //             next turn, a single swing whatever its APR; prone (asleep) reactors do not react.
 #pragma once
 #include <algorithm>
@@ -75,6 +77,7 @@ inline bool ApplyRun(Economy* e, Stance* s) {
   if (!CanRun(*e)) return false;
   e->move_ft += e->max_ft;
   e->action_used = true;
+  e->walk_only = true;  // its attack order walks up, no swing
   s->ran = true;
   return true;
 }
@@ -82,7 +85,7 @@ inline bool ApplyRun(Economy* e, Stance* s) {
 inline bool CanWithdraw(const Economy& e) { return ActionFree(e) && e.MoveLeft(); }
 inline bool ApplyWithdraw(Economy* e, Stance* s) {
   if (!CanWithdraw(*e)) return false;
-  e->move_ft /= 2.0;
+  e->move_ft /= 3.0;  // 2/3 of what is left go (31 -> 10.3)
   e->action_used = true;
   s->withdrawn = true;
   return true;
@@ -176,6 +179,17 @@ inline bool StepLeavesReach(int rx, int ry, int mx, int my, const std::vector<st
     px = p.first, py = p.second;
   }
   return false;
+}
+// The whole path (the walk about to start): does it leave the reactor's reach anywhere?
+inline bool PathLeavesReach(int rx, int ry, int mx, int my, const std::vector<std::pair<int, int>>& path, int reach) {
+  return StepLeavesReach(rx, ry, mx, my, path, reach, 1e9);
+}
+// The engine's 16 directions (CGameSprite::SetDirection): 0 south, 4 west, 8 north, 12 east (screen y down).
+inline int Direction16(int dx, int dy) {
+  if (dx == 0 && dy == 0) return 0;
+  const double a = std::atan2(static_cast<double>(-dx), static_cast<double>(dy));  // 0 south, +pi/2 west
+  int d = static_cast<int>(std::lround(a / (3.14159265358979323846 / 8.0)));
+  return ((d % 16) + 16) % 16;
 }
 // Movers without a walk path (floating) are seen one tick late: in reach last tick, out now but still within
 // one more cell (the reactor swings with the engine's RANGE_FUDGE).
@@ -283,6 +297,7 @@ struct AiView {
   bool melee_intent = false;  // its action is an attack (it will close in and swing)
   bool flee_intent = false;   // its action walks away (RunAwayFrom...)
   int gap_cells = 0;          // cells to the nearest enemy (Euclidean, cell deltas)
+  double path_ft = 0;         // its walk path's length (1 ft = 1 cell; 0 = not walking yet)
   int reach_cells = 2;        // its melee reach to that enemy (ReachCells)
   double move_ft = 31.0;      // movement left (1 ft = 1 cell)
   int adjacent_foes = 0;      // enemies whose reach it stands in
@@ -293,6 +308,16 @@ struct AiView {
   bool action_free = true;
   int roll100 = 100;          // 1..100, the random part (takedowns 20 %)
 };
+// The length of a walk path in feet (1 ft = 16 x 12 px, a search cell), from (x, y) along the waypoints.
+inline double PathFeet(int x, int y, const std::vector<std::pair<int, int>>& path) {
+  double ft = 0, px = x, py = y;
+  for (const auto& p : path) {
+    const double dx = (p.first - px) / 16.0, dy = (p.second - py) / 12.0;
+    ft += std::sqrt(dx * dx + dy * dy);
+    px = p.first, py = p.second;
+  }
+  return ft;
+}
 constexpr int kAiTakedownPercent = 20;
 constexpr int kAiBlockHpPercent = 35;
 inline AiMove ChooseAiMove(const AiView& v) {
@@ -301,8 +326,10 @@ inline AiMove ChooseAiMove(const AiView& v) {
   if (v.may_withdraw && v.flee_intent && v.adjacent_foes > 0 && v.move_ft > 0.05) return AiMove::Withdraw;
   if (!v.melee_intent) return AiMove::None;
   const bool in_reach = v.gap_cells <= v.reach_cells;
-  // Run only when a walk cannot close the gap this turn (it then spends the action on the run).
-  if (!in_reach && v.gap_cells - v.reach_cells > v.move_ft) return AiMove::Run;
+  // Run only when a walk cannot close the gap this turn (it then spends the action on the run): the walk path
+  // it took (around walls and other creatures), else the straight gap.
+  const double need = v.path_ft > 0 ? v.path_ft - (v.reach_cells - 1) : static_cast<double>(v.gap_cells - v.reach_cells);
+  if (!in_reach && need > v.move_ft) return AiMove::Run;
   if (!in_reach) return AiMove::None;
   // Hurt and surrounded: a fighter turns its swings into blocks.
   if (v.may_block && v.adjacent_foes >= 2 && v.hp * 100 < kAiBlockHpPercent * v.max_hp && v.attacks > 0)

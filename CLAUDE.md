@@ -279,5 +279,24 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `PSTF_DlgState()` (rolls, overrides, engine reply numbers, conditions, abilities), `PSTF_DlgNode()`, `PSTF_DlgForce(n)`
   (next natural d20), Lua `pstfDlg.rows`, `pstfDr` (panel), `pstfDlgFakeMouse`. Engine facts: reply flags +0 (1 text, 2 cond,
   8 end), number byte +0xA4 (-1 hidden), condition text +0xA8; CGameDialogSprite +0x54 = dialogue running.
+- Hotbar with long lists + right-click + hidden maneuvers: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\tbc_bar2.lua
+  -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_bar2: ok|TEST FAIL' -Close` (shot `logs\bar2_desc.bmp`). The engine shows 10 of a
+  list longer than 12 (scroll arrows in slots 0/11, `CInfButtonArray::pList` + scroll index +0x2264): probes `PSTF_BarCount()`,
+  `PSTF_BarScroll(index)` -> first, last slot. Right-click = `OnRButtonPressed` (engine spell/item description); maneuvers
+  open our `PSTF_DESC` (Lua `pstfMoveDesc`).
+- Enemy walk animation (no gliding) + AI Run by path length: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\tbc_walk.lua
+  -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'tbc_walk: ok|TEST FAIL' -Close -Timeout 300`. Engine fact: an AI's
+  Attack chase turns running off every tick; re-setting the walk sequence each time froze its frame (ForceRun now only
+  re-sets when the cycle 4/5 must change). combat.log `AI ... path X ft of 31` lines.
+- Missile of Patience: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\tbc_mop.lua -Env @{PSTF_TEST_TICK='1';
+  PSTF_FEEDBACK_LOG='1'} -Until 'tbc_mop: ok|TEST FAIL' -Close` (3 shots, then gone). Probes `PSTF_Cursor()` (CInfGame
+  +0x78B8, 20 = a hovering missile waits), `PSTF_MopFire(caster, target)` (a target click: caster +0x5124 = id+1).
+- Spell glow at night: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\lighting_hammer.lua -Env @{PSTF_TEST_TICK='1';
+  PSTF_TBC_NOFIGHT='1'} -Until 'lighting_hammer: ok|TEST FAIL' -Close` (shots `logs\hammer_night_<lit|off>_NN.bmp`; prefix
+  `pstfHammerRuns = {{'night','lit'},{'night','x','fx_soften',0},...}` for A/B). `DayNight(12)` does not change the tint
+  in a running area. Engine facts: effects are added untinted; `fx_soften`'s screen blend ignores the night tint, so it is
+  day-only (`SoftenAt`).
+- All-spells save: `tools\make_spell_save.ps1 -Keep` re-teaches from the save as it is (Nameless One, Ignus, Dak'kon all
+  mage spells; Grace priest), rests and puts the hour back (`DayNight`). The save is at night (hour 1).
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
 -- Turn-based maneuvers (Hive save 000000126, party turns driven by this script, one hostile thug):
 --   Run       31 ft -> 62 ft, the action is gone, a second Run is refused;
---   Withdraw  on a later turn: movement halves, the action is gone; walking away from the thug then
+--   Withdraw  on a later turn: a third of the movement is left, the action is gone; walking away from the thug then
 --             provokes no attack of opportunity;
 --   AoO       a party member in the thug's reach walks away without Withdraw: "Attack of Opportunity!",
 --             the thug swings once, the walk goes on;
@@ -62,7 +62,7 @@ local function partyTurn(id)
 		local before, s0 = ft(), stats()
 		if not PSTF_Maneuver('withdraw') then return fail('Withdraw refused') end
 		PSTF_Note(string.format('tbc_moves: withdraw %.1f -> %.1f ft', before, ft()))
-		if math.abs(ft() - before / 2) > 0.01 or not used() then return fail('Withdraw did not halve movement and take the action') end
+		if math.abs(ft() - before / 3) > 0.01 or not used() then return fail('Withdraw did not leave a third of the movement and take the action') end
 		walkAway(id)
 		pending = {kind = 'withdraw', frame = frames, s0 = s0}
 		done.withdraw = true
@@ -71,7 +71,8 @@ local function partyTurn(id)
 	if done.withdraw and not done.aoo and near then
 		local s = PSTF_Stance(thug)
 		if s:match('^%d+ %d+ %d+ %d+ 1') then return PSTF_EndTurn() end  -- the thug is prone: no reaction
-		pending = {kind = 'aoo', frame = frames, s0 = stats()}
+		local x0, y0 = PSTF_SpritePos(id, 1)
+		pending = {kind = 'aoo', frame = frames, s0 = stats(), mover = id, x0 = x0, y0 = y0, walkHeld = 0, moved = 0}
 		walkAway(id)
 		done.aoo = true
 		return
@@ -115,12 +116,25 @@ local function checkPending(turnOver)
 		local r, m = PSTF_Aoo()
 		PSTF_Note(string.format('tbc_moves: attack of opportunity by %X on %X', r, m))
 		if r ~= thug then return fail('the reactor is not the thug') end
-		pending = {kind = 'aooSwing', frame = frames, s0 = s0}
-	elseif pending.kind == 'aooSwing' and (s.aooSwung > s0.aooSwung or frames - pending.frame > 120) then
-		local r = PSTF_Aoo()
-		PSTF_Note(string.format('tbc_moves: aoo swung %d (reactor now %d)', s.aooSwung - s0.aooSwung, r))
-		if s.aooSwung == s0.aooSwung then return fail('the attack of opportunity never swung') end
-		pending = nil
+		local p = pending
+		pending = {kind = 'aooSwing', frame = frames, s0 = s0, mover = p.mover, x0 = p.x0, y0 = p.y0, walkHeld = 0, moved = 0}
+	elseif pending.kind == 'aooSwing' then
+		-- while the reactor swings the mover stands where it started the walk (turned toward its way), not walking in place
+		if PSTF_Aoo() ~= -1 then
+			local x, y = PSTF_SpritePos(pending.mover, 1)
+			if math.abs(x - pending.x0) + math.abs(y - pending.y0) > 2 then pending.moved = pending.moved + 1 end
+			local _, _, _, seq = PSTF_AnimProbe(pending.mover):match('(%-?%d+) (%-?%d+) (%-?%d+) (%-?%d+)')
+			if tonumber(seq) == 10 then pending.walkHeld = pending.walkHeld + 1 end
+		end
+		if s.aooSwung > s0.aooSwung or frames - pending.frame > 120 then
+			local r = PSTF_Aoo()
+			PSTF_Note(string.format('tbc_moves: aoo swung %d (reactor now %d); mover moved %d ticks, walk sequence %d ticks while waiting',
+				s.aooSwung - s0.aooSwung, r, pending.moved, pending.walkHeld))
+			if s.aooSwung == s0.aooSwung then return fail('the attack of opportunity never swung') end
+			if pending.moved > 0 then return fail('the mover walked before the attack of opportunity') end
+			if pending.walkHeld > 2 then return fail('the mover walked in place while waiting for the attack of opportunity') end
+			pending = nil
+		end
 	elseif pending.kind == 'trip' and turnOver then
 		PSTF_Note(string.format('tbc_moves: trip: takedowns %d, hits %d, prone %d', s.takedowns - s0.takedowns,
 			s.tdhits - s0.tdhits, s.prone - s0.prone))

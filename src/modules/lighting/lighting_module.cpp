@@ -415,8 +415,11 @@ void main() {
   vec2 uv = p / u_vpSize;
   vec3 l = texture(u_light, uv).rgb;
   if (u_mode == 1 || u_mode == 3) { gl_FragColor = vec4(l, c.a); return; }
-  c.rgb = min(c.rgb / max(u_engineTint, vec3(0.2)), vec3(1.0));  // albedo: the engine's night tint out
   vec3 ec =texelFetch(u_emis, ivec2(floor(gl_FragCoord.xy)), 0).rgb * step(0.0001, u_emisKeep);
+  // albedo: the engine's night tint out, except where an effect is drawn: the engine adds spell glows untinted
+  // (lighting_logic UndoTintFx); dividing them blew them up to an opaque, saturated blob at night
+  float fxCover = smoothstep(0.01, 0.12, max(ec.r, max(ec.g, ec.b)));
+  c.rgb = mix(min(c.rgb / max(u_engineTint, vec3(0.2)), vec3(1.0)), c.rgb, fxCover);
   float e = emisWeight(ec);
   // Colour fringe: red and blue of the halo sampled a little apart along the direction from the centre.
   vec2 fd = normalize(uv - 0.5 + 1e-5) * u_fringe / vec2(textureSize(u_bloom, 0));
@@ -465,6 +468,7 @@ void main() {
   float hi = smoothstep(0.72, 1.0, max(c.r, max(c.g, c.b)));
   lit = mix(lit, max(lit, c.rgb), hi * u_keep);
   lit = mix(lit, max(lit, c.rgb), e * u_emisKeep);  // emitting pixels keep their own brightness
+  lit = mix(lit, c.rgb, fxCover);  // where an effect is drawn it shows as the engine drew it: it is not lit
   lit += ec * e * u_fxBoost;                          // and shine a little past it
   if (u_atmo.w > 0.0 && u_hasHeight == 1) {
     vec2 m = (p + 0.5) * u_map.xy + u_map.zw;
@@ -1629,7 +1633,10 @@ int EmitDecision(const char* res, uint16_t cycle, uint16_t frame, uint32_t flags
   if (over && !over->glow) return 0;
   const bool glow = IsGlowBlend(flags);
   const bool listed = !glow && (over != nullptr || Emits(g_emit_names, res, 0));
-  const int soft = (listed && g_set.fx_soften && (!over || over->soften)) ? 4 : 0;
+  // Not at night: the screen blend adds the sprite untinted, so a dark-grey part the engine's own (tinted) draw
+  // keeps near black there shows at full strength (Spiritual Hammer's oval became an opaque glowing blob).
+  // Painting black over the scene, what the soften is for, does not show on a night scene anyway.
+  const int soft = (listed && g_set.fx_soften && SoftenAt(g_night) && (!over || over->soften)) ? 4 : 0;
   static int logged = 0;
   if ((glow || listed) && logged < 40) {
     ++logged;

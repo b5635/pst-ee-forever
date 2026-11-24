@@ -25,9 +25,9 @@ TEST_CASE("tbc run: action spent, remaining movement plus max (31/31 -> 62, 0/31
   CHECK(!CanRun(busy));
 }
 
-TEST_CASE("tbc withdraw: halves movement, spends the action, refused with no movement") {
+TEST_CASE("tbc withdraw: a third of the movement left, spends the action, refused with no movement") {
   Economy e(31.0, 51, true);
-  e.move_ft = 20.0;
+  e.move_ft = 30.0;
   Stance s;
   CHECK(ApplyWithdraw(&e, &s));
   CHECK(e.move_ft == 10.0);
@@ -284,4 +284,58 @@ TEST_CASE("tbc aoo late catch: a floating mover one cell past the reach still pr
   CHECK(!LeftReachLate(true, true, true));    // still in reach
   CHECK(!LeftReachLate(true, false, false));  // jumped further than the fudge cell: too far to swing
   CHECK(kRangeFudge == 1);
+}
+
+TEST_CASE("tbc direction: the engine's 16 directions (0 south, 4 west, 8 north, 12 east)") {
+  CHECK(Direction16(0, 10) == 0);
+  CHECK(Direction16(-10, 0) == 4);
+  CHECK(Direction16(0, -10) == 8);
+  CHECK(Direction16(10, 0) == 12);
+  CHECK(Direction16(-10, 10) == 2);
+  CHECK(Direction16(10, -10) == 10);
+}
+
+TEST_CASE("tbc attack of opportunity: only a walk that starts in reach and leaves it anywhere on the path") {
+  // reactor at 100,100, reach 2 cells (32 px x, 24 px y): mover at 110,100 (in reach)
+  const std::vector<std::pair<int, int>> away = {{120, 100}, {400, 100}};  // far point beyond the look-ahead
+  CHECK(PathLeavesReach(100, 100, 110, 100, away, 2));
+  CHECK(!StepLeavesReach(100, 100, 110, 100, {{400, 100}}, 6, kAooLookAheadPx) ||
+        PathLeavesReach(100, 100, 110, 100, {{400, 100}}, 6));
+  const std::vector<std::pair<int, int>> around = {{100, 110}, {90, 100}};  // stays in reach
+  CHECK(!PathLeavesReach(100, 100, 110, 100, around, 2));
+  // starts out of reach: never provokes, even passing by
+  CHECK(!PathLeavesReach(100, 100, 300, 100, {{100, 100}, {0, 100}}, 2));
+}
+
+TEST_CASE("tbc directed AI: runs by the walk path's length, not the straight gap") {
+  AiView v;
+  v.melee_intent = true;
+  v.gap_cells = 19, v.reach_cells = 3, v.move_ft = 31.0;
+  v.roll100 = 100;
+  CHECK(ChooseAiMove(v) == AiMove::None);  // straight: 16 cells to walk, 31 ft
+  v.path_ft = 40.0;                         // around the walls (the Hive log: 31 ft walked, not there)
+  CHECK(ChooseAiMove(v) == AiMove::Run);
+  v.path_ft = 30.0;
+  CHECK(ChooseAiMove(v) == AiMove::None);
+  CHECK(PathFeet(0, 0, {{160, 0}, {160, 120}}) == 20.0);  // 10 cells x, then 10 cells y
+}
+
+TEST_CASE("tbc run: an AI runner's attack walks between path parts, stops once it arrives (no swing)") {
+  Economy e(31.0, 75, false);
+  Stance s;
+  CHECK(ApplyRun(&e, &s));
+  CHECK(e.walk_only);
+  // walking (path), then one tick without a path between parts: no stop, the walk is not held
+  EconomyStep st = e.Feed(1, 1.0, true, 3);
+  CHECK(st.stop == Stop::None);
+  CHECK(!st.hold_walk);
+  st = e.Feed(1, 0.0, false, 3);
+  CHECK(st.stop == Stop::None);
+  CHECK(!st.end_turn);
+  st = e.Feed(1, 1.0, true, 3);
+  CHECK(st.stop == Stop::None);
+  CHECK(e.walked_ft == 2.0);
+  // arrived (no path for kWalkOnlyTicks): the action is gone, it stops
+  for (uint32_t i = 0; i < Economy::kWalkOnlyTicks; ++i) CHECK(e.Feed(1, 0.0, false, 3).stop == Stop::None);
+  CHECK(e.Feed(1, 0.0, false, 3).stop == Stop::NoAction);
 }

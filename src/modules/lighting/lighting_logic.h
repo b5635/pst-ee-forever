@@ -255,6 +255,14 @@ Rgb TimeOfDayAmbient(const Rgb& day, float n, const DayNight& d);
 float NightLightGain(float n, const DayNight& d);
 // Scene pixel with the engine tint taken out (composite): c / max(tint, 0.2), capped at 1.
 Rgb UndoTint(const Rgb& c, const Rgb& tint);
+// Where a spell effect is drawn (its capture fx): the engine adds effects untinted (a white Spiritual Hammer stays
+// white at night) and the softened capture is fainter than what it added, so dividing there blew the effect up to
+// an opaque yellow blob under a blue night tint. The pixel keeps the engine's own colour by the effect's coverage
+// (EffectCover: 0 below 0.01, 1 from 0.12 of the capture's brightest channel).
+float EffectCover(const Rgb& fx);
+// fx_soften (normal-alpha effect draws in the screen blend) only by day: nightness below 0.5.
+inline bool SoftenAt(float nightness) { return nightness < 0.5f; }
+Rgb UndoTintFx(const Rgb& c, const Rgb& tint, const Rgb& fx);
 Rgb TintRgb(uint32_t bbggrr);
 // Night light of the area lightmap (LM, painted light pools): what a LM texel holds above the area's
 // mean LM luma, scaled by k (0 where it is at or below the mean).

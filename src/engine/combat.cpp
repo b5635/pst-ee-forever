@@ -445,10 +445,19 @@ void ForceRun(int32_t id, bool run, uint8_t run_scale_other) {
         set_running(a, run ? 1 : 0, 0);
         // The walk/run cycle is picked by the animation's SetSequence only (symbols.h AnimPst.vtbl.SetSequence):
         // mid-walk, set the walk sequence again so the frames match the new speed (Withdraw walks).
+        // Only when the cycle changes (4 run, 5 walk): an AI chasing its target (Attack) has the engine turn
+        // running off again every tick, and setting the sequence each time restarts the cycle at frame 0 (the
+        // creature glides on one frame).
         static const int seq_ok = AllOk({sym::kRvaSlotAnimSetSeq}) ? 1 : 0;
-        if (seq_ok && R<uint16_t>(p + sym::kOffSpriteSequence) == sym::kSeqWalk) {
+        const int16_t want = run ? sym::kAnimCycleRun : sym::kAnimCycleWalk;
+        // An animation without run frames stays on the walk cycle when running: remembered, not re-set every tick.
+        static std::unordered_map<uint64_t, int16_t> no_cycle;  // anim -> the cycle it could not take
+        const auto nc = no_cycle.find(a);
+        if (seq_ok && R<uint16_t>(p + sym::kOffSpriteSequence) == sym::kSeqWalk && R<int16_t>(a + sym::kOffAnimCycle) != want &&
+            (nc == no_cycle.end() || nc->second != want)) {
           using SetSeqFn = int64_t(__fastcall*)(uint64_t, int16_t);
           reinterpret_cast<SetSeqFn>(R<uint64_t>(R<uint64_t>(a) + sym::kVtblAnimSetSeq))(a, static_cast<int16_t>(sym::kSeqWalk));
+          if (R<int16_t>(a + sym::kOffAnimCycle) != want) no_cycle[a] = want;
         }
       }
       return;
@@ -961,6 +970,28 @@ std::vector<BarButton> ActionBarButtons() {
   return out;
 }
 
+int ActionBarListCount() {
+  static const int ok = AllOk({sym::kRvaButtonArray, sym::kRvaBarList}) ? 1 : 0;
+  if (!ok) return 0;
+  const uint64_t list = R<uint64_t>(sym::kVaButtonList);
+  if (!PlausiblePtr(list)) return 0;
+  return R<int32_t>(list + sym::kOffPtrListCount);
+}
+bool ActionBarScroll(int index) {
+  static const int ok = AllOk({sym::kRvaButtonArray, sym::kRvaBarScroll, sym::kRvaUpdateButtons}) ? 1 : 0;
+  const uint64_t g = ok ? GameObject() : 0;
+  if (!g || index < 0) return false;
+  const uint64_t arr = g + sym::kOffGameButtonArray;
+  W<int32_t>(arr + sym::kOffBarScroll, index);
+  reinterpret_cast<void(__fastcall*)(uint64_t)>(Va(sym::kRvaUpdateButtons))(arr);
+  return true;
+}
+int ActionBarStateId() {
+  static const int ok = AllOk({sym::kRvaButtonArray, sym::kRvaUpdateButtons}) ? 1 : 0;
+  const uint64_t g = ok ? GameObject() : 0;
+  return g ? R<int32_t>(g + sym::kOffGameButtonArray + sym::kOffBarState) : -1;
+}
+
 std::string ActionBarHex(int slot, int bytes) {
   static const int ok = AllOk({sym::kRvaButtonArray}) ? 1 : 0;
   const uint64_t g = ok ? GameObject() : 0;
@@ -1071,6 +1102,67 @@ bool SetSpriteSequence(int32_t id, int16_t seq) {
   const uint64_t p = PoseOk() ? LookupSprite(id) : 0;
   if (!p) return false;
   reinterpret_cast<void(__fastcall*)(uint64_t, int16_t)>(Va(sym::kRvaSetSequence))(p, seq);
+  return true;
+}
+
+int GameCursorMode() {
+  static const int ok = AllOk({sym::kRvaMopCursor}) ? 1 : 0;
+  const uint64_t g = ok ? GameObject() : 0;
+  return g ? R<uint8_t>(g + sym::kOffGameCursorMode) : -1;
+}
+bool SetCursorMode(int mode) {
+  static const int ok = AllOk({sym::kRvaMopCursor}) ? 1 : 0;
+  const uint64_t g = ok ? GameObject() : 0;
+  if (!g) return false;
+  W<uint8_t>(g + sym::kOffGameCursorMode, static_cast<uint8_t>(mode));
+  return true;
+}
+bool MopClickTarget(int32_t caster, int32_t target) {
+  static const int ok = AllOk({sym::kRvaMopTarget}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(caster) : 0;
+  if (!p) return false;
+  W<int32_t>(p + sym::kOffSpriteMopTarget, target + 1);
+  return true;
+}
+
+bool MopUp() {
+  static const int ok = AllOk({sym::kRvaMopFlag}) ? 1 : 0;
+  const uint64_t pst = ok ? R<uint64_t>(sym::kVaPlanescape) : 0;
+  return PlausiblePtr(pst) && R<int32_t>(pst + sym::kOffPstMopUp) != 0;
+}
+
+namespace {
+MopShotFn g_mop_shot = nullptr;
+uint64_t g_mop_transfer = 0;
+int64_t __fastcall HookMopTransfer(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+  if (g_mop_shot && !g_mop_shot(a1)) return 0;
+  return reinterpret_cast<int64_t(__fastcall*)(uint64_t, uint64_t, uint64_t, uint64_t)>(g_mop_transfer)(a1, a2, a3, a4);
+}
+}  // namespace
+
+bool InstallMopShotHook(MopShotFn fn) {
+  if (g_mop_transfer) {
+    g_mop_shot = fn;
+    return true;
+  }
+  const sym::Symbol* s = Find(sym::kRvaMopShotCall);
+  if (!s || !AllOk({sym::kRvaMopShotCall, sym::kRvaMopFlag, sym::kRvaMopCursor})) return false;
+  const uint64_t orig = RedirectCall(*s, reinterpret_cast<void*>(&HookMopTransfer));
+  if (orig != sym::kImageBase + sym::kRvaMopTransfer) {
+    Log("combat: Missile of Patience hook FAILED (%llX)", static_cast<unsigned long long>(orig));
+    return false;
+  }
+  g_mop_transfer = orig;
+  g_mop_shot = fn;
+  Log("combat: Missile of Patience shot hook installed at %llX", reinterpret_cast<unsigned long long>(Va(sym::kRvaMopShotCall)));
+  return true;
+}
+
+bool SetSpriteDirection(int32_t id, int dir) {
+  static const int ok = AllOk({sym::kRvaSetDirection}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p || dir < 0 || dir > 15) return false;
+  reinterpret_cast<void(__fastcall*)(uint64_t, int16_t)>(Va(sym::kRvaSetDirection))(p, static_cast<int16_t>(dir));
   return true;
 }
 

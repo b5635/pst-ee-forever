@@ -174,6 +174,14 @@ struct State {
   int aoo_trace_react = 0;           // ... and the ticks of a reaction
   std::map<int32_t, Stance> stance;  // every combatant, from its turn start to the next
   Reaction aoo;                      // the attack of opportunity in progress
+  int mop_limit = 3;                 // [tbc] mop_shots: Missile of Patience shots in a turn-based fight (0 = engine's)
+  bool mop_hook = false;
+  std::map<uint64_t, int> mop_shots;  // hovering missile -> shots fired
+  bool mop_end = false;              // the missile fired its last shot: end it (cursor off targeting)
+  int ai_path_wait = 0;              // ticks the directed AI waited for its attack's walk path
+  std::vector<int32_t> aoo_queue;    // reactors still to swing before the mover walks (one after the other)
+  bool aoo_walk_checked = false;     // this walk (its destination) was checked as it started
+  std::pair<int, int> aoo_walk_dest{-1, -1};
   std::map<int32_t, bool> aoo_was_in;  // this turn: the mover stood in this foe's reach last tick
   bool aoo_freeze = false;           // the mover (no walk path) pauses its sprite update for the swing
   bool aoo_fudge = false;            // the reactor keeps the engine's RANGE_FUDGE reach for this reaction
@@ -244,7 +252,9 @@ bool Contains(const std::vector<int32_t>& v, int32_t id) {
 bool Held(int32_t id) { return g.running && id != g.current && id != g.aoo.reactor && Contains(g.in, id); }
 
 void ManeuverTurnStart(int32_t id);
-bool StepProvokes(int32_t cur);
+bool WalkStartProvokes(int32_t cur);
+void MopFinish(const char* why);
+void HoldStance(int32_t id);
 void ManeuverFightEnd();
 
 // Projectiles move in their caster's turn; a landed cloud or swarm also stops once it has used this
@@ -271,9 +281,16 @@ void __fastcall HookProcessAI(void* sprite) {
 void __fastcall HookWalk(void* sprite) {
   const int32_t id = engine::SpriteIdOf(sprite);
   if (Held(id)) return;
-  if (g.running && id == g.current && (g.hold_current || g.aoo.Active() || Rising(id))) return;  // spent / at the edge / getting up
+  if (g.running && id == g.current && (g.aoo.Active() || !g.aoo_queue.empty())) {  // attacks of opportunity first
+    HoldStance(id);
+    return;
+  }
+  if (g.running && id == g.current && (g.hold_current || Rising(id))) return;  // spent / getting up
   if (g.running && id == g.aoo.reactor) return;  // its attack of opportunity is a swing, never a chase
-  if (g.running && id == g.current && StepProvokes(id)) return;  // this step leaves a reach: the reaction first (OnTick)
+  if (g.running && id == g.current && WalkStartProvokes(id)) {  // its walk leaves reaches: the reactions first (OnTick)
+    HoldStance(id);
+    return;
+  }
   if (g.running && id == g.current && g.stance[id].withdrawn) {
     engine::ForceRun(id, false, g.run_scale_other);  // Withdraw: walk animation and walking speed
   } else if (g.running && g.run && id == g.current) {
@@ -505,6 +522,9 @@ void OnTurnChange(int32_t prev, int32_t next) {
     engine::ClearAI(prev);  // clean stop: no action, path or queue carried out of its turn
     engine::DropPath(prev);
   }
+  MopFinish("turn over");  // a hovering Missile of Patience belongs to its caster's turn
+  g.mop_shots.clear();
+  g.mop_end = false;
   g.nudged = -1;
   g.steady_ai = false;
   g.apr_halves = 0;
@@ -979,6 +999,26 @@ void SpriteUpdate(void* sprite, int32_t id, void (*orig)(void*)) {
   p.Tick(engine::PoseLying(id, back));
 }
 
+// A Missile of Patience shot (its TransferEffects): counted per missile in a fight; after the last one it ends.
+bool MopShot(uint64_t missile) {
+  if (!g.running || g.mop_limit <= 0) return true;
+  int& n = g.mop_shots[missile];
+  if (n >= g.mop_limit) return false;
+  ++n;
+  CLog("SPELL", Name(g.current) + ": Missile of Patience shot " + std::to_string(n) + " of " + std::to_string(g.mop_limit));
+  Log("tbc: Missile of Patience shot %d of %d", n, g.mop_limit);
+  if (n >= g.mop_limit) g.mop_end = true;
+  return true;
+}
+// The hovering missile waits for the player's target (the cursor in its mode).
+bool MopWaiting() { return g.mop_hook && engine::MopUp() && engine::GameCursorMode() == sym::kCursorModeTarget; }
+// It ends itself on its next update once the cursor leaves the targeting mode (AIUpdate -> RemoveSelf).
+void MopFinish(const char* why) {
+  if (!MopWaiting()) return;
+  engine::SetCursorMode(0);
+  Log("tbc: Missile of Patience ends (%s)", why);
+}
+
 bool BumpGuard(int32_t id) { return g.running && g.no_push && Contains(g.in, id); }
 
 void ManeuverTurnStart(int32_t id) {
@@ -992,9 +1032,12 @@ void ManeuverTurnStart(int32_t id) {
   g.aoo_trace = trace;
   g.aoo_trace_react = trace ? 80 : 0;
   g.aoo_was_in.clear();
+  g.aoo_queue.clear();
+  g.aoo_walk_checked = false;
   g.takedown_swung = false;
   g.trip_pace.Stop();
   g.ai_moved = false;
+  g.ai_path_wait = 0;
   g.aoo = Reaction{};
   if (!g.maneuvers) return;
   Stance& st = g.stance[id];
@@ -1017,6 +1060,7 @@ void ManeuverFightEnd() {
   g.trip_checks.clear();
   g.trip_pace.Stop();
   g.aoo = Reaction{};
+  g.aoo_queue.clear();
   g.fx.clear();
 }
 
@@ -1044,35 +1088,65 @@ void StartReaction(int32_t reactor, int32_t mover, bool fudge) {
   Log("tbc: %s: attack of opportunity on %s (%s)", Who(reactor).c_str(), Who(mover).c_str(), ok ? "ordered" : "order failed");
 }
 
-// The walk step about to run (HookWalk, before the engine moves it) leaves a foe's reach that would react.
-bool StepProvokes(int32_t cur) {
-  if (!g.running || !g.opportunity || !g.maneuvers || g.aoo.Active()) return false;
-  const auto sit = g.stance.find(cur);
-  if (sit != g.stance.end() && sit->second.withdrawn) return false;
+// The mover waits for its attacks of opportunity: standing (ready stance, turned toward its way), not walking in place.
+void HoldStance(int32_t id) {
+  if (engine::SpriteSequence(id) == static_cast<int16_t>(sym::kSeqWalk) && !g.poses.count(id))
+    engine::SetSpriteSequence(id, sym::kSeqReady);
+}
+
+// A foe that may react to `mover` now: alive, able, its reaction unused, standing.
+bool MayReact(int32_t id, int32_t mover, const engine::SpriteInfo& me, engine::SpriteInfo* o) {
+  if (id == mover || !Foes(id, mover)) return false;
+  if (!engine::GetSprite(id, o) || !o->alive || o->area != me.area || !CanReact(engine::SpriteState(id))) return false;
+  const auto st = g.stance.find(id);
+  return st == g.stance.end() || (!st->second.reaction_used && !st->second.prone);
+}
+
+// The walk about to start (HookWalk, before the engine moves it): every foe whose reach it stands in and that
+// its path leaves anywhere swings first, one after the other (queued, OnTick starts them); the mover turns
+// toward its way and waits. Checked once per walk (its destination); a reach entered later on the way provokes
+// nothing.
+bool WalkStartProvokes(int32_t cur) {
+  if (!g.running || !g.opportunity || !g.maneuvers) return false;
+  if (g.aoo.Active() || !g.aoo_queue.empty()) return true;
   engine::SpriteInfo me;
   if (!engine::GetSprite(cur, &me) || !me.has_path) return false;
   const auto path = engine::PathPoints(cur);
   if (path.empty()) return false;
+  if (g.aoo_walk_checked && path.back() == g.aoo_walk_dest) return false;
+  g.aoo_walk_checked = true;
+  g.aoo_walk_dest = path.back();
+  const auto sit = g.stance.find(cur);
+  if (sit != g.stance.end() && sit->second.withdrawn) return false;
   const int ps_me = PersonalSpace(cur);
   for (int32_t id : g.in) {
-    if (id == cur || !Foes(id, cur)) continue;
     engine::SpriteInfo o;
-    if (!engine::GetSprite(id, &o) || !o.alive || o.area != me.area || !CanReact(engine::SpriteState(id))) continue;
-    const auto st = g.stance.find(id);
-    if (st != g.stance.end() && (st->second.reaction_used || st->second.prone)) continue;
+    if (!MayReact(id, cur, me, &o)) continue;
     const int reach = ReachCells(kMeleeRangeField, PersonalSpace(id), ps_me);
-    if (StepLeavesReach(o.x, o.y, me.x, me.y, path, reach, kAooLookAheadPx)) return true;
+    if (PathLeavesReach(o.x, o.y, me.x, me.y, path, reach)) g.aoo_queue.push_back(id);
   }
-  return false;
+  if (g.aoo_queue.empty()) return false;
+  engine::SetSpriteDirection(cur, Direction16(path[0].first - me.x, path[0].second - me.y));
+  CLog("AOO", Name(cur) + " starts to move away: " + std::to_string(g.aoo_queue.size()) +
+                  " attack(s) of opportunity before it walks");
+  return true;
 }
 
 // Per tick while the current creature walks: who did it just walk out of reach of?
 void CheckOpportunity(int32_t cur, const engine::SpriteInfo& me) {
   if (!g.opportunity || !g.maneuvers) return;
-  // The steps it is about to take along its path leave the reach: the reactor swings while the mover still
-  // stands in its reach (the engine's Attack swings without walking). Creatures that move without a walk
-  // path (Ignus floats: AIUpdateFly) are caught one tick late: in reach last tick, just outside it now.
-  const auto path = me.has_path ? engine::PathPoints(cur) : std::vector<std::pair<int, int>>{};
+  // Walkers: the reactions queued as the walk started (WalkStartProvokes), one after the other, the mover
+  // standing in their reach. Re-checked as each starts (one may have died or fallen meanwhile).
+  while (!g.aoo.Active() && !g.aoo_queue.empty()) {
+    const int32_t id = g.aoo_queue.front();
+    g.aoo_queue.erase(g.aoo_queue.begin());
+    engine::SpriteInfo o;
+    if (MayReact(id, cur, me, &o)) StartReaction(id, cur, false);
+  }
+  if (g.aoo.Active() || me.has_path) return;
+  // Creatures that move without a walk path (Ignus floats: AIUpdateFly) are caught one tick late: in reach
+  // last tick, just outside it now.
+  const std::vector<std::pair<int, int>> path;
   const bool withdrawn = g.stance[cur].withdrawn;
   const int ps_me = PersonalSpace(cur);
   for (int32_t id : g.in) {
@@ -1086,9 +1160,7 @@ void CheckOpportunity(int32_t cur, const engine::SpriteInfo& me) {
     // The engine's plain reach: its swing re-checks range at the hit frame without RANGE_FUDGE (Swing clears it).
     const int reach = ReachCells(kMeleeRangeField, PersonalSpace(id), ps_me);
     const bool in = InReach(o.x, o.y, me.x, me.y, reach);
-    // Within the next few cells of its path (a running step covers more than one cell). HookWalk holds the step
-    // that would leave (StepProvokes), so the mover is still in reach here.
-    const bool leaves = !path.empty() && StepLeavesReach(o.x, o.y, me.x, me.y, path, reach, kAooLookAheadPx);
+    const bool leaves = false;
     bool& was = g.aoo_was_in[id];
     const bool late = path.empty() && LeftReachLate(was, in, InReach(o.x, o.y, me.x, me.y, reach + kRangeFudge));
     was = in;
@@ -1098,10 +1170,6 @@ void CheckOpportunity(int32_t cur, const engine::SpriteInfo& me) {
           static_cast<unsigned>(cur), me.x, me.y, static_cast<unsigned>(id), o.x, o.y, reach, CellDist2(o.x, o.y, me.x, me.y), in,
           leaves, path.size(), path.empty() ? -1 : path[0].first, path.empty() ? -1 : path[0].second, withdrawn,
           g.stance[id].reaction_used);
-    }
-    if (ProvokesNow(in, !leaves, withdrawn, g.stance[id])) {
-      StartReaction(id, cur, false);
-      return;
     }
     if (late && !withdrawn && !g.stance[id].reaction_used && !g.stance[id].prone) {
       StartReaction(id, cur, true);  // one cell out: the engine's RANGE_FUDGE lets it swing from there
@@ -1142,11 +1210,14 @@ bool ReactionTick(uint32_t dt) {
 }
 
 // The directed AI: once per AI turn, when its script shows its intent (an attack or a flight).
+constexpr int kAiPathWaitTicks = 10;
 void DirectedAi(int32_t cur, const engine::SpriteInfo& s) {
   if (!g.maneuvers || g.econ.party || g.ai_moved || !ActionFree(g.econ)) return;
   const bool attack = IsAttackAction(s.action), flee = IsFleeAction(s.action);
-  if (!attack && !flee) return;
-  g.ai_moved = true;
+  if (!attack && !flee) {
+    g.econ.defer_act = false;
+    return;
+  }
   AiView v;
   v.melee_intent = attack, v.flee_intent = flee;
   v.move_ft = g.econ.move_ft;
@@ -1159,7 +1230,7 @@ void DirectedAi(int32_t cur, const engine::SpriteInfo& s) {
   v.attacks = AttacksForBlock();
   v.roll100 = static_cast<int>(Rand() % 100) + 1;
   const int ps_me = PersonalSpace(cur);
-  int best = -1;
+  int best = -1, fx = s.x, fy = s.y;
   for (int32_t id : g.in) {
     if (id == cur || !Foes(id, cur)) continue;
     engine::SpriteInfo o;
@@ -1167,14 +1238,29 @@ void DirectedAi(int32_t cur, const engine::SpriteInfo& s) {
     const int reach = ReachCells(kMeleeRangeField, ps_me, PersonalSpace(id));
     const int d2 = CellDist2(s.x, s.y, o.x, o.y);
     if (reach * reach >= d2) ++v.adjacent_foes;
-    if (best < 0 || d2 < best) best = d2, v.reach_cells = reach;
+    if (best < 0 || d2 < best) best = d2, v.reach_cells = reach, fx = o.x, fy = o.y;
   }
   if (best < 0) return;
   v.gap_cells = static_cast<int>(std::sqrt(static_cast<double>(best)));
+  // Out of reach: decide once it walks, by the path it took (a straight gap of 19 cells can be 40 ft around walls).
+  // The economy holds its action meanwhile (defer_act), at most kAiPathWaitTicks: no path by then, the straight gap.
+  // The engine may plan a long walk in parts: the rest from the path's end to the foe counts too.
+  if (attack && v.gap_cells > v.reach_cells) {
+    const auto path = s.has_path ? engine::PathPoints(cur) : std::vector<std::pair<int, int>>{};
+    if (path.empty() && ++g.ai_path_wait <= kAiPathWaitTicks) {
+      g.econ.defer_act = true;
+      return;
+    }
+    if (!path.empty()) v.path_ft = PathFeet(s.x, s.y, path) + FeetBetween(path.back().first, path.back().second, fx, fy);
+  }
+  g.econ.defer_act = false;
+  g.ai_moved = true;
   const AiMove m = ChooseAiMove(v);
   static const char* kNames[] = {"none", "run", "withdraw", "block", "trip", "knockdown"};
-  CLog("AI", Name(cur) + " maneuver: " + kNames[static_cast<int>(m)] + " (gap " + std::to_string(v.gap_cells) +
-                 " cells, reach " + std::to_string(v.reach_cells) + ", " + std::to_string(v.adjacent_foes) +
+  char pf[32];
+  std::snprintf(pf, sizeof pf, ", path %.1f ft of %.1f", v.path_ft, v.move_ft);
+  CLog("AI", Name(cur) + " maneuver: " + kNames[static_cast<int>(m)] + " (gap " + std::to_string(v.gap_cells) + " cells" +
+                 (v.path_ft > 0 ? pf : "") + ", reach " + std::to_string(v.reach_cells) + ", " + std::to_string(v.adjacent_foes) +
                  " foes in reach, d100 " + std::to_string(v.roll100) + ")");
   if (m != AiMove::None && UseManeuver(cur, m)) ++g.ms.ai_moves;
 }
@@ -1290,7 +1376,15 @@ std::string ManeuverLua() {
   s += b(on && CanBlock(g.econ, st, MayBlockId(g.current), AttacksForBlock()));
   s += ",armed=";
   s += b(on && st.takedown == Takedown::Trip);
-  s += ",stacks=" + std::to_string(st.block_stacks) + "}";
+  s += ",stacks=" + std::to_string(st.block_stacks);
+  // who may trip / block at all (the hotbar hides the button otherwise); known for a party member's turn
+  if (g.running && PartySlot(g.current) >= 0) {
+    s += ",mayTrip=";
+    s += b(MayTripId(g.current));
+    s += ",mayBlock=";
+    s += b(MayBlockId(g.current));
+  }
+  s += "}";
   return s;
 }
 
@@ -1763,6 +1857,10 @@ void OnTick(uint64_t frame) {
     }
     g.turn_casts = casts;
   }
+  // An attack that has not swung yet only walked: its action is still there to run with.
+  if (st.stop == Stop::OutOfMove && g.maneuvers && !g.econ.party && IsAttackAction(s.action) && g.econ.action_used &&
+      g.econ.swings == 0 && IsAttackAction(g.econ.act_action) && !g.stance[cur].ran)
+    g.econ.action_used = false, g.econ.acting = false;
   if (st.stop == Stop::OutOfMove && g.maneuvers && AiRunsWhenShort(g.econ, IsAttackAction(s.action), true) &&
       UseManeuver(cur, AiMove::Run)) {
     // Stopped short of its target with the action free: it runs the rest of the way (the action goes).
@@ -1771,6 +1869,7 @@ void OnTick(uint64_t frame) {
     CLog("AI", Name(cur) + " would stop short of its target: runs instead");
     st.stop = Stop::None;
     st.hold_walk = false;
+    st.end_turn = false;  // OutOfMove with the action used ended it: the run goes on
   }
   if (!g.econ.party && s.has_path && !g.steady_ai) {
     // Sure of itself: its script does not re-plan the walk every pass (stop-and-go); it walks there in
@@ -1782,8 +1881,9 @@ void OnTick(uint64_t frame) {
   if (g.maneuvers) {
     RunDust(cur, moved);
     CheckOpportunity(cur, s);
-    if (g.aoo.Active()) {
+    if (g.aoo.Active() || !g.aoo_queue.empty()) {
       g.hold_current = true;
+      HoldStance(cur);
       FlushSounds();
       if (g.rolls) TakeRolls();
       UpdateHud(now);
@@ -1830,6 +1930,15 @@ void OnTick(uint64_t frame) {
     }
   }
   g.since_action = g.econ.acting ? 0 : g.since_action + dt;
+  // Missile of Patience: the turn waits while it hovers for its target (End Turn ends it), its last shot ends it.
+  if (g.mop_end) {
+    g.mop_end = false;
+    MopFinish("last shot");
+  }
+  if (MopWaiting()) {
+    if (g.end_requested) MopFinish("End Turn");
+    else st.end_turn = false;
+  }
   bool wait_spell = false;
   if ((st.end_turn || g.end_requested) && g.resolve_ticks < kFlightCapTicks) {
     const Pending pend = CasterProjectiles(cur, s.area);
@@ -1865,7 +1974,7 @@ void OnTick(uint64_t frame) {
                         : g.econ.action_used && !g.econ.MoveLeft() ? "action and movement spent"
                         : g.econ.action_used ? "acted" : "nothing to do";
       std::snprintf(b, sizeof b, " ends turn: %s; action %s, %.1f of %.1f ft walked, %u ticks", why,
-                    g.econ.action_used ? "used" : "unused", g.econ.max_ft - g.econ.move_ft, g.econ.max_ft, g.econ.total);
+                    g.econ.action_used ? "used" : "unused", g.econ.walked_ft, g.econ.max_ft, g.econ.total);
       CLog("END", Name(cur) + b);
     }
     Log("tbc: %s ends turn (%s, action %s, %.1f/%.1f ft left, busy %u ticks, total %u) hp:%s",
@@ -2285,6 +2394,36 @@ int __cdecl LuaBarSlots(engine::LuaState* L) {
   return 1;
 }
 
+// PSTF_Cursor() -> the game's cursor mode (20: a hovering Missile of Patience waits for a target).
+int __cdecl LuaCursor(engine::LuaState* L) {
+  engine::LuaPushNumber(L, engine::GameCursorMode());
+  return 1;
+}
+// PSTF_MopFire(caster, target) -> true: a target click for the caster's hovering Missile of Patience (test probe).
+int __cdecl LuaMopFire(engine::LuaState* L) {
+  const auto c = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1)), t = static_cast<int32_t>(engine::LuaNumberArg(L, 2, -1));
+  const bool ok = engine::MopClickTarget(c, t);
+  Log("lua: PSTF_MopFire(%X, %X) -> %d (cursor %d)", static_cast<unsigned>(c), static_cast<unsigned>(t), ok ? 1 : 0, engine::GameCursorMode());
+  engine::LuaPushBool(L, ok);
+  return 1;
+}
+// PSTF_BarCount() -> entries in the engine's list behind the bar (after a SetState; more than 12 = it scrolls).
+int __cdecl LuaBarCount(engine::LuaState* L) {
+  engine::LuaPushNumber(L, engine::ActionBarListCount());
+  return 1;
+}
+// PSTF_BarScroll(index) -> first, last slot (0-based) that hold list entries index.. after the engine's
+// UpdateButtons refilled the bar there (a long list: slots 1..10, 2..10 in states 113/114); -1, -1 if not.
+int __cdecl LuaBarScroll(engine::LuaState* L) {
+  const int index = static_cast<int>(engine::LuaNumberArg(L, 1, 0));
+  const int state = engine::ActionBarStateId();
+  const bool ok = engine::ActionBarScroll(index);
+  const int first = !ok ? -1 : (state == 113 || state == 114) ? 2 : 1;
+  engine::LuaPushNumber(L, first);
+  engine::LuaPushNumber(L, ok ? 10 : -1);
+  return 2;
+}
+
 // PSTF_Maneuver(name) -> true if the current creature took it: 'run', 'withdraw', 'block', 'trip' (toggles),
 // 'knockdown'. The hotbar's maneuver buttons call it.
 int __cdecl LuaManeuver(engine::LuaState* L) {
@@ -2536,6 +2675,7 @@ bool InstallTbc(const IniMap& ini) {
   g.maneuvers = IniBool(ini, "tbc.maneuvers", true);
   g.opportunity = IniBool(ini, "tbc.opportunity_attacks", true);
   g.no_push = IniBool(ini, "tbc.no_push", true);
+  g.mop_limit = IniInt(ini, "tbc.mop_shots", 3);
   g.party_max = IniInt(ini, "party.size", 6) >= 8 && IniBool(ini, "party.enabled", false) ? 8 : 6;
   {
     const int feet = IniInt(ini, "tbc.move_feet", 31);
@@ -2613,6 +2753,7 @@ bool InstallTbc(const IniMap& ini) {
   // A spell's projectile (a flying knife, a cloud) moves only in its caster's turn.
   if (g.round_effects) engine::SetProjectileGate(&ProjectileRuns);
   g.items = engine::InstallItemUseHooks();
+  g.mop_hook = g.mop_limit > 0 && engine::InstallMopShotHook(&MopShot);
   {
     char* v = nullptr;
     size_t n = 0;
@@ -2678,6 +2819,10 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_Bar", &LuaBar);
   dev::AddLuaFunction("PSTF_Near", &LuaNear);
   dev::AddLuaFunction("PSTF_BarSlots", &LuaBarSlots);
+  dev::AddLuaFunction("PSTF_BarCount", &LuaBarCount);
+  dev::AddLuaFunction("PSTF_Cursor", &LuaCursor);
+  dev::AddLuaFunction("PSTF_MopFire", &LuaMopFire);
+  dev::AddLuaFunction("PSTF_BarScroll", &LuaBarScroll);
   dev::AddLuaFunction("PSTF_BarHex", &LuaBarHex);
   dev::AddLuaFunction("PSTF_TbcCurrent", &LuaTbcCurrent);
   dev::AddLuaFunction("PSTF_MakeEnemy", &LuaMakeEnemy);

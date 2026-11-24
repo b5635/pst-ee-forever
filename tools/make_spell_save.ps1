@@ -2,9 +2,12 @@
 # Builds the all-spells test save and stores it in the repository (tests\saves\000000990-PSTF-AllSpells) and in
 # the game's save folder (same name: tools\launch.ps1 -Save 000000990 loads it).
 #   tools\make_spell_save.ps1            from the Hive save 000000126 (tests\ingame\make_spell_save.lua)
+#   tools\make_spell_save.ps1 -Keep      from the all-spells save as it is in the save folder: only teaches the
+#                                        spells again (Ignus and Dak'kon too), rests, keeps its hour
 # The game writes a quick save on the way (its own rotating 000000001-Quick-Save* folders).
 param(
   [string]$From = '000000126',
+  [switch]$Keep,
   [string]$Name = '000000990-PSTF-AllSpells',
   [string]$Docs = (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Planescape Torment - Enhanced Edition')
 )
@@ -12,7 +15,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $tmp = Join-Path $root 'build\tmp_make_spell_save.lua'
 New-Item -ItemType Directory -Force (Split-Path $tmp) | Out-Null
-(Get-Content (Join-Path $root 'tests\ingame\spell_list.lua') -Raw) + "`n" + (Get-Content (Join-Path $root 'tests\ingame\make_spell_save.lua') -Raw) |
+if ($Keep) { $From = '000000990' }
+$prefix = if ($Keep) { "pstfSpellSaveKeep = true`n" } else { '' }
+$prefix + (Get-Content (Join-Path $root 'tests\ingame\spell_list.lua') -Raw) + "`n" + (Get-Content (Join-Path $root 'tests\ingame\make_spell_save.lua') -Raw) |
   Set-Content -Path $tmp -Encoding utf8
 $start = Get-Date
 & (Join-Path $PSScriptRoot 'launch.ps1') -Save $From -Lua $tmp -Env @{PSTF_TEST_TICK = '1'; PSTF_TBC_NOFIGHT = '1'} `

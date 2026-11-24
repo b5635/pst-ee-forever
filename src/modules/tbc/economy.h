@@ -157,6 +157,14 @@ struct Economy {
       : max_ft(feet), move_ft(feet), round_ticks(round), party(is_party) {}
 
   bool MoveLeft() const { return move_ft > 0.05; }
+  // The directed AI has not decided yet (its attack has no walk path yet): the action does not start.
+  bool defer_act = false;
+  // Ran (the action went on movement): an attack order only walks up; between its path parts (no path for a
+  // tick or two) it is not an action. No path for kWalkOnlyTicks = it arrived: the action is gone, it stops.
+  bool walk_only = false;
+  uint32_t pathless = 0;
+  static constexpr uint32_t kWalkOnlyTicks = 4;
+  double walked_ft = 0;  // feet walked this turn (a run adds movement, so max - left is not it)
 
   // The engine cast a spell for it this turn (its "casts" feedback). A cast with no casting time (Identify,
   // speed 0) starts and ends inside one engine update, so Feed never sees its action: it still spends the action.
@@ -190,16 +198,20 @@ struct Economy {
       return out;
     }
     if (moved_ft > 0 && moved_ft < kTeleportFt) {
+      walked_ft += moved_ft;
       move_ft = move_ft > moved_ft ? move_ft - moved_ft : 0.0;
       did_something = true;
     }
     const bool walk_action = IsMoveAction(action), idle_action = IsIdleAction(action);
+    if (has_path) pathless = 0;
     if (has_path && !MoveLeft()) {
       out.stop = Stop::OutOfMove;  // walking (to a point or to a target) with no feet left
       if (acting) acting = false;   // e.g. chasing a target mid-round: the action stays used
-    } else if (!idle_action && !walk_action && !has_path) {
+    } else if (!idle_action && !walk_action && !has_path && !defer_act) {
       if (!acting) {
-        if (action_used && IsForcedCast(action) && since_act <= kFollowUpTicks) {
+        if (walk_only && MoveLeft() && pathless < kWalkOnlyTicks) {
+          ++pathless;  // a runner's attack between its path parts: it walks on
+        } else if (action_used && IsForcedCast(action) && since_act <= kFollowUpTicks) {
           acting = true;  // the item's (or spell's) own follow-up cast: the same action goes on
           act_ticks = 0;
         } else if (action_used) {
@@ -233,7 +245,7 @@ struct Economy {
     last_action = action;
     const bool busy = acting || has_path || (!idle_action && out.stop == Stop::None);
     idle = busy ? 0 : idle + dt;
-    out.hold_walk = !MoveLeft() || (!party && action_used && !acting);  // AI: no wandering off after it
+    out.hold_walk = !MoveLeft() || (!party && action_used && !acting && !walk_only);  // AI: no wandering off after it
     const bool spent = action_used && !acting && !MoveLeft();
     if (party) {
       out.end_turn = spent && !has_path;
@@ -246,7 +258,7 @@ struct Economy {
       // Gave up: nudged and still nothing in hand (no action, no path) for kNudgeTicks.
       const bool gave_up = nudged && !did_something && idle >= kNudgeTicks;
       // Sure of itself: once its action is over, the AI's turn is (no script wandering afterwards).
-      out.end_turn = (spent && !has_path) || (action_used && !acting && since_act >= kAiSettleTicks) ||
+      out.end_turn = (spent && !has_path) || (action_used && !acting && !walk_only && since_act >= kAiSettleTicks) ||
                      (idle >= kIdleTicks && did_something && !acting) || gave_up ||
                      (out.stop == Stop::OutOfMove && action_used) ||
                      total >= 3 * round_ticks + kAiThinkTicks + kNudgeTicks;
