@@ -2,6 +2,7 @@
 // L0 tests for the turn-based maneuvers (src/modules/tbc/maneuvers.h): GemRB fork rules, the engine's
 // melee reach (CGameSprite::Attack lin 4ED490 L304-353) and the directed AI's choices.
 #include "mini_test.h"
+#include "modules/tbc/ground_fx.h"
 #include "modules/tbc/maneuvers.h"
 
 using namespace pstf::tbc;
@@ -338,4 +339,40 @@ TEST_CASE("tbc run: an AI runner's attack walks between path parts, stops once i
   // arrived (no path for kWalkOnlyTicks): the action is gone, it stops
   for (uint32_t i = 0; i < Economy::kWalkOnlyTicks; ++i) CHECK(e.Feed(1, 0.0, false, 3).stop == Stop::None);
   CHECK(e.Feed(1, 0.0, false, 3).stop == Stop::NoAction);
+}
+
+TEST_CASE("tbc ground fx: puffs are filled blobs that drift out, rise, grow and fade within their life") {
+  const PuffFx kinds[] = {PuffFx::RunBurst, PuffFx::RunTrail, PuffFx::Smoke, PuffFx::SmokeTrail, PuffFx::KnockDust};
+  for (PuffFx k : kinds) {
+    std::vector<Puff> none;
+    PuffsFor(k, 1234u, -1.0, 100, 200, &none);
+    PuffsFor(k, 1234u, PuffFxLifeMs(k), 100, 200, &none);
+    CHECK(none.empty());  // nothing before the start or after the life
+    const double life = PuffFxLifeMs(k);
+    std::vector<Puff> early, mid, late;
+    PuffsFor(k, 1234u, life * 0.15 + (k == PuffFx::KnockDust ? 280.0 * 0.85 : 0.0), 100, 200, &early);
+    PuffsFor(k, 1234u, life * 0.55, 100, 200, &mid);
+    PuffsFor(k, 1234u, life * 0.97, 100, 200, &late);
+    CHECK(!early.empty() && !mid.empty());
+    double ar = 0, mr = 0, ay = 0, my = 0, aa = 0, la = 0;
+    for (const auto& p : early) ar += p.rx, ay += p.y, aa += p.alpha;
+    for (const auto& p : mid) mr += p.rx, my += p.y;
+    for (const auto& p : late) la += p.alpha;
+    CHECK(mr / mid.size() > ar / early.size());  // grows
+    CHECK(my / mid.size() < ay / early.size());  // rises (y up the screen)
+    CHECK(la < aa);                              // fades out
+    for (const auto& p : mid) CHECK(p.ry <= p.rx && p.ry > 0.5f * p.rx && p.alpha <= 0.8f);
+  }
+  // Deterministic per seed, different shapes for another seed.
+  std::vector<Puff> a, b, c;
+  PuffsFor(PuffFx::Smoke, 7u, 300.0, 0, 0, &a);
+  PuffsFor(PuffFx::Smoke, 7u, 300.0, 0, 0, &b);
+  PuffsFor(PuffFx::Smoke, 8u, 300.0, 0, 0, &c);
+  CHECK(a.size() == 17 && b.size() == a.size());  // 12 burst + 5 column
+  CHECK(a[0].x == b[0].x && a[0].seed == b[0].seed);
+  CHECK(a[0].x != c[0].x);
+  // The knock-down dust waits for the body to land.
+  std::vector<Puff> d;
+  PuffsFor(PuffFx::KnockDust, 7u, 250.0, 0, 0, &d);
+  CHECK(d.empty());
 }

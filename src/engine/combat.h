@@ -34,6 +34,10 @@ std::vector<AttachedView> AttachedObjects(int32_t id);
 // caster's turn waits for it), 2 = presentation only (world time, nobody waits).
 using OnsetFn = int (*)(int32_t left, int opcode);
 void SetOnsetRule(OnsetFn resolves_now);
+// Optional: sees every delayed effect new on one creature in one pass (they arrived together) and may change
+// kinds[i] from what resolves_now gave; source[i] = the effect's parent resref bytes (0 = none).
+using OnsetSyncFn = void (*)(const int32_t* left, const int* opcode, const uint64_t* source, int* kinds, int n);
+void SetOnsetSync(OnsetSyncFn sync);
 int ResolvingOnsets(int32_t id);
 void ForgetOnsets();  // fight over
 // One round of the creature's own time passes now (at its turn start): timed effects come `ticks`
@@ -115,8 +119,9 @@ inline bool IsAttackSequence(int16_t s) { return s == 0 || s == 8 || s == 11 || 
 // Lying down: a PST character animation shows its die cycle at `back` frames before the last one (0 = on the
 // ground; more = on the way up or down). Returns the cycle's frame count (0: not a PST animation).
 int PoseLying(int32_t id, int back);
-// The engine's armour hit sound at the creature (HIT_02<armor>, as a piercing hit plays it).
-bool PlayArmorHitSound(int32_t id);
+// The engine's armour hit sound at the creature for a damage type (sym::kHitSoundCrushing = HIT_03<armor>,
+// kHitSoundPiercing = HIT_02<armor>), as CGameEffectDamage plays it.
+bool PlayArmorHitSound(int32_t id, uint32_t damage_type);
 // Anim probe: run flag, cycle word, frame, sprite sequence (-1s when not a PST animation).
 std::string AnimProbe(int32_t id);
 

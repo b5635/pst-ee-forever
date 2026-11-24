@@ -2,6 +2,7 @@
 // Turn-based effect timing rules (pure, unit-tested).
 #pragma once
 #include <cstdint>
+#include <cstdlib>
 #include <map>
 
 namespace pstf::tbc {
@@ -43,6 +44,33 @@ inline int OnsetKind(int32_t left, int opcode) {
   return OnsetResolvesNow(left) ? 1 : 0;
 }
 
+// Delayed effects that arrived together (one ShiftEffectClock pass, one creature), each with its OnsetKind.
+// A round-clocked one (kind 0, on a 75-tick step) that lands within kOnsetSync ticks of a sibling from the
+// same source that plays or resolves now is the spell's own impact timed to its visuals, not a damage-over-time
+// step: it resolves now too (Stygian Ice Storm: op12 8d8 at 75 ticks, its ice drop op373 at 65, shake op269 and
+// sound op174 at 70; deferred a round it looked like the storm did no damage). A series (the same opcode at
+// another step from the same source, Adder's Kiss' later hits) stays round-clocked.
+struct OnsetSeen {
+  int32_t left;     // ticks to the onset
+  int opcode;
+  uint64_t source;  // parent resref bytes (0 = unknown: all of the pass count as one source)
+  int kind;         // in: OnsetKind; out: synced
+};
+constexpr int32_t kOnsetSync = 12;
+inline void SyncSpellOnsets(OnsetSeen* v, int n) {
+  for (int i = 0; i < n; ++i) {
+    if (v[i].kind != 0) continue;
+    bool series = false, synced = false;
+    for (int j = 0; j < n; ++j) {
+      if (j == i || v[j].source != v[i].source) continue;
+      const int32_t d = std::abs(v[j].left - v[i].left);
+      if (v[j].opcode == v[i].opcode && d >= kRoundTicks5s - 3) series = true;
+      if (OnsetKind(v[j].left, v[j].opcode) != 0 && d <= kOnsetSync) synced = true;
+    }
+    if (synced && !series) v[i].kind = 1;
+  }
+}
+
 // The casting aura: after a cast starts, CGameSprite::DoAction counts the caster's AI ticks (lin 4A26A0 l.39-52,
 // win 1404079D0: word +0x46A8) and clears it (-1) at ROUND_LENGTH unless a cast still runs (+0x46B0); SpellPST
 // refuses a new spell while the counter is >= 0. In a fight the caster's AI runs on its own turns only, so the
@@ -73,6 +101,21 @@ struct PulseBudget {
   }
   void NewRound(int32_t proj) { left[proj] = kRound; }
   void Clear() { left.clear(); }
+};
+
+// Whether a combatant's projectile moves this tick. It moves in its caster's turn (a landed cloud or swarm only
+// while this round's pulse ticks last). One born outside its caster's turn (already flying when the fight began:
+// Ignus' fire that started the fight; or an attack of opportunity's) flies on and lands: held in mid-air until
+// its caster's turn, it hung there and hit a whole round late.
+struct ProjectilePace {
+  std::map<int32_t, bool> free;  // projectile id -> born outside its caster's turn
+  bool Runs(int32_t caster, int32_t proj, int32_t current, bool lingers, PulseBudget* pulses) {
+    const bool born_free = free.try_emplace(proj, caster != current).first->second;
+    if (born_free && !lingers) return true;
+    if (caster != current) return false;
+    return !lingers || pulses->Run(proj);
+  }
+  void Clear() { free.clear(); }
 };
 
 }  // namespace pstf::tbc

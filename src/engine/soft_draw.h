@@ -18,4 +18,16 @@ struct SoftSeg {
 // Draws n strips (normal alpha blend, or additive with `add`). False when GL is unavailable.
 bool DrawSoftSegments(const SoftSeg* s, int n, bool add = false);
 
+// A filled, soft-edged puff of smoke or dust: value noise breaks up its outline and shades it (lighter
+// on top), so a few overlapping puffs read as a cloud, not as rings.
+struct SoftPuff {
+  float x, y;     // centre, area px
+  float rx, ry;   // radii, area px
+  uint32_t bgr;   // 0x00BBGGRR
+  float alpha;    // 0..1 at the centre
+  float seed;     // noise offset: each puff its own shape
+};
+// Draws n puffs (normal alpha blend). False when GL is unavailable.
+bool DrawSoftPuffs(const SoftPuff* p, int n);
+
 }  // namespace pstf::engine

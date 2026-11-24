@@ -877,3 +877,39 @@ TEST_CASE("tbc economy: a cast with no casting time still spends the action") {
   st = e.Feed(1, 0, false, 3);  // a later attack: no action left
   CHECK(st.stop == Stop::NoAction);
 }
+
+TEST_CASE("tbc onsets: a 75-tick impact timed to its spell's visuals resolves now, a damage series stays clocked") {
+  // Stygian Ice Storm (SPWI705) as seen one tick after it landed: op12 8d8 at 74, op373 ice drop 64, op269 shake
+  // and op174 sound 69, op128 44 (all one source).
+  const uint64_t ice = 0x353037495750ull, other = 0x313032495750ull;
+  OnsetSeen v[] = {{74, 12, ice, OnsetKind(74, 12)}, {64, 373, ice, OnsetKind(64, 373)}, {69, 269, ice, OnsetKind(69, 269)},
+                   {69, 174, ice, OnsetKind(69, 174)}, {44, 128, ice, OnsetKind(44, 128)}};
+  CHECK(v[0].kind == 0);  // alone: on a 5-second step
+  SyncSpellOnsets(v, 5);
+  CHECK(v[0].kind == 1 && v[1].kind == 2 && v[2].kind == 1 && v[3].kind == 2 && v[4].kind == 1);
+  // A damage series with a sound at each step: the same opcode at 75 and 150 stays round-clocked.
+  OnsetSeen dot[] = {{75, 12, other, 0}, {150, 12, other, 0}, {75, 174, other, 2}, {150, 174, other, 2}};
+  SyncSpellOnsets(dot, 4);
+  CHECK(dot[0].kind == 0 && dot[1].kind == 0);
+  // Visuals of another spell do not pull it in; visuals 20 ticks away do not either.
+  OnsetSeen apart[] = {{75, 12, other, 0}, {70, 373, ice, 2}, {150, 12, ice, 0}, {130, 373, ice, 2}};
+  SyncSpellOnsets(apart, 4);
+  CHECK(apart[0].kind == 0 && apart[2].kind == 0);
+}
+
+TEST_CASE("tbc projectiles: theirs move in their caster's turn, one born outside it flies on and lands") {
+  ProjectilePace pace;
+  PulseBudget pulses;
+  const int32_t ignus = 7, tno = 1, fire = 100, missile = 101, cloud = 102;
+  // Ignus' fire that started the fight: first seen in the Nameless One's turn, it keeps flying.
+  CHECK(pace.Runs(ignus, fire, tno, false, &pulses));
+  CHECK(pace.Runs(ignus, fire, tno, false, &pulses));
+  // Ignus' own-turn missile: moves in his turn, waits in another's.
+  CHECK(pace.Runs(ignus, missile, ignus, false, &pulses));
+  CHECK(!pace.Runs(ignus, missile, tno, false, &pulses));
+  // A landed cloud born free still keeps to its caster's pulse budget.
+  CHECK(!pace.Runs(ignus, cloud, tno, true, &pulses));
+  CHECK(pace.Runs(ignus, cloud, ignus, true, &pulses));
+  pace.Clear();
+  CHECK(pace.free.empty());
+}

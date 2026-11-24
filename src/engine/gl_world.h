@@ -37,6 +37,7 @@ struct Gl {
   void(__stdcall* Vertex2f)(float, float);
   void(__stdcall* Color4f)(float, float, float, float);
   void(__stdcall* TexCoord2f)(float, float);
+  void(__stdcall* TexCoord4f)(float, float, float, float);
   void(__stdcall* ReadPixels)(int, int, int, int, unsigned, unsigned, void*);
   void(__stdcall* PixelStorei)(unsigned, int);
   void(__stdcall* ColorMask)(unsigned char, unsigned char, unsigned char, unsigned char);

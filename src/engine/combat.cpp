@@ -51,6 +51,7 @@ uint64_t Stats(uint64_t p) {
 // --- round clock ---------------------------------------------------------------------------------
 FrozenFn g_frozen = nullptr;
 OnsetFn g_onset = nullptr;
+OnsetSyncFn g_onset_sync = nullptr;
 std::unordered_map<uint64_t, int> g_onsets;  // delayed effect -> OnsetFn kind (seen once)
 bool g_clock = false;
 
@@ -139,6 +140,7 @@ void HeldEffectsTick(void* sprite) {
 }
 
 void SetOnsetRule(OnsetFn resolves_now) { g_onset = resolves_now; }
+void SetOnsetSync(OnsetSyncFn sync) { g_onset_sync = sync; }
 void ForgetOnsets() { g_onsets.clear(); }
 
 int ResolvingOnsets(int32_t id) {
@@ -159,20 +161,37 @@ void ShiftEffectClock(int32_t id, int32_t ticks) {
   if (!p) return;
   const uint64_t g = GameObject();
   const uint32_t now = g ? R<uint32_t>(g + 0x7820) : 0;
+  if (g_onset && ticks > 0) {  // classify the delayed effects new since the last pass, together
+    std::vector<uint64_t> effs;
+    std::vector<int32_t> lefts;
+    std::vector<int> ops, kinds;
+    std::vector<uint64_t> srcs;
+    ForEachEffect(p, [&](uint64_t eff) {
+      const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
+      if (!ClockedType(type) || type < 6 || type > 8 || g_onsets.count(eff)) return;
+      const int32_t left = static_cast<int32_t>(R<uint32_t>(eff + sym::kOffEffTick) - now);
+      const int op = R<int32_t>(eff + sym::kOffEffOpcode);
+      effs.push_back(eff), lefts.push_back(left), ops.push_back(op), kinds.push_back(g_onset(left, op));
+      srcs.push_back(R<uint64_t>(eff + sym::kOffEffParentRes));
+    });
+    const int n = static_cast<int>(effs.size());
+    std::vector<int> before = kinds;
+    if (n && g_onset_sync) g_onset_sync(lefts.data(), ops.data(), srcs.data(), kinds.data(), n);
+    for (int i = 0; i < n; ++i) {
+      g_onsets.emplace(effs[i], kinds[i]);
+      if (kinds[i])
+        Log("combat: %X: onset in %d ticks %s (opcode %d)%s", static_cast<unsigned>(id), lefts[i],
+            kinds[i] == 1 ? "resolves now" : "plays now (presentation)", ops[i],
+            kinds[i] != before[i] ? ", with its spell's visuals" : "");
+    }
+  }
   ForEachEffect(p, [&](uint64_t eff) {
     const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
     if (!ClockedType(type)) return;
     const uint32_t t = R<uint32_t>(eff + sym::kOffEffTick);
     if (type >= 6 && type <= 8 && g_onset && ticks > 0) {
-      auto it = g_onsets.find(eff);
-      if (it == g_onsets.end()) {
-        const int op = R<int32_t>(eff + sym::kOffEffOpcode);
-        const int kind = g_onset(static_cast<int32_t>(t - now), op);
-        it = g_onsets.emplace(eff, kind).first;
-        if (kind) Log("combat: %X: onset in %d ticks %s (opcode %d)", static_cast<unsigned>(id),
-                      static_cast<int32_t>(t - now), kind == 1 ? "resolves now" : "plays now (presentation)", op);
-      }
-      if (it->second) {  // the spell resolving: world time, and its list is checked every tick
+      const auto it = g_onsets.find(eff);
+      if (it != g_onsets.end() && it->second) {  // the spell resolving: world time, and its list is checked every tick
         W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
         return;
       }
@@ -1202,12 +1221,12 @@ int PoseLying(int32_t id, int back) {
   return len;
 }
 
-bool PlayArmorHitSound(int32_t id) {
+bool PlayArmorHitSound(int32_t id, uint32_t damage_type) {
   static const int ok = AllOk({sym::kRvaHitSound, sym::kRvaHitSoundPst}) ? 1 : 0;
   const uint64_t p = ok ? LookupSprite(id) : 0;
   const uint64_t pst = R<uint64_t>(sym::kVaPlanescape);
   if (!p || !PlausiblePtr(pst)) return false;
-  reinterpret_cast<void(__fastcall*)(uint64_t, uint32_t, uint64_t)>(Va(sym::kRvaHitSound))(pst, sym::kHitSoundPiercing, p);
+  reinterpret_cast<void(__fastcall*)(uint64_t, uint32_t, uint64_t)>(Va(sym::kRvaHitSound))(pst, damage_type, p);
   return true;
 }
 

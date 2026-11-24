@@ -53,6 +53,7 @@
 #include "modules/tbc/economy.h"
 #include "modules/tbc/hud.h"
 #include "modules/tbc/hover.h"
+#include "modules/tbc/ground_fx.h"
 #include "modules/tbc/maneuvers.h"
 #include "modules/tbc/status.h"
 #include "core/gameres.h"
@@ -149,6 +150,7 @@ struct State {
   uint32_t since_action = 1000;      // world ticks since its action stopped running
   bool resolving_logged = false;
   PulseBudget pulses;                // lingering spells: one round of pulse ticks per caster round
+  ProjectilePace proj_pace;          // which projectiles move (theirs in their caster's turn; born free fly on)
   int sight_radius = 448;            // [tbc] sight_radius: px of fog lifted around each foe in the fight
   bool select_voice = true;          // [tbc] select_voice: a party member's turn plays its selection line
   bool no_bored = true;              // [tbc] no_bored: no bored voice lines during a fight
@@ -200,8 +202,8 @@ struct State {
   TripPace trip_pace;                // the armed takedown swing: slow wind-up, quick follow-through
   std::map<int32_t, PronePose> poses;  // knocked down: lying / getting up (die cycle, backwards to rise)
   std::vector<std::string> sounds;   // queued from the swing hook (no Lua inside Swing)
-  // Maneuver visuals in the world overlay (GetTickCount ms): rings, dust, smoke, block glow, sparks.
-  enum class FxKind : uint8_t { RunRings, Dust, Smoke, Shield, Sparks };
+  // Maneuver visuals in the world overlay (GetTickCount ms): dust and smoke puffs (ground_fx.h), block glow, sparks.
+  enum class FxKind : uint8_t { RunBurst, RunTrail, Smoke, SmokeTrail, KnockDust, Shield, Sparks };
   bool ground_fx = false;  // ground effects drawn at the floor point (soft_draw), else over the sprites
   struct Fx {
     FxKind kind;
@@ -211,7 +213,7 @@ struct State {
     uint32_t seed;
   };
   std::vector<Fx> fx;
-  uint32_t dust_t = 0;               // last dust puff under a runner
+  uint32_t dust_t = 0;               // last dust/smoke puff under a runner or withdrawer
   uint32_t rng = 0x2545F491u;
   // Counters for tests (PSTF_MoveStats): since install.
   struct MoveStats {
@@ -261,11 +263,11 @@ void HoldStance(int32_t id);
 void ManeuverFightEnd();
 
 // Projectiles move in their caster's turn; a landed cloud or swarm also stops once it has used this
-// round's pulse ticks. Casters outside the fight are not paced.
+// round's pulse ticks; one already flying when the fight began flies on (round_rules.h ProjectilePace).
+// Casters outside the fight are not paced.
 bool ProjectileRuns(int32_t caster, int32_t proj, bool lingers) {
   if (!g.running || !Contains(g.in, caster)) return true;
-  if (caster != g.current) return false;
-  return !lingers || g.pulses.Run(proj);
+  return g.proj_pace.Runs(caster, proj, g.current, lingers, &g.pulses);
 }
 
 bool Rising(int32_t id) {
@@ -407,6 +409,7 @@ void EndFight(const char* why) {
   g.running = false;
   engine::ForgetOnsets();
   g.pulses.Clear();
+  g.proj_pace.Clear();
   g.in.clear();
   g.hp_seen.clear();
   g.current = -1;
@@ -785,6 +788,14 @@ void AddFx(State::FxKind kind, int32_t id, int x = 0, int y = 0) {
   g.fx.push_back({kind, id, x, y, GetTickCount(), Rand()});
   if (g.fx.size() > 96) g.fx.erase(g.fx.begin());
 }
+// An effect left on the ground where the creature is now drawn (it does not follow it).
+void AddFxAtFeet(State::FxKind kind, int32_t id, int dx = 0, int dy = 0) {
+  engine::SpriteInfo o;
+  if (!engine::GetSprite(id, &o)) return;
+  int x = o.x, y = o.y;
+  engine::InterpDrawPos(id, &x, &y);
+  AddFx(kind, -1, x + dx, y + dy);
+}
 bool Foes(int32_t a, int32_t b) {
   const Combatant* ca = g.dir ? g.dir->Find(a) : nullptr;
   const Combatant* cb = g.dir ? g.dir->Find(b) : nullptr;
@@ -813,6 +824,14 @@ bool MayKnockdownId(int32_t id) {
 }
 int AttacksForBlock() { return g.econ.want_swings > 0 ? g.econ.SwingsLeft() : 1; }
 
+// engine::OnsetSyncFn: delayed effects that arrived together (round_rules.h SyncSpellOnsets).
+void OnsetSync(const int32_t* left, const int* opcode, const uint64_t* source, int* kinds, int n) {
+  std::vector<OnsetSeen> v(n);
+  for (int i = 0; i < n; ++i) v[i] = {left[i], opcode[i], source[i], kinds[i]};
+  SyncSpellOnsets(v.data(), n);
+  for (int i = 0; i < n; ++i) kinds[i] = v[i].kind;
+}
+
 // The current creature takes a maneuver (button, Lua or the directed AI). False = not allowed now.
 bool UseManeuver(int32_t id, AiMove m) {
   if (!g.running || !g.maneuvers || id != g.current || g.aoo.Active()) return false;
@@ -825,7 +844,7 @@ bool UseManeuver(int32_t id, AiMove m) {
       if (ok) {
         engine::ForceRun(id, true, g.run_scale_other);
         QueueSound("PFSNDRUN");
-        AddFx(State::FxKind::RunRings, id);
+        AddFxAtFeet(State::FxKind::RunBurst, id);
         FloatText(id, "Run!");
       }
       break;
@@ -836,7 +855,7 @@ bool UseManeuver(int32_t id, AiMove m) {
       if (ok) {
         engine::ForceRun(id, false, g.run_scale_other);
         QueueSound("PFSNDWDR");
-        AddFx(State::FxKind::Smoke, id);
+        AddFxAtFeet(State::FxKind::Smoke, id);
         FloatText(id, "Withdraw!");
       }
       break;
@@ -931,7 +950,7 @@ int RunningAcEffects(int32_t id) {
 }
 void ApplyTrips() {
   for (auto tr : g.trips) {
-    engine::PlayArmorHitSound(tr.target);
+    engine::PlayArmorHitSound(tr.target, sym::kHitSoundCrushing);  // a trip is a blunt blow
     engine::SetSpriteSequence(tr.target, sym::kSeqDamage);
     engine::EffectSpec e;
     e.opcode = 0;  // Stat: AC vs. Damage Type Modifier
@@ -958,6 +977,7 @@ void ApplyTrips() {
     if (down) {
       ++g.ms.prone;
       g.poses[it->target].Fall();
+      AddFxAtFeet(State::FxKind::KnockDust, it->target);  // dust thrown up when the body lands
       engine::ClearAI(it->target);
       engine::DropPath(it->target);
     }
@@ -1268,18 +1288,15 @@ void DirectedAi(int32_t cur, const engine::SpriteInfo& s) {
   if (m != AiMove::None && UseManeuver(cur, m)) ++g.ms.ai_moves;
 }
 
-// Dust under a runner's feet while it walks.
+// Dust under a runner's feet (smoke wisps under a withdrawer's) while it walks, left behind on the ground.
 void RunDust(int32_t cur, double moved) {
   const auto it = g.stance.find(cur);
-  if (it == g.stance.end() || !it->second.ran || moved <= 0) return;
+  if (it == g.stance.end() || moved <= 0 || !(it->second.ran || it->second.withdrawn)) return;
   const uint32_t now = GetTickCount();
-  if (now - g.dust_t < 110) return;
+  if (now - g.dust_t < (it->second.ran ? 110u : 170u)) return;
   g.dust_t = now;
-  engine::SpriteInfo o;
-  if (!engine::GetSprite(cur, &o)) return;
-  int x = o.x, y = o.y;
-  engine::InterpDrawPos(cur, &x, &y);
-  AddFx(State::FxKind::Dust, -1, x + static_cast<int>(Rand() % 9) - 4, y + static_cast<int>(Rand() % 5) - 2);
+  AddFxAtFeet(it->second.ran ? State::FxKind::RunTrail : State::FxKind::SmokeTrail, cur,
+              static_cast<int>(Rand() % 9) - 4, static_cast<int>(Rand() % 5) - 2);
 }
 
 void Ellipse(int cx, int cy, double r, uint32_t col, float w, double wave, double phase, int n = 28) {
@@ -1294,59 +1311,26 @@ uint32_t Dim(uint32_t c, double k) {
   const auto ch = [&](int s) { return static_cast<uint32_t>(((c >> s) & 0xFF) * k) << s; };
   return ch(0) | ch(8) | ch(16);
 }
-// Ground effects of the maneuvers (Run rings, run dust, Withdraw smoke): soft translucent strips drawn at
-// the floor point, under every creature and lit like the ground (engine/soft_draw.h). Without the floor
-// hook they fall back to the engine's lines over the sprites, dimmer.
-void SoftEllipse(std::vector<engine::SoftSeg>* out, int cx, int cy, double r, uint32_t col, float alpha, float hw,
-                 double wave, double phase, int n = 28) {
-  for (int i = 0; i < n; ++i) {
-    const double a0 = 6.283185307 * i / n, a1 = 6.283185307 * (i + 1) / n;
-    const double r0 = r * (1.0 + wave * std::sin(6.0 * a0 + phase)), r1 = r * (1.0 + wave * std::sin(6.0 * a1 + phase));
-    out->push_back({float(cx + r0 * std::cos(a0)), float(cy + r0 * 0.75 * std::sin(a0)), float(cx + r1 * std::cos(a1)),
-                    float(cy + r1 * 0.75 * std::sin(a1)), col, alpha, hw});
+// Ground effects of the maneuvers (dust and smoke puffs, ground_fx.h): soft filled noisy blobs drawn at the
+// floor point, under every creature and lit like the ground (engine/soft_draw.h). Without the floor hook
+// they fall back to the engine's lines over the sprites, dimmer.
+bool PuffKind(State::FxKind k, PuffFx* out) {
+  switch (k) {
+    case State::FxKind::RunBurst: *out = PuffFx::RunBurst; return true;
+    case State::FxKind::RunTrail: *out = PuffFx::RunTrail; return true;
+    case State::FxKind::Smoke: *out = PuffFx::Smoke; return true;
+    case State::FxKind::SmokeTrail: *out = PuffFx::SmokeTrail; return true;
+    case State::FxKind::KnockDust: *out = PuffFx::KnockDust; return true;
+    default: return false;
   }
 }
 bool IsGroundFx(State::FxKind k) {
-  return k == State::FxKind::RunRings || k == State::FxKind::Dust || k == State::FxKind::Smoke;
+  PuffFx p;
+  return PuffKind(k, &p);
 }
-void GroundFxSegments(const State::Fx& f, int x, int y, double ms, std::vector<engine::SoftSeg>* out) {
-  switch (f.kind) {
-    case State::FxKind::RunRings:
-      // three faint wavy blue rings shrinking into the feet, one after the other
-      for (int k = 0; k < 3; ++k) {
-        const double u = (ms - 140.0 * k) / 650.0;
-        if (u < 0 || u > 1) continue;
-        const double r = 40.0 * (1.0 - u) + 2.0;
-        const float fade = static_cast<float>(std::sin(3.14159265 * u));  // in and out, no pop
-        SoftEllipse(out, x, y, r, 0xF0A040, 0.30f * fade, 3.0f, 0.06, ms / 70.0 + k);
-        SoftEllipse(out, x, y, r, 0xFFE0B0, 0.35f * fade, 1.0f, 0.06, ms / 70.0 + k);
-      }
-      break;
-    case State::FxKind::Dust: {
-      const double u = ms / 700.0;
-      if (u > 1) break;
-      const double r = 3.0 + 8.0 * u;
-      SoftEllipse(out, x, y - static_cast<int>(3 * u), r, 0x6890A8, static_cast<float>(0.28 * (1.0 - u)),
-                  static_cast<float>(1.8 * (1.0 - u) + 0.8), 0.18, f.seed % 7, 12);
-      break;
-    }
-    case State::FxKind::Smoke: {
-      // a soft puff of smoke out from the feet
-      const double u = ms / 800.0;
-      if (u > 1) break;
-      for (int k = 0; k < 9; ++k) {
-        const double a = 6.283185307 * k / 9 + (f.seed % 100) / 50.0;
-        const double d = 8.0 + 40.0 * std::sqrt(u);
-        const int px = x + static_cast<int>(d * std::cos(a));
-        const int py = y + static_cast<int>(d * 0.75 * std::sin(a)) - static_cast<int>(8 * u);
-        SoftEllipse(out, px, py, 4.0 + 9.0 * u, 0xB4B4B4, static_cast<float>(0.25 * (1.0 - u)),
-                    static_cast<float>(2.6 * (1.0 - u) + 1.0), 0.2, k, 12);
-      }
-      break;
-    }
-    default:
-      break;
-  }
+void GroundFxPuffs(const State::Fx& f, int x, int y, double ms, std::vector<Puff>* out) {
+  PuffFx k;
+  if (PuffKind(f.kind, &k)) PuffsFor(k, f.seed, ms, x, y, out);
 }
 int FxPos(const State::Fx& f, int* x, int* y) {
   *x = f.x, *y = f.y;
@@ -1359,14 +1343,20 @@ int FxPos(const State::Fx& f, int* x, int* y) {
 void DrawGroundFx() {  // floor draw point (gl_world.h InstallWorldFloor)
   if (g.fx.empty()) return;
   const uint32_t now = GetTickCount();
-  std::vector<engine::SoftSeg> segs;
+  std::vector<Puff> puffs;
   for (const auto& f : g.fx) {
     if (!IsGroundFx(f.kind)) continue;
     int x, y;
     FxPos(f, &x, &y);
-    GroundFxSegments(f, x, y, now - f.t0, &segs);
+    GroundFxPuffs(f, x, y, now - f.t0, &puffs);
   }
-  if (!segs.empty() && !engine::DrawSoftSegments(segs.data(), static_cast<int>(segs.size()))) g.ground_fx = false;
+  static_assert(sizeof(Puff) == sizeof(engine::SoftPuff), "ground_fx Puff mirrors engine::SoftPuff");
+  std::vector<engine::SoftPuff> soft(puffs.size());
+  for (size_t i = 0; i < puffs.size(); ++i) {
+    const Puff& p = puffs[i];
+    soft[i] = {p.x, p.y, p.rx, p.ry, p.bgr, p.alpha, p.seed};
+  }
+  if (!soft.empty() && !engine::DrawSoftPuffs(soft.data(), static_cast<int>(soft.size()))) g.ground_fx = false;
 }
 void FxPreDraw() { engine::ArmWorldComposite(); }  // the floor point runs only on armed frames
 
@@ -1379,11 +1369,10 @@ void DrawManeuverFx() {
     const double ms = now - f.t0;
     if (IsGroundFx(f.kind)) {
       if (g.ground_fx) continue;  // drawn at the floor point, under the creatures
-      std::vector<engine::SoftSeg> segs;
-      GroundFxSegments(f, x, y, ms, &segs);
-      for (const auto& q : segs)  // fallback: the engine's lines over the sprites, dimmed by the alpha
-        engine::DrawWorldLine(static_cast<int>(q.x1), static_cast<int>(q.y1), static_cast<int>(q.x2),
-                              static_cast<int>(q.y2), Dim(q.bgr, q.alpha), q.half_width * 0.5f);
+      std::vector<Puff> puffs;
+      GroundFxPuffs(f, x, y, ms, &puffs);
+      for (const auto& q : puffs)  // fallback: the engine's lines over the sprites, dimmed by the alpha
+        Ellipse(static_cast<int>(q.x), static_cast<int>(q.y), q.rx * 0.6, Dim(q.bgr, q.alpha), 1.0f, 0.15, q.seed, 10);
       continue;
     }
     switch (f.kind) {
@@ -2332,6 +2321,19 @@ int __cdecl LuaFightId(engine::LuaState* L) {
   return 1;
 }
 // PSTF_MakeEnemy(id) -> the engine's Enemy() on that creature.
+// PSTF_GroundFx(kind, id) -> 1: plays a maneuver ground effect at the creature's feet (0 run burst, 1 run trail,
+// 2 withdraw smoke, 3 withdraw trail, 4 knock-down dust), as UseManeuver/RunDust/ApplyTrips do. For screenshots.
+int __cdecl LuaGroundFx(engine::LuaState* L) {
+  const int k = static_cast<int>(engine::LuaNumberArg(L, 1, 0));
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 2, -1));
+  static const State::FxKind kinds[] = {State::FxKind::RunBurst, State::FxKind::RunTrail, State::FxKind::Smoke,
+                                        State::FxKind::SmokeTrail, State::FxKind::KnockDust};
+  const bool ok = k >= 0 && k < 5;
+  if (ok) AddFxAtFeet(kinds[k], id);
+  Log("lua: PSTF_GroundFx(%d, %X) -> %d (ground_fx %d)", k, static_cast<unsigned>(id), ok ? 1 : 0, g.ground_fx ? 1 : 0);
+  engine::LuaPushBool(L, ok);
+  return 1;
+}
 int __cdecl LuaMakeEnemy(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
   const bool ok = engine::MakeEnemy(id);
@@ -2812,7 +2814,7 @@ bool InstallTbc(const IniMap& ini) {
   g.cam_pre = g.camera ? engine::InstallWorldPreDraw(&CameraStep) : false;
   if (g.camera && !g.cam_pre) AddTickHandler(&CameraTick);
   if (g.round_effects && !engine::InstallEffectClock(&FrozenCombatant)) g.round_effects = false;
-  if (g.round_effects) engine::SetOnsetRule(&OnsetKind);
+  if (g.round_effects) engine::SetOnsetRule(&OnsetKind), engine::SetOnsetSync(&OnsetSync);
   // A spell's projectile (a flying knife, a cloud) moves only in its caster's turn.
   if (g.round_effects) engine::SetProjectileGate(&ProjectileRuns);
   g.items = engine::InstallItemUseHooks();
@@ -2892,6 +2894,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_BarHex", &LuaBarHex);
   dev::AddLuaFunction("PSTF_TbcCurrent", &LuaTbcCurrent);
   dev::AddLuaFunction("PSTF_MakeEnemy", &LuaMakeEnemy);
+  dev::AddLuaFunction("PSTF_GroundFx", &LuaGroundFx);
   dev::AddLuaFunction("PSTF_WorldTicks", &LuaWorldTicks);
   dev::AddLuaFunction("PSTF_SetName", &LuaSetName);
   dev::AddLuaFunction("PSTF_EvalAs", &LuaEvalAs);

@@ -42,6 +42,44 @@ void main() {
 }
 )";
 
+// Puffs: uv -1..1 across the quad, z = seed. Two octaves of value noise break the outline and the fill;
+// the top is lighter (lit from above), the edge fades out smoothly.
+const char* kVsPuff = R"(#version 130
+uniform vec2 u_target;
+out vec4 v_uv;
+out vec4 v_col;
+void main() {
+  gl_Position = vec4(gl_Vertex.xy / u_target * 2.0 - 1.0, 0.0, 1.0);
+  v_uv = gl_MultiTexCoord0;
+  v_col = gl_Color;
+}
+)";
+const char* kFsPuff = R"(#version 130
+in vec4 v_uv;
+in vec4 v_col;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+void main() {
+  vec2 p = v_uv.xy;
+  float s = v_uv.z;
+  float n = 0.62 * noise(p * 2.3 + vec2(s, s * 0.7)) + 0.38 * noise(p * 5.1 + vec2(s * 1.9, -s));
+  float r = length(p);
+  float edge = 0.62 + 0.38 * n;
+  float a = 1.0 - smoothstep(edge * 0.15, edge, r);
+  a *= 0.7 + 0.3 * n;
+  float shade = 0.82 + 0.22 * n + 0.12 * (-p.y);
+  gl_FragColor = vec4(min(v_col.rgb * shade, vec3(1.0)), v_col.a * a);
+}
+)";
+
+unsigned g_prog_puff = 0;
+int g_u_target_puff = -1;
+bool g_off_puff = false;
+
 unsigned Compile(unsigned type, const char* src) {
   const unsigned s = g_gl.CreateShader(type);
   g_gl.ShaderSource(s, 1, &src, nullptr);
@@ -57,21 +95,9 @@ unsigned Compile(unsigned type, const char* src) {
   return s;
 }
 
-bool SetUp() {
-  if (g_prog) return true;
-  if (g_off) return false;
-  g_off = true;
-  if (!g_loaded) {
-    const std::string err = LoadGl(&g_gl);
-    if (!err.empty()) {
-      Log("soft_draw: off, GL %s", err.c_str());
-      return false;
-    }
-    g_loaded = true;
-  }
-  if (!EngineProgram(0)) return false;  // the engine runs without shaders
-  const unsigned v = Compile(kVertexShader, kVs), f = Compile(kFragmentShader, kFs);
-  if (!v || !f) return false;
+unsigned Link(const char* vs, const char* fs) {
+  const unsigned v = Compile(kVertexShader, vs), f = Compile(kFragmentShader, fs);
+  if (!v || !f) return 0;
   const unsigned p = g_gl.CreateProgram();
   g_gl.AttachShader(p, v);
   g_gl.AttachShader(p, f);
@@ -82,11 +108,45 @@ bool SetUp() {
   g_gl.GetProgramiv(p, kLinkStatus, &ok);
   if (!ok) {
     Log("soft_draw: program link failed");
+    return 0;
+  }
+  return p;
+}
+
+bool LoadOnce() {
+  if (g_loaded) return true;
+  const std::string err = LoadGl(&g_gl);
+  if (!err.empty()) {
+    Log("soft_draw: off, GL %s", err.c_str());
     return false;
   }
+  g_loaded = true;
+  return true;
+}
+
+bool SetUp() {
+  if (g_prog) return true;
+  if (g_off) return false;
+  g_off = true;
+  if (!LoadOnce() || !EngineProgram(0)) return false;  // the engine runs without shaders
+  const unsigned p = Link(kVs, kFs);
+  if (!p) return false;
   g_prog = p;
   g_u_target = g_gl.GetUniformLocation(p, "u_target");
   g_off = false;
+  return true;
+}
+
+bool SetUpPuff() {
+  if (g_prog_puff) return true;
+  if (g_off_puff) return false;
+  g_off_puff = true;
+  if (!LoadOnce() || !EngineProgram(0)) return false;
+  const unsigned p = Link(kVsPuff, kFsPuff);
+  if (!p) return false;
+  g_prog_puff = p;
+  g_u_target_puff = g_gl.GetUniformLocation(p, "u_target");
+  g_off_puff = false;
   return true;
 }
 
@@ -142,6 +202,50 @@ bool DrawSoftSegments(const SoftSeg* s, int n, bool add) {
     gl.Vertex2f(bx + ex - nx, by + ey - ny);
     gl.TexCoord2f(1, 0);
     gl.Vertex2f(ax - ex - nx, ay - ey - ny);
+  }
+  gl.End();
+  gl.Color4f(1, 1, 1, 1);
+  RestoreGlState(gl, saved);
+  return true;
+}
+
+bool DrawSoftPuffs(const SoftPuff* s, int n) {
+  if (n <= 0) return true;
+  if (!WorldPassArea()) return false;
+  EngineFlushBatch();
+  if (!SetUpPuff()) return false;
+  auto& gl = g_gl;
+  GlState saved;
+  SaveGlState(gl, &saved);
+  const int vw = saved.viewport[2], vh = saved.viewport[3];
+  float st[4], ox, oy;
+  WorldMatrix(st);
+  WorldPassOffset(&ox, &oy);
+  if (vw <= 0 || vh <= 0 || st[0] == 0 || st[1] == 0) {
+    RestoreGlState(gl, saved);
+    return false;
+  }
+  const lighting::ViewMap vm = lighting::MakeViewMap(vw, vh, st, ox, oy);
+  for (unsigned cap : {kScissor, kDepth, kCull, kStencil, kAlphaTest}) gl.Disable(cap);
+  gl.ColorMask(1, 1, 1, 0);
+  gl.UseProgram(g_prog_puff);
+  gl.Uniform2f(g_u_target_puff, float(vw), float(vh));
+  gl.Enable(kBlend);
+  gl.BlendEquationSeparate(kFuncAdd, kFuncAdd);
+  gl.BlendFuncSeparate(kSrcAlpha, kOneMinusSrcAlpha, kSrcAlpha, kOneMinusSrcAlpha);
+  gl.Begin(kQuads);
+  for (int i = 0; i < n; ++i) {
+    const SoftPuff& q = s[i];
+    if (q.alpha <= 0.003f || q.rx <= 0 || q.ry <= 0) continue;
+    gl.Color4f(float(q.bgr & 0xFF) / 255.0f, float((q.bgr >> 8) & 0xFF) / 255.0f, float((q.bgr >> 16) & 0xFF) / 255.0f,
+               q.alpha);
+    static const float kCorner[4][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+    for (const auto& c : kCorner) {
+      float px, py;
+      lighting::ToPhys(vm, q.x + c[0] * q.rx, q.y + c[1] * q.ry, &px, &py);
+      gl.TexCoord4f(c[0], c[1], q.seed, 0);
+      gl.Vertex2f(px, py);
+    }
   }
   gl.End();
   gl.Color4f(1, 1, 1, 1);

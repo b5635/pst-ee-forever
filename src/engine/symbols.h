@@ -783,12 +783,13 @@ constexpr uint32_t kRvaFrameSet = 0x499B90, kRvaSeqLength = 0x49A4E0;  // frame/
 constexpr int16_t kSeqAttack = 0, kSeqDamage = 4, kSeqDie = 5, kSeqShoot = 8, kSeqSlash = 11, kSeqBackslash = 12, kSeqJab = 13;
 // Hit sound by the target's RESDATA armour: CPlanescape::EffectDamageDecodeHitSound(uint damage type,
 // CGameSprite*) lin 5AC450 / win 1402503F0 (HIT_02<A+armor> for 0x100000), called by CGameEffectDamage::ApplyEffect
-// with rcx = g_PST (1401C92AB `mov rcx, cs:14072C8F0`).
+// with rcx = g_PST (1401C92AB `mov rcx, cs:14072C8F0`). Damage type = op 12 param2: 0 crushing (HIT_03<A+armor>),
+// 0x100000 piercing (HIT_02), 0x800000 missile (HIT_04), 0x1000000 slashing (HIT_01); lin 5AC450 branches.
 inline constexpr uint8_t kHitSoundBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89};
 inline constexpr uint8_t kHitSoundPstBytes[] = {0x48, 0x8B, 0x0D, 0x3E, 0x36, 0x56, 0x00};
 constexpr uint32_t kRvaHitSound = 0x2503F0, kRvaHitSoundPst = 0x1C92AB;
 constexpr uint64_t kVaPlanescape = 0x14072C8F0ull;
-constexpr uint32_t kHitSoundPiercing = 0x100000;
+constexpr uint32_t kHitSoundCrushing = 0, kHitSoundPiercing = 0x100000;
 // CAIObjectType of a creature at sprite +0x30 (EA +0x38 = kOffSpriteEa): EA +8, general +9, race +10, class +11
 // (CAIObjectType::GetClass lin 5E4DE0), instance id dword +12, special cases +16..20, specifics +21, gender +22,
 // alignment +23 (CAIObjectType::Set lin 5E1A20, FlushToString lin 5E4960). SPECIFIC.IDS: 2 Nameless One, 9 Morte;

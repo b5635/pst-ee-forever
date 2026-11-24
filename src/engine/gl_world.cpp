@@ -559,7 +559,7 @@ std::string LoadGl(Gl* g) {
   L(Disable, "glDisable") L(BindTexture, "glBindTexture") L(GenTextures, "glGenTextures")
   L(DeleteTextures, "glDeleteTextures") L(TexImage2D, "glTexImage2D") L(TexParameteri, "glTexParameteri")
   L(CopyTexSubImage2D, "glCopyTexSubImage2D") L(Viewport, "glViewport") L(BlendFunc, "glBlendFunc")
-  L(ClearColor, "glClearColor") L(Clear, "glClear") L(Begin, "glBegin") L(End, "glEnd") L(Vertex2f, "glVertex2f") L(Color4f, "glColor4f") L(TexCoord2f, "glTexCoord2f")
+  L(ClearColor, "glClearColor") L(Clear, "glClear") L(Begin, "glBegin") L(End, "glEnd") L(Vertex2f, "glVertex2f") L(Color4f, "glColor4f") L(TexCoord2f, "glTexCoord2f") L(TexCoord4f, "glTexCoord4f")
   L(ReadPixels, "glReadPixels") L(PixelStorei, "glPixelStorei") L(ColorMask, "glColorMask")
   L(GetString, "glGetString") L(GetError, "glGetError")
   L(ActiveTexture, "glActiveTexture") L(UseProgram, "glUseProgram") L(CreateShader, "glCreateShader")
