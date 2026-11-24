@@ -51,6 +51,7 @@
 #include "modules/tbc/economy.h"
 #include "modules/tbc/hud.h"
 #include "modules/tbc/hover.h"
+#include "modules/tbc/maneuvers.h"
 #include "modules/tbc/status.h"
 #include "core/gameres.h"
 #include "modules/tbc/round_rules.h"
@@ -162,6 +163,38 @@ struct State {
   StatusSpans status_spans;          // first-seen length of each buff on each creature
   std::vector<std::vector<StatusIconView>> status_party;
   uint32_t status_t0 = 0;            // GetTickCount of the last party status collection
+  // Maneuvers (maneuvers.h): Run, Withdraw, Block, Trip/Knockdown, attacks of opportunity.
+  bool maneuvers = true;             // [tbc] maneuvers
+  bool opportunity = true;           // [tbc] opportunity_attacks
+  std::map<int32_t, Stance> stance;  // every combatant, from its turn start to the next
+  Reaction aoo;                      // the attack of opportunity in progress
+  bool aoo_swing = false;            // the reactor swung (TakeRolls)
+  bool takedown_swung = false;       // the armed takedown's first swing came
+  bool ai_moved = false;             // the directed AI chose its maneuver this turn
+  struct Trip {
+    int32_t target, attacker;
+    Takedown kind;
+    int wait;  // ticks until the outcome is read (the save comes as the effect applies)
+  };
+  std::vector<Trip> trips, trip_checks;
+  std::vector<std::string> sounds;   // queued from the swing hook (no Lua inside Swing)
+  // Maneuver visuals in the world overlay (GetTickCount ms): rings, dust, smoke, block glow, sparks.
+  enum class FxKind : uint8_t { RunRings, Dust, Smoke, Shield, Sparks };
+  struct Fx {
+    FxKind kind;
+    int32_t id;  // follows this creature (-1: stays at x,y)
+    int x, y;
+    uint32_t t0;
+    uint32_t seed;
+  };
+  std::vector<Fx> fx;
+  uint32_t dust_t = 0;               // last dust puff under a runner
+  uint32_t rng = 0x2545F491u;
+  // Counters for tests (PSTF_MoveStats): since install.
+  struct MoveStats {
+    int runs = 0, withdraws = 0, blocks = 0, block_tries = 0, blocked = 0, takedowns = 0, takedown_hits = 0, prone = 0;
+    int aoo = 0, aoo_swung = 0, ai_moves = 0, stood = 0;
+  } ms;
 } g;
 
 // The creature's spell is still on its way (a projectile object it cast is in the area): its turn
@@ -196,7 +229,10 @@ bool Contains(const std::vector<int32_t>& v, int32_t id) {
   return std::find(v.begin(), v.end(), id) != v.end();
 }
 
-bool Held(int32_t id) { return g.running && id != g.current && Contains(g.in, id); }
+bool Held(int32_t id) { return g.running && id != g.current && id != g.aoo.reactor && Contains(g.in, id); }
+
+void ManeuverTurnStart(int32_t id);
+void ManeuverFightEnd();
 
 // Projectiles move in their caster's turn; a landed cloud or swarm also stops once it has used this
 // round's pulse ticks. Casters outside the fight are not paced.
@@ -217,8 +253,13 @@ void __fastcall HookProcessAI(void* sprite) {
 void __fastcall HookWalk(void* sprite) {
   const int32_t id = engine::SpriteIdOf(sprite);
   if (Held(id)) return;
-  if (g.running && id == g.current && g.hold_current) return;  // movement spent this turn
-  if (g.running && g.run && id == g.current) engine::ForceRun(id, true, g.run_scale_other);
+  if (g.running && id == g.current && (g.hold_current || g.aoo.Active())) return;  // spent / held at the edge
+  if (g.running && id == g.aoo.reactor) return;  // its attack of opportunity is a swing, never a chase
+  if (g.running && id == g.current && g.stance[id].withdrawn) {
+    engine::ForceRun(id, false, g.run_scale_other);  // Withdraw: walk animation and walking speed
+  } else if (g.running && g.run && id == g.current) {
+    engine::ForceRun(id, true, g.run_scale_other);
+  }
   g_walk(sprite);
 }
 
@@ -323,6 +364,7 @@ void EndFight(const char* why) {
     for (int32_t id : g.in) engine::ForceRun(id, false, g.run_scale_other);
   if (g.sight && !g.party.empty()) engine::RevealCombatants(g.party[0], {}, 0);
   g.nudged = -1;
+  ManeuverFightEnd();  // prone combatants stand up (before g.running goes: their effects are ours)
   g.running = false;
   engine::ForgetOnsets();
   g.pulses.Clear();
@@ -513,6 +555,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
   }
   // Its selection line, as a portrait click would play it (the engine's SelectCharacter with sound).
   if (slot >= 0 && !g.auto_party && g.select_voice) engine::SelectOnly(next, true);
+  ManeuverTurnStart(next);  // stances of its own turn go; a prone creature stands up (its action)
   g.bar_t0 = 0;  // the hotbar is collected again for whoever acts now
   {
     engine::SpriteInfo s0;
@@ -666,6 +709,461 @@ void DrawMovementLine() {
   GlowRing(g.line.back(), total <= g.econ.move_ft + 0.01 ? kGlowGold : kGlowRed);
 }
 
+// --- maneuvers: Run, Withdraw, Block, Trip/Knockdown, attacks of opportunity (maneuvers.h) -------------
+uint32_t Rand() {
+  g.rng ^= g.rng << 13, g.rng ^= g.rng >> 17, g.rng ^= g.rng << 5;
+  return g.rng;
+}
+int D20() { return static_cast<int>(Rand() % 20) + 1; }
+void QueueSound(const char* res) { g.sounds.push_back(res); }
+void FlushSounds() {
+  if (g.sounds.empty()) return;
+  std::string code;
+  for (const auto& s : g.sounds) code += "Infinity_PlaySound('" + s + "') ";
+  g.sounds.clear();
+  const std::string err = engine::LuaDoString(code.c_str());
+  if (!err.empty()) Log("tbc: maneuver sound failed: %s", err.c_str());
+}
+void FloatText(int32_t id, const std::string& text, uint32_t ms = 1800) {
+  g.floats.push_back({id, text, GetTickCount() + ms});
+}
+void AddFx(State::FxKind kind, int32_t id, int x = 0, int y = 0) {
+  engine::SpriteInfo o;
+  if (id != -1 && engine::GetSprite(id, &o)) x = o.x, y = o.y;
+  g.fx.push_back({kind, id, x, y, GetTickCount(), Rand()});
+  if (g.fx.size() > 96) g.fx.erase(g.fx.begin());
+}
+bool Foes(int32_t a, int32_t b) {
+  const Combatant* ca = g.dir ? g.dir->Find(a) : nullptr;
+  const Combatant* cb = g.dir ? g.dir->Find(b) : nullptr;
+  return ca && cb && ca->r.side != cb->r.side;
+}
+int PersonalSpace(int32_t id) {
+  const engine::CellCoster c = engine::CosterFor(id);
+  return c.ok() && c.personal_space ? c.personal_space : 3;
+}
+bool ClassOf(int32_t id, uint8_t* cls, uint8_t* spec) {
+  *cls = *spec = 0;
+  return engine::SpriteClass(id, cls, spec);
+}
+bool MayTripId(int32_t id) {
+  uint8_t c, s;
+  return ClassOf(id, &c, &s) && MayTrip(c, s);
+}
+bool MayBlockId(int32_t id) {
+  uint8_t c, s;
+  return ClassOf(id, &c, &s) && MayBlock(c, s);
+}
+bool MayKnockdownId(int32_t id) {
+  const Combatant* c = g.dir ? g.dir->Find(id) : nullptr;
+  engine::CombatStats st;
+  return c && c->r.side == Side::Hostile && engine::GetCombatStats(id, &st) && MayKnockdown(false, st.thac0);
+}
+int AttacksForBlock() { return g.econ.want_swings > 0 ? g.econ.SwingsLeft() : 1; }
+
+// The current creature takes a maneuver (button, Lua or the directed AI). False = not allowed now.
+bool UseManeuver(int32_t id, AiMove m) {
+  if (!g.running || !g.maneuvers || id != g.current || g.aoo.Active()) return false;
+  Stance& st = g.stance[id];
+  bool ok = false;
+  const char* what = "";
+  switch (m) {
+    case AiMove::Run:
+      ok = ApplyRun(&g.econ, &st), what = "runs";
+      if (ok) {
+        engine::ForceRun(id, true, g.run_scale_other);
+        QueueSound("PFSNDRUN");
+        AddFx(State::FxKind::RunRings, id);
+        FloatText(id, "Run!");
+      }
+      break;
+    case AiMove::Withdraw: {
+      const Combatant* me = g.dir ? g.dir->Find(id) : nullptr;
+      if (!me || me->r.side != Side::Party) break;  // enemies never withdraw
+      ok = ApplyWithdraw(&g.econ, &st), what = "withdraws";
+      if (ok) {
+        engine::ForceRun(id, false, g.run_scale_other);
+        QueueSound("PFSNDWDR");
+        AddFx(State::FxKind::Smoke, id);
+        FloatText(id, "Withdraw!");
+      }
+      break;
+    }
+    case AiMove::Block:
+      ok = ApplyBlock(&g.econ, &st, MayBlockId(id), AttacksForBlock()), what = "prepares to block";
+      if (ok) {
+        engine::ClearAI(id);  // its swings are the blocks now
+        engine::DropPath(id);
+        QueueSound("PFSNDBLK");
+        AddFx(State::FxKind::Shield, id);
+        FloatText(id, "Block!");
+      }
+      break;
+    case AiMove::Trip:
+      ok = ToggleTrip(g.econ, &st, MayTripId(id));
+      what = st.takedown == Takedown::Trip ? "will trip with its first attack" : "cancels the trip";
+      if (ok && st.takedown == Takedown::Trip) FloatText(id, "Trip", 1200);
+      break;
+    case AiMove::Knockdown:
+      ok = ArmKnockdown(g.econ, &st, MayKnockdownId(id)), what = "will knock down with its first attack";
+      break;
+    case AiMove::None:
+      break;
+  }
+  if (!ok) return false;
+  if (m == AiMove::Run) ++g.ms.runs;
+  if (m == AiMove::Withdraw) ++g.ms.withdraws;
+  if (m == AiMove::Block) ++g.ms.blocks;
+  char b[96];
+  std::snprintf(b, sizeof b, " %s (%.1f/%.1f ft, %d block stacks)", what, g.econ.move_ft, g.econ.max_ft, st.block_stacks);
+  CLog("MOVE", Name(id) + b);
+  Log("tbc: %s%s", Who(id).c_str(), b);
+  g.bar_t0 = 0;
+  return true;
+}
+
+// Swing.hit1 (melee) filters, inside the engine's Swing: no Lua here, only our state.
+int __cdecl MeleeThac0(int32_t attacker, int32_t /*target*/) {
+  if (!g.running || attacker != g.current || g.takedown_swung) return 0;
+  const auto it = g.stance.find(attacker);
+  return it == g.stance.end() ? 0 : TakedownThac0(it->second.takedown);
+}
+uint8_t __cdecl MeleeOutcome(int32_t attacker, int32_t target, bool hit, int roll) {
+  if (!g.running || !Contains(g.in, target)) return 0;
+  if (attacker == g.current && !g.takedown_swung) {
+    Stance& a = g.stance[attacker];
+    if (a.takedown != Takedown::None) {
+      const Takedown k = a.takedown;
+      a.takedown = Takedown::None;
+      g.takedown_swung = true;
+      ++g.ms.takedowns;
+      QueueSound("PFSNDTRP");
+      if (!hit) {
+        FloatText(target, std::string(TakedownName(k)) + ": Failure");
+        CLog("MOVE", Name(attacker) + " " + TakedownName(k) + " misses " + Name(target));
+        return 0;
+      }
+      ++g.ms.takedown_hits;
+      g.trips.push_back({target, attacker, k, 0});
+      return 2;  // a hit with no damage: the target saves or falls
+    }
+  }
+  if (!hit) return 0;
+  auto it = g.stance.find(target);
+  if (it == g.stance.end() || it->second.block_stacks <= 0) return 0;
+  --it->second.block_stacks;
+  ++g.ms.block_tries;
+  engine::CombatStats d;
+  const int thac0 = engine::GetCombatStats(target, &d) ? d.thac0 : 20;
+  const int block = D20();
+  const bool stopped = BlockStops(block, thac0, roll);
+  char b[128];
+  std::snprintf(b, sizeof b, " blocks: d20 %d + AC %d vs THAC0 %d, attack d20 %d -> %s (%d stacks left)", block, kBlockAc,
+                thac0, roll, stopped ? "BLOCKED" : "not blocked", it->second.block_stacks);
+  CLog("MOVE", Name(target) + b);
+  Log("tbc: %s%s", Who(target).c_str(), b);
+  if (!stopped) return 0;
+  ++g.ms.blocked;
+  QueueSound("PFSNDPRY");
+  AddFx(State::FxKind::Sparks, target);
+  FloatText(target, "Blocked!");
+  return 1;
+}
+
+// Prone: the engine's own unconsciousness (op 39, wake on damage) with a save vs death, from the attacker.
+void ApplyTrips() {
+  for (const auto& tr : g.trips) {
+    engine::EffectSpec e;
+    e.opcode = 39;   // State: Unconsciousness
+    e.param2 = 0;    // wakes on damage
+    e.timing = 0;    // duration in seconds: one combat round; we stand it up at its next turn anyway
+    e.duration = 6;
+    e.save_type = 4;  // save vs death
+    const bool ok = engine::ApplyEffect(tr.target, tr.attacker, e);
+    CLog("MOVE", Name(tr.attacker) + " " + TakedownName(tr.kind) + " hits " + Name(tr.target) +
+                     (ok ? ": save vs death or prone" : ": effect could not be applied"));
+    if (ok) g.trip_checks.push_back({tr.target, tr.attacker, tr.kind, 2});
+  }
+  g.trips.clear();
+  for (auto it = g.trip_checks.begin(); it != g.trip_checks.end();) {
+    if (--it->wait > 0) {
+      ++it;
+      continue;
+    }
+    bool down = false;
+    for (const auto& e : engine::TimedEffects(it->target)) down = down || e.opcode == 39;
+    g.stance[it->target].prone = down;
+    if (down) ++g.ms.prone;
+    FloatText(it->target, std::string(TakedownName(it->kind)) + (down ? ": Success" : ": Failure"));
+    CLog("MOVE", Name(it->target) + (down ? " falls prone until its next turn" : " keeps its footing (saved)"));
+    Log("tbc: %s: %s %s", Who(it->target).c_str(), TakedownName(it->kind), down ? "success, prone" : "failure (saved)");
+    it = g.trip_checks.erase(it);
+  }
+}
+void StandUp(int32_t id) {
+  engine::EffectSpec rm;
+  rm.opcode = 337;  // Remove: Opcode
+  rm.param2 = 39;
+  rm.timing = 1;
+  engine::ApplyEffect(id, -1, rm);
+  engine::EffectSpec cure;
+  cure.opcode = 2;  // Cure: Sleep
+  cure.timing = 1;
+  engine::ApplyEffect(id, -1, cure);
+  g.stance[id].prone = false;
+}
+
+void ManeuverTurnStart(int32_t id) {
+  g.takedown_swung = false;
+  g.ai_moved = false;
+  g.aoo = Reaction{};
+  if (!g.maneuvers) return;
+  Stance& st = g.stance[id];
+  const bool prone = st.prone;
+  NewTurn(&st);
+  if (prone) {
+    StandUp(id);
+    g.econ.action_used = true;  // standing up is this turn's action
+    FloatText(id, "Stands up");
+    ++g.ms.stood;
+    CLog("MOVE", Name(id) + " stands up and loses its action");
+  }
+}
+
+void ManeuverFightEnd() {
+  for (auto& kv : g.stance)
+    if (kv.second.prone) StandUp(kv.first);
+  g.stance.clear();
+  g.trips.clear();
+  g.trip_checks.clear();
+  g.aoo = Reaction{};
+  g.fx.clear();
+}
+
+// Start an attack of opportunity: the mover waits at the edge of the reach, the reactor swings once.
+void StartReaction(int32_t reactor, int32_t mover) {
+  g.stance[reactor].reaction_used = true;
+  ++g.ms.aoo;
+  g.aoo = Reaction{};
+  g.aoo.reactor = reactor, g.aoo.mover = mover;
+  g.aoo_swing = false;
+  std::string order = "Attack(NearestEnemyOf(Myself))";
+  const int slot = PartySlot(mover);
+  if (slot >= 0) order = "Attack(Player" + std::to_string(slot + 1) + ")";
+  engine::ClearAI(reactor);
+  const bool ok = engine::EvalAs(reactor, order);
+  engine::SetNoInterrupt(reactor);
+  FloatText(reactor, "Attack of Opportunity!", 2200);
+  CLog("AOO", Name(reactor) + " gets an attack of opportunity on " + Name(mover) + " (" + order + (ok ? ")" : ", failed)"));
+  Log("tbc: %s: attack of opportunity on %s (%s)", Who(reactor).c_str(), Who(mover).c_str(), ok ? "ordered" : "order failed");
+}
+
+// Per tick while the current creature walks: who did it just walk out of reach of?
+void CheckOpportunity(int32_t cur, const engine::SpriteInfo& me) {
+  if (!g.opportunity || !g.maneuvers) return;
+  // The step it is about to take (the next path cell it has not reached) leaves the reach: the reactor
+  // swings while the mover still stands in its reach (the engine's Attack swings without walking).
+  if (!me.has_path) return;
+  const auto path = engine::PathPoints(cur);
+  if (path.empty()) return;
+  const bool withdrawn = g.stance[cur].withdrawn;
+  const int ps_me = PersonalSpace(cur);
+  for (int32_t id : g.in) {
+    if (id == cur || !Foes(id, cur)) continue;
+    engine::SpriteInfo o;
+    if (!engine::GetSprite(id, &o) || !o.alive || o.area != me.area) continue;
+    const int64_t state = engine::SpriteState(id);
+    if (!CanReact(state)) {
+      continue;
+    }
+    const int reach = ReachCells(kMeleeRangeField, PersonalSpace(id), ps_me);
+    const bool in = InReach(o.x, o.y, me.x, me.y, reach);
+    bool next_in = in;
+    for (const auto& p : path) {  // the first path cell that is not the one it stands in
+      if (p.first / 16 == me.x / 16 && p.second / 12 == me.y / 12) continue;
+      next_in = InReach(o.x, o.y, p.first, p.second, reach);
+      break;
+    }
+    if (ProvokesNow(in, next_in, withdrawn, g.stance[id])) {
+      StartReaction(id, cur);
+      return;
+    }
+  }
+}
+
+// One tick of a reaction in progress; true while the turn waits for it.
+bool ReactionTick(uint32_t dt) {
+  if (!g.aoo.Active()) return false;
+  engine::SpriteInfo r;
+  const bool alive = engine::GetSprite(g.aoo.reactor, &r) && r.alive;
+  if (alive && r.has_path) engine::DropPath(g.aoo.reactor);  // out of reach now: no chase
+  const bool swung = g.aoo_swing;
+  g.aoo_swing = false;
+  if (alive && !g.aoo.Feed(dt, swung)) return true;
+  engine::ClearAI(g.aoo.reactor);
+  engine::DropPath(g.aoo.reactor);
+  if (g.aoo.swung) ++g.ms.aoo_swung;
+  if (!g.aoo.swung)
+    Log("tbc: %s: no attack of opportunity swing (action %u, path %d, state %llX)", Who(g.aoo.reactor).c_str(), alive ? r.action : 0,
+        alive && r.has_path ? 1 : 0, static_cast<long long>(engine::SpriteState(g.aoo.reactor)));
+  CLog("AOO", Name(g.aoo.reactor) + (g.aoo.swung ? " swung; " : " could not swing; ") + Name(g.aoo.mover) + " walks on");
+  g.aoo = Reaction{};
+  return false;
+}
+
+// The directed AI: once per AI turn, when its script shows its intent (an attack or a flight).
+void DirectedAi(int32_t cur, const engine::SpriteInfo& s) {
+  if (!g.maneuvers || g.econ.party || g.ai_moved || !ActionFree(g.econ)) return;
+  const bool attack = IsAttackAction(s.action), flee = IsFleeAction(s.action);
+  if (!attack && !flee) return;
+  g.ai_moved = true;
+  AiView v;
+  v.melee_intent = attack, v.flee_intent = flee;
+  v.move_ft = g.econ.move_ft;
+  v.hp = s.hp, v.max_hp = s.max_hp > 0 ? s.max_hp : 1;
+  v.may_trip = MayTripId(cur), v.may_block = MayBlockId(cur), v.may_knockdown = MayKnockdownId(cur);
+  {
+    const Combatant* me = g.dir ? g.dir->Find(cur) : nullptr;
+    v.may_withdraw = me && me->r.side == Side::Party;  // enemies never withdraw
+  }
+  v.attacks = AttacksForBlock();
+  v.roll100 = static_cast<int>(Rand() % 100) + 1;
+  const int ps_me = PersonalSpace(cur);
+  int best = -1;
+  for (int32_t id : g.in) {
+    if (id == cur || !Foes(id, cur)) continue;
+    engine::SpriteInfo o;
+    if (!engine::GetSprite(id, &o) || !o.alive || o.area != s.area) continue;
+    const int reach = ReachCells(kMeleeRangeField, ps_me, PersonalSpace(id));
+    const int d2 = CellDist2(s.x, s.y, o.x, o.y);
+    if (reach * reach >= d2) ++v.adjacent_foes;
+    if (best < 0 || d2 < best) best = d2, v.reach_cells = reach;
+  }
+  if (best < 0) return;
+  v.gap_cells = static_cast<int>(std::sqrt(static_cast<double>(best)));
+  const AiMove m = ChooseAiMove(v);
+  static const char* kNames[] = {"none", "run", "withdraw", "block", "trip", "knockdown"};
+  CLog("AI", Name(cur) + " maneuver: " + kNames[static_cast<int>(m)] + " (gap " + std::to_string(v.gap_cells) +
+                 " cells, reach " + std::to_string(v.reach_cells) + ", " + std::to_string(v.adjacent_foes) +
+                 " foes in reach, d100 " + std::to_string(v.roll100) + ")");
+  if (m != AiMove::None && UseManeuver(cur, m)) ++g.ms.ai_moves;
+}
+
+// Dust under a runner's feet while it walks.
+void RunDust(int32_t cur, double moved) {
+  const auto it = g.stance.find(cur);
+  if (it == g.stance.end() || !it->second.ran || moved <= 0) return;
+  const uint32_t now = GetTickCount();
+  if (now - g.dust_t < 110) return;
+  g.dust_t = now;
+  engine::SpriteInfo o;
+  if (!engine::GetSprite(cur, &o)) return;
+  int x = o.x, y = o.y;
+  engine::InterpDrawPos(cur, &x, &y);
+  AddFx(State::FxKind::Dust, -1, x + static_cast<int>(Rand() % 9) - 4, y + static_cast<int>(Rand() % 5) - 2);
+}
+
+void Ellipse(int cx, int cy, double r, uint32_t col, float w, double wave, double phase, int n = 28) {
+  for (int i = 0; i < n; ++i) {
+    const double a0 = 6.283185307 * i / n, a1 = 6.283185307 * (i + 1) / n;
+    const double r0 = r * (1.0 + wave * std::sin(6.0 * a0 + phase)), r1 = r * (1.0 + wave * std::sin(6.0 * a1 + phase));
+    engine::DrawWorldLine(cx + static_cast<int>(r0 * std::cos(a0)), cy + static_cast<int>(r0 * 0.75 * std::sin(a0)),
+                          cx + static_cast<int>(r1 * std::cos(a1)), cy + static_cast<int>(r1 * 0.75 * std::sin(a1)), col, w);
+  }
+}
+uint32_t Dim(uint32_t c, double k) {
+  const auto ch = [&](int s) { return static_cast<uint32_t>(((c >> s) & 0xFF) * k) << s; };
+  return ch(0) | ch(8) | ch(16);
+}
+void DrawManeuverFx() {
+  const uint32_t now = GetTickCount();
+  g.fx.erase(std::remove_if(g.fx.begin(), g.fx.end(), [&](const State::Fx& f) { return now - f.t0 > 1400; }), g.fx.end());
+  for (auto& f : g.fx) {
+    int x = f.x, y = f.y;
+    if (f.id != -1) {
+      engine::SpriteInfo o;
+      if (engine::GetSprite(f.id, &o)) x = o.x, y = o.y, engine::InterpDrawPos(f.id, &x, &y);
+    }
+    const double ms = now - f.t0;
+    switch (f.kind) {
+      case State::FxKind::RunRings:
+        // three wavy blue rings shrinking into the feet, one after the other
+        for (int k = 0; k < 3; ++k) {
+          const double u = (ms - 140.0 * k) / 650.0;
+          if (u < 0 || u > 1) continue;
+          const double r = 46.0 * (1.0 - u) + 2.0;
+          const double fade = 1.0 - 0.6 * u;
+          Ellipse(x, y, r, Dim(0xF0A040, fade), 2.4f, 0.07, ms / 70.0 + k);
+          Ellipse(x, y, r, Dim(0xFFE0B0, fade), 0.9f, 0.07, ms / 70.0 + k);
+        }
+        break;
+      case State::FxKind::Dust: {
+        const double u = ms / 700.0;
+        if (u > 1) break;
+        const double r = 3.0 + 9.0 * u;
+        const uint32_t c = Dim(0x6890A8, 1.0 - 0.7 * u);  // dusty tan (BGR)
+        Ellipse(x, y - static_cast<int>(4 * u), r, c, static_cast<float>(1.6 * (1.0 - u) + 0.5), 0.18, f.seed % 7, 12);
+        break;
+      }
+      case State::FxKind::Smoke: {
+        // a puff of smoke blasting out from the feet
+        const double u = ms / 800.0;
+        if (u > 1) break;
+        for (int k = 0; k < 9; ++k) {
+          const double a = 6.283185307 * k / 9 + (f.seed % 100) / 50.0;
+          const double d = 8.0 + 44.0 * std::sqrt(u);
+          const int px = x + static_cast<int>(d * std::cos(a));
+          const int py = y + static_cast<int>(d * 0.75 * std::sin(a)) - static_cast<int>(10 * u);
+          Ellipse(px, py, 4.0 + 10.0 * u, Dim(0xB4B4B4, 1.0 - 0.75 * u), static_cast<float>(2.2 * (1.0 - u) + 0.6), 0.2, k, 12);
+        }
+        break;
+      }
+      case State::FxKind::Shield: {
+        const double u = ms / 900.0;
+        if (u > 1) break;
+        const double r = 20.0 + 10.0 * u;
+        Ellipse(x, y - 36, r, Dim(0x40C8F0, 1.0 - 0.7 * u), 2.6f, 0.0, 0.0);
+        Ellipse(x, y - 36, r, Dim(0xD0F8FF, 1.0 - 0.7 * u), 1.0f, 0.0, 0.0);
+        break;
+      }
+      case State::FxKind::Sparks: {
+        const double u = ms / 450.0;
+        if (u > 1) break;
+        for (int k = 0; k < 10; ++k) {
+          const double a = 6.283185307 * ((f.seed >> (k % 16)) % 64) / 64.0;
+          const double d0 = 4.0 + 26.0 * u, d1 = d0 + 9.0 * (1.0 - u);
+          const int cy0 = y - 40;
+          engine::DrawWorldLine(x + static_cast<int>(d0 * std::cos(a)), cy0 + static_cast<int>(d0 * std::sin(a)),
+                                x + static_cast<int>(d1 * std::cos(a)), cy0 + static_cast<int>(d1 * std::sin(a)),
+                                Dim(0x60E8FF, 1.0 - 0.6 * u), 1.1f);
+        }
+        break;
+      }
+    }
+  }
+}
+// The hotbar's maneuver buttons: usable now, which takedown is armed, block stacks.
+std::string ManeuverLua() {
+  const bool on = g.running && g.maneuvers && PartySlot(g.current) >= 0 && !g.aoo.Active();
+  Stance none;
+  const Stance& st = on ? g.stance[g.current] : none;
+  const auto b = [](bool v) { return v ? "true" : "false"; };
+  std::string s = "pstfMv = {on=";
+  s += b(g.maneuvers);
+  s += ",run=";
+  s += b(on && CanRun(g.econ));
+  s += ",withdraw=";
+  s += b(on && CanWithdraw(g.econ));
+  s += ",trip=";
+  s += b(on && CanTrip(g.econ, st, MayTripId(g.current)));
+  s += ",block=";
+  s += b(on && CanBlock(g.econ, st, MayBlockId(g.current), AttacksForBlock()));
+  s += ",armed=";
+  s += b(on && st.takedown == Takedown::Trip);
+  s += ",stacks=" + std::to_string(st.block_stacks) + "}";
+  return s;
+}
+
 
 // --- dice panel and hover card --------------------------------------------------------------------
 uint32_t DiceMs() { return g.dice_on ? GetTickCount() - g.dice_t0 : 0; }
@@ -686,14 +1184,15 @@ void TakeRolls() {
     if (e.kind == engine::RollEvent::Save && g.save_sounds) sound = true, sound_good = e.success;
     if (!g.running || !Contains(g.in, e.actor)) continue;
     if (e.kind == engine::RollEvent::Attack && e.actor == g.current) g.econ.Swing();
-    Log("tbc: roll: %s %s d20 %d total %d needs %d -> %s", Who(e.actor).c_str(),
-        e.kind == engine::RollEvent::Attack ? ("attacks " + Who(e.target)).c_str() : "saves", e.roll, e.total, e.needs,
+    if (e.kind == engine::RollEvent::Attack && e.actor == g.aoo.reactor) g.aoo_swing = true;
+    Log("tbc: roll: %s %s d20 %d total %d needs %d (site %d) -> %s", Who(e.actor).c_str(),
+        e.kind == engine::RollEvent::Attack ? ("attacks " + Who(e.target)).c_str() : "saves", e.roll, e.total, e.needs, e.site,
         e.success ? (e.kind == engine::RollEvent::Attack ? "hit" : "saved") : (e.kind == engine::RollEvent::Attack ? "miss" : "failed"));
     {
       char b[128];
       if (e.kind == engine::RollEvent::Attack)
         std::snprintf(b, sizeof b, " attacks %s: d20 %d, total %d, needs %d -> %s", Name(e.target).c_str(), e.roll, e.total,
-                      e.needs, e.success ? "HIT" : "miss");
+                      e.needs, e.outcome == 1 ? "hit, BLOCKED" : e.outcome == 2 ? "hit, takedown (no damage)" : e.success ? "HIT" : "miss");
       else
         std::snprintf(b, sizeof b, " saving throw: d20 %d, total %d -> %s", e.roll, e.total, e.success ? "SAVED" : "failed");
       CLog("ROLL", Name(e.actor) + b);
@@ -733,7 +1232,8 @@ void FillDice(HudView* v) {
   if (e.kind == engine::RollEvent::Attack) {
     std::snprintf(b, sizeof b, "%d %s %d = %d     needs %d", e.roll, mod < 0 ? "-" : "+", mod < 0 ? -mod : mod, e.total,
                   e.needs);
-    v->dice_result = e.roll == 20 ? "Critical hit!" : e.roll == 1 ? "Critical miss" : e.success ? "Hit" : "Miss";
+    v->dice_result = e.outcome == 1 ? "Blocked!" : e.outcome == 2 ? (e.roll == 20 ? "Critical hit! Takedown" : "Hit: takedown")
+                     : e.roll == 20 ? "Critical hit!" : e.roll == 1 ? "Critical miss" : e.success ? "Hit" : "Miss";
   } else {
     std::snprintf(b, sizeof b, "%d %s %d = %d", e.roll, mod < 0 ? "-" : "+", mod < 0 ? -mod : mod, e.total);
     v->dice_result = e.success ? "Saved" : "Failed";
@@ -816,6 +1316,7 @@ void FillHover(HoverView* v) {
 void UpdateStatusHud(engine::Screen scr) {
   if (!g.hud) return;
   std::string code = "if pstfHudGuard then pstfHudGuard() end";
+  if (!g.running) code += g.maneuvers ? " if pstfMv then pstfMv.on = true end" : " if pstfMv then pstfMv.on = false end";
   const bool world = scr == engine::Screen::World;
   if (world || scr == engine::Screen::Other) {
     const uint32_t ms = GetTickCount();
@@ -877,6 +1378,7 @@ void DrawDie() {
 
 void DrawOverlay() {
   DrawMovementLine();
+  DrawManeuverFx();
   DrawDie();
 }
 
@@ -966,7 +1468,7 @@ void UpdateHud(uint32_t now) {
     bar = " pstfBarCollect()";
   }
   if (!v.party_turn) bar = " pstfBar = {}";
-  const std::string code = BuildHudLua(v) + bar +
+  const std::string code = BuildHudLua(v) + " " + ManeuverLua() + bar +
                            " pstfTbcLayout()";
   const std::string err = engine::LuaDoString(code.c_str());
   if (!err.empty()) {
@@ -1078,6 +1580,16 @@ void OnTick(uint64_t frame) {
     CLog("ACTION", Name(cur) + " " + ActionName(s.action) + (s.has_path ? " (walking)" : ""));
     g.clog_action = s.action;
   }
+  if (g.maneuvers) ApplyTrips();
+  if (ReactionTick(dt)) {
+    // An attack of opportunity: the mover waits at the edge of the reach, its turn does not run.
+    if (g.rolls) TakeRolls();
+    LogHpChanges();
+    FlushSounds();
+    UpdateHud(now);
+    return;
+  }
+  DirectedAi(cur, s);  // before the economy sees its attack: a run, block or takedown comes first
   // The camera is not here: it follows the DRAWN position on every loop iteration (CameraTick), not the
   // position this tick recorded.
   g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
@@ -1091,6 +1603,17 @@ void OnTick(uint64_t frame) {
     engine::SetNoInterrupt(cur);
   }
   g.hold_current = st.hold_walk;
+  if (g.maneuvers) {
+    RunDust(cur, moved);
+    CheckOpportunity(cur, s);
+    if (g.aoo.Active()) {
+      g.hold_current = true;
+      FlushSounds();
+      if (g.rolls) TakeRolls();
+      UpdateHud(now);
+      return;
+    }
+  }
   if (st.nudge) {
     // Its own script picked nothing (many creatures only wait or wander): the engine's attack on the
     // nearest enemy it can see, as a real-time fight would have it retaliate.
@@ -1182,6 +1705,7 @@ void OnTick(uint64_t frame) {
   LockSelection();
   if (g.rolls) TakeRolls();
   LogHpChanges();
+  FlushSounds();
   UpdateHud(now);
 }
 
@@ -1585,6 +2109,63 @@ int __cdecl LuaBarSlots(engine::LuaState* L) {
   return 1;
 }
 
+// PSTF_Maneuver(name) -> true if the current creature took it: 'run', 'withdraw', 'block', 'trip' (toggles),
+// 'knockdown'. The hotbar's maneuver buttons call it.
+int __cdecl LuaManeuver(engine::LuaState* L) {
+  const std::string n = engine::LuaStringArg(L, 1);
+  const AiMove m = n == "run" ? AiMove::Run : n == "withdraw" ? AiMove::Withdraw : n == "block" ? AiMove::Block
+                   : n == "trip" ? AiMove::Trip : n == "knockdown" ? AiMove::Knockdown : AiMove::None;
+  const bool ok = UseManeuver(g.current, m);
+  Log("lua: PSTF_Maneuver(%s) -> %d", n.c_str(), ok ? 1 : 0);
+  engine::LuaPushBool(L, ok);
+  return 1;
+}
+// PSTF_Stance(id) -> "ran withdrawn stacks takedown prone reaction_used" (0/1, stacks, 0 none 1 trip 2 knockdown).
+int __cdecl LuaStance(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, g.current));
+  const auto it = g.stance.find(id);
+  const Stance s = it == g.stance.end() ? Stance{} : it->second;
+  char b[64];
+  std::snprintf(b, sizeof b, "%d %d %d %d %d %d", s.ran, s.withdrawn, s.block_stacks, static_cast<int>(s.takedown), s.prone,
+                s.reaction_used);
+  Log("lua: PSTF_Stance(%X) -> %s", static_cast<unsigned>(id), b);
+  engine::LuaPushString(L, b);
+  return 1;
+}
+// PSTF_MoveStats() -> "runs withdraws blocks block_tries blocked takedowns takedown_hits prone aoo aoo_swung ai_moves stood".
+int __cdecl LuaMoveStats(engine::LuaState* L) {
+  const auto& m = g.ms;
+  char b[128];
+  std::snprintf(b, sizeof b, "%d %d %d %d %d %d %d %d %d %d %d %d", m.runs, m.withdraws, m.blocks, m.block_tries, m.blocked,
+                m.takedowns, m.takedown_hits, m.prone, m.aoo, m.aoo_swung, m.ai_moves, m.stood);
+  engine::LuaPushString(L, b);
+  return 1;
+}
+// PSTF_State(id) -> general state of its derived stats (STATE.IDS bits), -1 none.
+int __cdecl LuaSpriteState(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const int64_t s = engine::SpriteState(id);
+  Log("lua: PSTF_State(%X) -> %llX", static_cast<unsigned>(id), static_cast<long long>(s));
+  engine::LuaPushNumber(L, static_cast<double>(s));
+  return 1;
+}
+// PSTF_Aoo() -> reactor id, mover id of the attack of opportunity in progress (-1, -1 none).
+int __cdecl LuaAoo(engine::LuaState* L) {
+  engine::LuaPushNumber(L, g.aoo.reactor);
+  engine::LuaPushNumber(L, g.aoo.mover);
+  return 2;
+}
+// PSTF_Class(id) -> CLASS.IDS, SPECIFIC.IDS of a creature (-1 unknown).
+int __cdecl LuaClass(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  uint8_t c = 0, s = 0;
+  const bool ok = engine::SpriteClass(id, &c, &s);
+  Log("lua: PSTF_Class(%X) -> %d %d", static_cast<unsigned>(id), ok ? c : -1, ok ? s : -1);
+  engine::LuaPushNumber(L, ok ? c : -1);
+  engine::LuaPushNumber(L, ok ? s : -1);
+  return 2;
+}
+
 // PSTF_CenterOn(id): the initiative card click: the camera centres on that combatant (where it is drawn).
 int __cdecl LuaCenterOn(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
@@ -1713,6 +2294,8 @@ bool InstallTbc(const IniMap& ini) {
   g.sight_radius = IniInt(ini, "tbc.sight_radius", g.sight_radius);
   g.select_voice = IniBool(ini, "tbc.select_voice", true);
   g.no_bored = IniBool(ini, "tbc.no_bored", true);
+  g.maneuvers = IniBool(ini, "tbc.maneuvers", true);
+  g.opportunity = IniBool(ini, "tbc.opportunity_attacks", true);
   g.party_max = IniInt(ini, "party.size", 6) >= 8 && IniBool(ini, "party.enabled", false) ? 8 : 6;
   {
     const int feet = IniInt(ini, "tbc.move_feet", 31);
@@ -1809,6 +2392,23 @@ bool InstallTbc(const IniMap& ini) {
       Log("tbc: HUD functions differ from the manifest; turn-based HUD off (combat still on)");
     }
   }
+  if (g.maneuvers) {
+    // Trip, knockdown and block live in the engine's melee swing; prone is the engine's op 39.
+    if (!g.rolls) g.rolls = engine::InstallRollHooks();
+    if (g.rolls && engine::EffectsAvailable()) {
+      engine::SetMeleeHitFilter(&MeleeThac0, &MeleeOutcome);
+    } else {
+      Log("tbc: maneuver hooks differ from the manifest (rolls %d, effects %d); maneuvers off", g.rolls ? 1 : 0,
+          engine::EffectsAvailable() ? 1 : 0);
+      g.maneuvers = false;
+    }
+  }
+  dev::AddLuaFunction("PSTF_Maneuver", &LuaManeuver);
+  dev::AddLuaFunction("PSTF_Stance", &LuaStance);
+  dev::AddLuaFunction("PSTF_Aoo", &LuaAoo);
+  dev::AddLuaFunction("PSTF_State", &LuaSpriteState);
+  dev::AddLuaFunction("PSTF_MoveStats", &LuaMoveStats);
+  dev::AddLuaFunction("PSTF_Class", &LuaClass);
   dev::AddLuaFunction("PSTF_TbcState", &LuaState);
   dev::AddLuaFunction("PSTF_EndTurn", &LuaEndTurn);
   dev::AddLuaFunction("PSTF_MakeEnemyNearest", &LuaMakeEnemyNearest);
@@ -1846,10 +2446,11 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_PreviewPts", &LuaPreviewPts);
   dev::AddLuaFunction("PSTF_EnginePath", &LuaEnginePath);
   Log("tbc: installed (ProcessAI slot, 2 walk calls, tick); radii %d/%d/%d, end turn key %X%s, "
-      "move %.0f ft, hud %s, camera %s",
+      "move %.0f ft, hud %s, camera %s, maneuvers %s",
       g.radii.start, g.radii.join, g.radii.leave, g.end_turn_vk, g.auto_party ? ", auto party" : "",
       g.move_feet, g.hud ? "on" : "off",
-      !g.camera ? "off" : (!g.cam_pre ? "tick handler" : (g.cam_smooth ? "eased in draw pass" : "tick rate")));
+      !g.camera ? "off" : (!g.cam_pre ? "tick handler" : (g.cam_smooth ? "eased in draw pass" : "tick rate")),
+      !g.maneuvers ? "off" : g.opportunity ? "on, attacks of opportunity" : "on");
   return true;
 }
 

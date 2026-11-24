@@ -196,11 +196,19 @@ pstfBarPage = 1
 pstfBarOwner = nil
 pstfBarRows = {{'Weapons', 'ACTIONBAR_STATE_WEAPONS'}, {'Spells', 'ACTIONBAR_STATE_SPELLS'},
 	{'Items', 'ACTIONBAR_STATE_ITEMS'}, {'Abilities', 'ACTIONBAR_STATE_SPECIAL_ABILITES'}}
+-- Turn-based maneuvers (maneuvers.h): usable states come from C++ as pstfMv every frame of a fight.
+-- Block wears the icon of the engine's own Guard button, which the hotbar leaves out (Block replaces it).
+pstfMv = pstfMv or {}
+pstfGuardIcon = pstfGuardIcon or nil
 pstfMoves = {
-	{icon = 'PFSPRINT', tip = 'Sprint: give up your action for a second move. (Turn-based; coming soon)'},
-	{icon = 'PFWITHDR', tip = 'Withdraw: step away without provoking attacks. (Turn-based; coming soon)'},
-	{icon = 'PFTRIP', tip = 'Trip: knock the target prone with your first attack. (Turn-based; coming soon)'},
+	{id = 'run', icon = 'PFSPRINT', tip = 'Run: uses your action; adds your full movement again (31/31 becomes 62/31).'},
+	{id = 'withdraw', icon = 'PFWITHDR', tip = 'Withdraw: uses your action; halves your remaining movement. You walk away without provoking attacks of opportunity.'},
+	{id = 'trip', icon = 'PFTRIP', tip = 'Trip (fighters): your first melee swing this round is at -2. A hit does no damage: the target saves vs. death or falls prone until its next turn, then loses its action standing up. Click again to cancel.'},
+	{id = 'block', icon = 'PFTRIP', guard = true, tip = 'Block (fighters, not Morte): uses your action. Your attacks left this round become blocks: each melee hit on you until your next turn rolls d20 + AC 4 against your THAC0, and must also match the attack roll, to stop it.'},
 }
+local function isGuard(tip)
+	return type(tip) == 'string' and (string.find(tip, 'Guard') ~= nil or string.find(tip, 'Protect') ~= nil)
+end
 local function iconSize(icon)
 	if PSTF_IconSize then
 		local w, h = PSTF_IconSize(icon)
@@ -209,11 +217,7 @@ local function iconSize(icon)
 	return 32, 32
 end
 function pstfBarCollect()
-	local bar = {}
-	for _, m in ipairs(pstfMoves) do
-		local w, h = iconSize(m.icon)
-		table.insert(bar, {row = 0, move = true, icon = m.icon, on = false, tip = m.tip, w = w, h = h})
-	end
+	local bar, engineBar = {}, {}
 	local ba = game:GetButtonArray()
 	for r, row in ipairs(pstfBarRows) do
 		local st = const and const[row[2]]
@@ -222,13 +226,26 @@ function pstfBarCollect()
 			local i = 0
 			for icon, on in string.gmatch(PSTF_BarSlots(), '([^:;]*):(%d);') do
 				if icon ~= '' then
-					local w, h = iconSize(icon)
-					table.insert(bar, {row = r, state = st, slot = i, icon = icon, on = on == '1', tip = actionBarTooltip and actionBarTooltip[i], w = w, h = h})
+					local tip = actionBarTooltip and actionBarTooltip[i]
+					if pstfMv.on and isGuard(tip) then
+						pstfGuardIcon = icon  -- Block takes its place and its icon
+					else
+						local w, h = iconSize(icon)
+						table.insert(engineBar, {row = r, state = st, slot = i, icon = icon, on = on == '1', tip = tip, w = w, h = h})
+					end
 				end
 				i = i + 1
 			end
 		end
 	end
+	if pstfMv.on then
+		for _, m in ipairs(pstfMoves) do
+			local icon = m.guard and pstfGuardIcon or m.icon
+			local w, h = iconSize(icon)
+			table.insert(bar, {row = 0, move = true, id = m.id, icon = icon, on = true, tip = m.tip, w = w, h = h})
+		end
+	end
+	for _, e in ipairs(engineBar) do table.insert(bar, e) end
 	-- a new owner (the next party member's turn) starts on the first page
 	local owner = pstfTbc.on and pstfTbc.slot or -1
 	if owner ~= pstfBarOwner then pstfBarPage = 1 pstfBarOwner = owner end
@@ -255,16 +272,27 @@ function pstfBarEntry(k)
 end
 function pstfBarOn(k) return pstfBarEntry(k) ~= nil end
 function pstfBarIcon(k) local e = pstfBarEntry(k) return e and e.icon or '' end
-function pstfBarTip(k) local e = pstfBarEntry(k) return e and e.tip or nil end
+function pstfBarTip(k)
+	local e = pstfBarEntry(k)
+	if not e then return nil end
+	if e.move and e.id == 'trip' and pstfMv.armed then return 'Trip armed: attack a foe (click again to cancel)' end
+	if e.move and e.id == 'block' and (pstfMv.stacks or 0) > 0 then return 'Blocking: ' .. pstfMv.stacks .. ' block(s) left' end
+	return e.tip
+end
 function pstfBarUsable(k)
 	local e = pstfBarEntry(k)
 	if e == nil or not e.on then return false end
+	if e.move then return pstfTbc.on and pstfMv[e.id] == true end
 	if pstfTbc.on then return not pstfTbc.used end
 	return true
 end
 function pstfBarClick(k)
 	local e = pstfBarEntry(k)
-	if not e or not e.on or e.move then return end
+	if not e or not e.on then return end
+	if e.move then
+		if pstfTbc.on and pstfMv[e.id] then PSTF_Maneuver(e.id) end
+		return
+	end
 	game:GetButtonArray():SetState(e.state)
 	game:GetButtonArray():OnLButtonPressed(e.slot)
 end

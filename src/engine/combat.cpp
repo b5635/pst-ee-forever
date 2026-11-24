@@ -553,19 +553,57 @@ HitFn g_hit = nullptr;
 FeedBackFn g_feedback = nullptr;
 CheckSaveFn g_check_save = nullptr;
 int32_t g_hit_target = -1;
+uint8_t g_hit_site = 0;
 std::vector<RollEvent> g_rolls;
 
 int32_t IdOf(void* sprite) {
   return sprite ? R<int32_t>(reinterpret_cast<uint64_t>(sprite) + sym::kOffSpriteId) : -1;
 }
 
-uint8_t __fastcall HookHit(void* self, void* target, void* item, int ability, int* crit, int a6) {
+uint8_t HookHit(uint8_t site, void* self, void* target, void* item, int ability, int* crit, int a6) {
   const int32_t prev = g_hit_target;
+  const uint8_t prev_site = g_hit_site;
   g_hit_target = IdOf(target);
+  g_hit_site = site;
   const uint8_t r = g_hit(self, target, item, ability, crit, a6);
   g_hit_target = prev;
+  g_hit_site = prev_site;
   return r;
 }
+
+MeleeThac0Fn g_melee_thac0 = nullptr;
+MeleeOutcomeFn g_melee_outcome = nullptr;
+// Swing's melee Hit call (sym::kMeleeHitSites): a takedown's THAC0 for this one roll, then blocked or tripping
+// hits do no damage (Swing goes down its miss branch, lin 4EAC10 L560-561).
+uint8_t HookHitFiltered(uint8_t site, void* self, void* target, void* item, int ability, int* crit, int a6) {
+  const bool melee = (sym::kMeleeHitSites >> site) & 1;
+  if (!melee || (!g_melee_thac0 && !g_melee_outcome)) return HookHit(site, self, target, item, ability, crit, a6);
+  const int32_t a = IdOf(self), t = IdOf(target);
+  const uint64_t p = reinterpret_cast<uint64_t>(self);
+  const int add = g_melee_thac0 && p ? g_melee_thac0(a, t) : 0;
+  uint64_t thac0 = 0;
+  int16_t before = 0;
+  if (add && PlausiblePtr(p)) {
+    thac0 = Stats(p) + sym::kOffStatThac0;
+    before = R<int16_t>(thac0);
+    W<int16_t>(thac0, static_cast<int16_t>(before + add));
+  }
+  const size_t n0 = g_rolls.size();
+  uint8_t r = HookHit(site, self, target, item, ability, crit, a6);
+  if (thac0) W<int16_t>(thac0, before);
+  RollEvent* e = g_rolls.size() > n0 ? &g_rolls.back() : nullptr;
+  const int roll = e && e->actor == a ? e->roll : 0;
+  const uint8_t out = g_melee_outcome ? g_melee_outcome(a, t, r != 0, roll) : 0;
+  if (out && r) {
+    r = 0;
+    if (crit) *crit = 0;
+    if (e && e->actor == a) e->success = false, e->outcome = out;
+  }
+  return r;
+}
+uint8_t __fastcall HookHit1(void* s, void* t, void* i, int ab, int* c, int a6) { return HookHitFiltered(1, s, t, i, ab, c, a6); }
+uint8_t __fastcall HookHit2(void* s, void* t, void* i, int ab, int* c, int a6) { return HookHitFiltered(2, s, t, i, ab, c, a6); }
+uint8_t __fastcall HookHit3(void* s, void* t, void* i, int ab, int* c, int a6) { return HookHitFiltered(3, s, t, i, ab, c, a6); }
 
 void __fastcall HookFeedBack4(void* self, uint32_t type, int total, int hit, uint32_t roll, int a6, int a7, void* str) {
   if (type == 4 && g_rolls.size() < 64) {
@@ -576,6 +614,7 @@ void __fastcall HookFeedBack4(void* self, uint32_t type, int total, int hit, uin
     e.roll = static_cast<int>(roll);
     e.total = static_cast<int16_t>(total);
     e.success = hit != 0;
+    e.site = g_hit_site;
     CombatStats a, t;
     if (GetCombatStats(e.actor, &a) && GetCombatStats(e.target, &t)) e.needs = a.thac0 - t.ac;
     g_rolls.push_back(e);
@@ -636,7 +675,10 @@ bool InstallRollHooks() {
   if (fb != sym::kVaFeedBack) return false;
   g_feedback = reinterpret_cast<FeedBackFn>(fb);
   for (uint32_t site : {sym::kRvaSwingHit1, sym::kRvaSwingHit2, sym::kRvaSwingHit3}) {
-    const uint64_t h = RedirectCall(*Find(site), reinterpret_cast<void*>(&HookHit));
+    void* hook = site == sym::kRvaSwingHit1   ? reinterpret_cast<void*>(&HookHit1)
+                 : site == sym::kRvaSwingHit2 ? reinterpret_cast<void*>(&HookHit2)
+                                              : reinterpret_cast<void*>(&HookHit3);
+    const uint64_t h = RedirectCall(*Find(site), hook);
     if (h != sym::kVaHit) return false;
     g_hit = reinterpret_cast<HitFn>(h);
   }
@@ -646,6 +688,83 @@ bool InstallRollHooks() {
   g_check_save = reinterpret_cast<CheckSaveFn>(cs);
   Log("combat: roll hooks installed (Hit, FeedBack 4, CheckSave)");
   return true;
+}
+
+void SetMeleeHitFilter(MeleeThac0Fn thac0_add, MeleeOutcomeFn outcome) {
+  g_melee_thac0 = thac0_add;
+  g_melee_outcome = outcome;
+}
+
+// --- effects -------------------------------------------------------------------------------------
+namespace {
+#pragma pack(push, 1)
+struct ItemEffect {  // Item_effect_st (ITM/SPL feature block v1, 0x30 bytes)
+  uint16_t opcode;
+  uint8_t target, power;
+  uint32_t param1, param2;
+  uint8_t timing, dispel;
+  uint32_t duration;
+  uint8_t prob1, prob2;
+  char res[8];
+  uint32_t dice_count, dice_sides, save_type;
+  int32_t save_bonus;
+  uint32_t special;
+};
+#pragma pack(pop)
+static_assert(sizeof(ItemEffect) == 0x30, "Item_effect_st is 0x30 bytes");
+struct EnginePoint {
+  int32_t x, y;
+};
+using DecodeEffectFn = void*(__fastcall*)(ItemEffect*, const EnginePoint*, int, const EnginePoint*, int);
+using AddEffectFn = void(__fastcall*)(void* sprite, void* effect, uint8_t list, int no_save, int immediate);
+}  // namespace
+
+bool EffectsAvailable() {
+  static const int ok = AllOk({sym::kRvaDecodeEffect, sym::kRvaAddEffectCall}) ? 1 : 0;
+  return ok != 0;
+}
+
+bool ApplyEffect(int32_t target, int32_t source, const EffectSpec& s) {
+  if (!EffectsAvailable()) return false;
+  const uint64_t p = LookupSprite(target);
+  if (!p || !PlausiblePtr(p)) return false;
+  const uint64_t vt = R<uint64_t>(p);
+  if (!PlausiblePtr(vt)) return false;
+  ItemEffect fx{};
+  fx.opcode = s.opcode;
+  fx.target = 1;  // self (the creature it is added to)
+  fx.param1 = s.param1;
+  fx.param2 = s.param2;
+  fx.timing = s.timing;
+  fx.duration = s.duration;
+  fx.prob1 = 100;  // CGameEffect::ClearItemEffect: always
+  fx.save_type = s.save_type;
+  fx.save_bonus = s.save_bonus;
+  fx.special = s.special;
+  const uint64_t ps = source >= 0 ? LookupSprite(source) : 0;
+  const EnginePoint from = ps ? EnginePoint{R<int32_t>(ps + sym::kOffSpritePos), R<int32_t>(ps + sym::kOffSpritePos + 4)}
+                              : EnginePoint{-1, -1};
+  const EnginePoint to{R<int32_t>(p + sym::kOffSpritePos), R<int32_t>(p + sym::kOffSpritePos + 4)};
+  void* eff = reinterpret_cast<DecodeEffectFn>(sym::kImageBase + sym::kRvaDecodeEffect)(&fx, &from, source, &to, -1);
+  if (!eff) return false;
+  reinterpret_cast<AddEffectFn>(R<uint64_t>(vt + sym::kVtblAddEffect))(reinterpret_cast<void*>(p), eff,
+                                                                         sym::kEffectListTimed, 0, 1);
+  return true;
+}
+
+bool SpriteClass(int32_t id, uint8_t* cls, uint8_t* specific) {
+  const uint64_t p = LookupSprite(id);
+  if (!p) return false;
+  *cls = R<uint8_t>(p + sym::kOffSpriteClass);
+  *specific = R<uint8_t>(p + sym::kOffSpriteSpecific);
+  return true;
+}
+
+// CDerivedStats starts with the general state (CGameEffectSleep::ApplyEffect lin 223AC0 L35: sprite dword 1018
+// = +0xFE8 = kOffSpriteStatsA, |= 0x20).
+int64_t SpriteState(int32_t id) {
+  const uint64_t p = LookupSprite(id);
+  return p ? static_cast<int64_t>(R<uint32_t>(Stats(p))) : -1;
 }
 
 std::vector<RollEvent> TakeRollEvents() {

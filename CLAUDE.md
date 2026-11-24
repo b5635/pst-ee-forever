@@ -222,5 +222,14 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `party8_load.lua` (`-Until 'party8_load: ok|TEST FAIL'`), `party8_formation.lua` (same env), `party8_fight.lua`
   (env `PSTF_TEST_TICK=1; PSTF_TBC_AUTOPARTY=1`, `-Timeout 300`). Probes: `PSTF_Party/PartyNames/Trigger/CanSave/
   Formation/UnselectAll`. `CheckSymbol` accepts bytes the party layout retargeted (manifest rewrite).
+- Maneuvers (`[tbc] maneuvers`, `opportunity_attacks`; rules in `src/modules/tbc/maneuvers.h`, GemRB fork port): Run,
+  Withdraw (party side only), Block, Trip/Knockdown on the hotbar (Block wears the engine's Guard icon; Guard is left out),
+  directed AI (`DirectedAi`: run to close, block when hurt and surrounded, 20 % takedowns), attacks of opportunity.
+  Melee swings are Swing's Hit call **site 3** on Windows (Ignus' fire = site 1; roll log `(site N)`): the THAC0 / outcome
+  filter sits there. Prone = engine op 39 (save vs death) via `engine::ApplyEffect` (DecodeEffect + vtable AddEffect),
+  stood up with op 337/2 at its next turn. Test: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\tbc_moves.lua
+  -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_moves: ok|TEST FAIL' -Close -Timeout 400`. Probes: `PSTF_Maneuver(name)`,
+  `PSTF_Stance(id)`, `PSTF_Aoo()`, `PSTF_Class(id)` (CLASS/SPECIFIC.IDS), `PSTF_MoveStats()`; combat.log `MOVE`/`AOO`/`AI` lines.
+  Sounds `data/override/PFSND*.WAV` (Ogg in WAV, from the GemRB fork), played with `Infinity_PlaySound`.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

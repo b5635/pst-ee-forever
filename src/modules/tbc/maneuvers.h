@@ -1,0 +1,214 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Turn-based combat maneuvers (pure, unit-tested): Run, Withdraw, Block, Trip/Knockdown and attacks of
+// opportunity. Rules ported from the GemRB fork (D:\gemrb gemrb/core/TurnBasedCombat/CombatDirector.cpp
+// ApplyRun/ApplyWithdraw/ApplyBlock/TryBlockHit/ResolveTakedown/ThreatsTo/ChooseAIManeuvers); the engine
+// still makes every roll that a script can see (the attack roll, the save vs death), we only decide which
+// maneuver runs and what a blocked or tripping hit does.
+//
+//   Run       spends the action; remaining movement += max movement (31/31 -> 62/31, 0/31 -> 31/31).
+//   Withdraw  the party side only (enemies never withdraw); spends the action; remaining movement halves; walks (walk animation and speed); no attacks
+//             of opportunity until its next turn. Refused with no movement left (a wasted action).
+//   Block     fighters (not the Nameless One, not Morte); spends the action; the attacks left this round
+//             become block stacks until its next turn. Each melee hit on it uses one stack: a d20 with its
+//             own THAC0 vs AC 4 (1 fails, 20 succeeds) that also comes up at least the attack's d20 stops it.
+//   Trip      fighters (not the Nameless One): the first melee swing of the attack round gets -2 to hit
+//             (THAC0 + 2); a hit does no damage, the target saves vs death or falls prone (op 39) until
+//             its next turn, when it stands up and loses that turn's action.
+//   Knockdown the same for AI creatures outside the party with THAC0 15 or better, without the -2.
+//   AoO       a creature walking out of an enemy's melee reach (the engine's own Attack range test, in
+//             search-map cells) without Withdraw gets one swing from it. One per reactor until its own
+//             next turn, a single swing whatever its APR; prone (asleep) reactors do not react.
+#pragma once
+#include <cstdint>
+
+#include "modules/tbc/economy.h"
+
+namespace pstf::tbc {
+
+enum class Takedown : uint8_t { None, Trip, Knockdown };
+
+// What one creature carries from its own turn start to the next one.
+struct Stance {
+  bool ran = false;
+  bool withdrawn = false;  // immune to attacks of opportunity; walks
+  int block_stacks = 0;
+  Takedown takedown = Takedown::None;  // armed for the first swing of the next attack round
+  bool prone = false;                  // knocked down (op 39 applied by us)
+  bool reaction_used = false;          // its attack of opportunity until its next turn
+};
+
+// A new turn of its own: budgets and stances go, a prone creature is still prone (it stands up now).
+inline void NewTurn(Stance* s) {
+  const bool prone = s->prone;
+  *s = Stance{};
+  s->prone = prone;
+}
+
+// CLASS.IDS (PST:EE): FIGHTER 2, PALADIN 6, FIGHTER_MAGE 7, FIGHTER_CLERIC 8, FIGHTER_THIEF 9,
+// FIGHTER_MAGE_THIEF 10, RANGER 12, FIGHTER_DRUID 16, FIGHTER_MAGE_CLERIC 17.
+inline bool FighterClass(uint8_t cls) {
+  switch (cls) {
+    case 2: case 6: case 7: case 8: case 9: case 10: case 12: case 16: case 17:
+      return true;
+    default:
+      return false;
+  }
+}
+// SPECIFIC.IDS: NAMELESS_ONE 2 (always counts fighter levels: GemRB keeps him out), MORTE 9.
+constexpr uint8_t kSpecificNameless = 2, kSpecificMorte = 9;
+inline bool MayTrip(uint8_t cls, uint8_t specific) { return FighterClass(cls) && specific != kSpecificNameless; }
+inline bool MayBlock(uint8_t cls, uint8_t specific) { return MayTrip(cls, specific) && specific != kSpecificMorte; }
+constexpr int kKnockdownThac0 = 15;
+inline bool MayKnockdown(bool party, int thac0) { return !party && thac0 <= kKnockdownThac0; }
+
+// The action is free: not used and nothing running.
+inline bool ActionFree(const Economy& e) { return !e.action_used && !e.acting; }
+
+inline bool CanRun(const Economy& e) { return ActionFree(e); }
+inline bool ApplyRun(Economy* e, Stance* s) {
+  if (!CanRun(*e)) return false;
+  e->move_ft += e->max_ft;
+  e->action_used = true;
+  s->ran = true;
+  return true;
+}
+
+inline bool CanWithdraw(const Economy& e) { return ActionFree(e) && e.MoveLeft(); }
+inline bool ApplyWithdraw(Economy* e, Stance* s) {
+  if (!CanWithdraw(*e)) return false;
+  e->move_ft /= 2.0;
+  e->action_used = true;
+  s->withdrawn = true;
+  return true;
+}
+
+// attacks_left: the swings this attack round would have (Economy::want_swings; 1 when unknown).
+inline bool CanBlock(const Economy& e, const Stance& s, bool may_block, int attacks_left) {
+  return may_block && ActionFree(e) && !s.prone && attacks_left > 0;
+}
+inline bool ApplyBlock(Economy* e, Stance* s, bool may_block, int attacks_left) {
+  if (!CanBlock(*e, *s, may_block, attacks_left)) return false;
+  s->block_stacks += attacks_left;
+  s->takedown = Takedown::None;
+  e->action_used = true;
+  return true;
+}
+
+// Trip is armed before the attack (clicking it again disarms).
+inline bool CanTrip(const Economy& e, const Stance& s, bool may_trip) {
+  return may_trip && !s.prone && (s.takedown == Takedown::Trip || (ActionFree(e) && s.takedown == Takedown::None));
+}
+inline bool ToggleTrip(const Economy& e, Stance* s, bool may_trip) {
+  if (!CanTrip(e, *s, may_trip)) return false;
+  s->takedown = s->takedown == Takedown::Trip ? Takedown::None : Takedown::Trip;
+  return true;
+}
+inline bool ArmKnockdown(const Economy& e, Stance* s, bool may_knockdown) {
+  if (!may_knockdown || s->prone || !ActionFree(e) || s->takedown != Takedown::None) return false;
+  s->takedown = Takedown::Knockdown;
+  return true;
+}
+// THAC0 added for the takedown swing (THAC0 rules: higher is worse; trip is -2 to hit).
+inline int TakedownThac0(Takedown k) { return k == Takedown::Trip ? 2 : 0; }
+inline const char* TakedownName(Takedown k) { return k == Takedown::Knockdown ? "Knockdown" : "Trip"; }
+
+// GemRB TryBlockHit (THAC0 rules, IsReverseToHit): the block d20 + AC 4 must beat the defender's
+// THAC0 (natural 1 fails, natural 20 succeeds), and come up at least the attacker's d20.
+constexpr int kBlockAc = 4;
+inline bool BlockRollHits(int block_roll, int defender_thac0) {
+  if (block_roll <= 1) return false;
+  if (block_roll >= 20) return true;
+  return block_roll + kBlockAc > defender_thac0;
+}
+inline bool BlockStops(int block_roll, int defender_thac0, int attack_roll) {
+  return BlockRollHits(block_roll, defender_thac0) && block_roll >= attack_roll;
+}
+
+// --- melee reach: CGameSprite::Attack (lin 4ED490 L304-353, win twin of the same) -----------------------
+// Cells are search-map squares (16 x 12 px). range = the weapon ability's range field + 1 (melee 1 -> 2),
+// personal spaces of both: reach = range + ((ps_a - 1) >> 1) + ((ps_b - 1) >> 1) - 1 cells, in reach when
+// reach^2 >= dx^2 + dy^2 (cell deltas of x/16, y/12).
+constexpr int kMeleeRangeField = 1;
+inline int ReachCells(int range_field, int ps_a, int ps_b) {
+  return range_field + 1 + ((ps_a - 1) >> 1) + ((ps_b - 1) >> 1) - 1;
+}
+inline int CellDist2(int ax, int ay, int bx, int by) {
+  const int dx = ax / 16 - bx / 16, dy = ay / 12 - by / 12;
+  return dx * dx + dy * dy;
+}
+inline bool InReach(int ax, int ay, int bx, int by, int reach) { return reach * reach >= CellDist2(ax, ay, bx, by); }
+
+// Attack of opportunity on this frame: the mover was in the reactor's reach and is not now.
+inline bool ProvokesNow(bool was_in_reach, bool in_reach, bool mover_withdrawn, const Stance& reactor) {
+  return was_in_reach && !in_reach && !mover_withdrawn && !reactor.reaction_used && !reactor.prone;
+}
+
+// A reactor in one of these states cannot swing (STATE.IDS: sleeping, panic, stunned, helpless, frozen, stone,
+// dead), as GemRB ThreatsTo skips helpless, sleeping and panicked reactors.
+constexpr uint32_t kNoReactionStates = 0x1 | 0x4 | 0x8 | 0x20 | 0x40 | 0x80 | 0x800;
+inline bool CanReact(int64_t state) { return state >= 0 && (static_cast<uint32_t>(state) & kNoReactionStates) == 0; }
+
+// The AoO swing in progress: the reactor attacks once, then gives the turn back.
+struct Reaction {
+  static constexpr uint32_t kTailTicks = 10;   // after its swing, the animation finishes
+  static constexpr uint32_t kCapTicks = 60;    // no swing in 4 s (it could not attack): give up
+  int32_t reactor = -1, mover = -1;
+  uint32_t ticks = 0, since_swing = 0;
+  bool swung = false;
+  bool Active() const { return reactor != -1; }
+  // Per world tick; true = over.
+  bool Feed(uint32_t dt, bool swing_now) {
+    ticks += dt;
+    if (swing_now) swung = true, since_swing = 0;
+    else if (swung) since_swing += dt;
+    return (swung && since_swing >= kTailTicks) || ticks >= kCapTicks;
+  }
+};
+
+// --- directed AI: which maneuver an AI creature takes this turn (GemRB ChooseAIManeuvers, extended) ------
+enum class AiMove : uint8_t { None, Run, Withdraw, Block, Trip, Knockdown };
+struct AiView {
+  bool melee_intent = false;  // its action is an attack (it will close in and swing)
+  bool flee_intent = false;   // its action walks away (RunAwayFrom...)
+  int gap_cells = 0;          // cells to the nearest enemy (Euclidean, cell deltas)
+  int reach_cells = 2;        // its melee reach to that enemy (ReachCells)
+  double move_ft = 31.0;      // movement left (1 ft = 1 cell)
+  int adjacent_foes = 0;      // enemies whose reach it stands in
+  int hp = 1, max_hp = 1;
+  bool may_trip = false, may_block = false, may_knockdown = false;
+  bool may_withdraw = false;  // the party side only: enemies never withdraw
+  int attacks = 1;            // swings this round
+  bool action_free = true;
+  int roll100 = 100;          // 1..100, the random part (takedowns 20 %)
+};
+constexpr int kAiTakedownPercent = 20;
+constexpr int kAiBlockHpPercent = 35;
+inline AiMove ChooseAiMove(const AiView& v) {
+  if (!v.action_free) return AiMove::None;
+  // Walking away from someone in reach: withdraw rather than eat a free swing.
+  if (v.may_withdraw && v.flee_intent && v.adjacent_foes > 0 && v.move_ft > 0.05) return AiMove::Withdraw;
+  if (!v.melee_intent) return AiMove::None;
+  const bool in_reach = v.gap_cells <= v.reach_cells;
+  // Run only when a walk cannot close the gap this turn (it then spends the action on the run).
+  if (!in_reach && v.gap_cells - v.reach_cells > v.move_ft) return AiMove::Run;
+  if (!in_reach) return AiMove::None;
+  // Hurt and surrounded: a fighter turns its swings into blocks.
+  if (v.may_block && v.adjacent_foes >= 2 && v.hp * 100 < kAiBlockHpPercent * v.max_hp && v.attacks > 0)
+    return AiMove::Block;
+  if (v.roll100 <= kAiTakedownPercent) {
+    if (v.may_knockdown) return AiMove::Knockdown;
+    if (v.may_trip) return AiMove::Trip;
+  }
+  return AiMove::None;
+}
+
+// PST:EE ACTION.IDS: RunAwayFrom 29, RunAwayFromNoInterrupt 184, RunAwayFromNoInterruptNoLeaveArea 354,
+// RunAwayFromNoLeaveArea 355.
+inline bool IsFleeAction(uint16_t id) { return id == 29 || id == 184 || id == 354 || id == 355; }
+// Attack 3, GroupAttack 94, AttackNoSound 98, AttackOneRound 105, AttackReevaluate 134, RunningAttack 400,
+// RunningAttackNoSound 401.
+inline bool IsAttackAction(uint16_t id) {
+  return id == 3 || id == 94 || id == 98 || id == 105 || id == 134 || id == 400 || id == 401;
+}
+
+}  // namespace pstf::tbc

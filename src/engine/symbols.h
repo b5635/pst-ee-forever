@@ -682,6 +682,10 @@ inline constexpr uint8_t kSwingHit2Bytes[] = {0xE8, 0x1B, 0x08, 0xFE, 0xFF};
 inline constexpr uint8_t kSwingHit3Bytes[] = {0xE8, 0x7E, 0x05, 0xFE, 0xFF};
 constexpr uint32_t kRvaHitFeedbackCall = 0x415759, kRvaSwingHit1 = 0x433E8A, kRvaSwingHit2 = 0x433F90;
 constexpr uint32_t kRvaSwingHit3 = 0x43422D;
+// Bit n set = Swing.hitN is the melee roll (maneuvers filter only these). The Windows sites are not in the
+// Linux order: measured live (the roll log names the site of every attack, "tbc: roll: ... (site N)"):
+// Morte, Annah, Dak'kon, the Nameless One and the Hive thugs swing through site 3, Ignus' fire through site 1.
+constexpr uint32_t kMeleeHitSites = 1u << 3;
 constexpr uint64_t kVaFeedBack = 0x14040EB20ull, kVaHit = 0x1404147B0ull;
 // CGameSprite::FeedBack(uint type, int, int, int, uint, int, CString const&) lin 4BD4E0, win 14040EB20:
 // prologue `mov [rsp+10h],rbx` (5 bytes, no RIP operand) for the debug log of every feedback type.
@@ -691,6 +695,24 @@ constexpr uint32_t kRvaFeedBack = 0x40EB20;
 inline constexpr uint8_t kThac0AcBytes[] = {0xBA, 0x9E, 0x1C, 0x00, 0x00, 0xB8, 0xA8, 0x1C, 0x00, 0x00,
                                             0xB9, 0xF8, 0x0F, 0x00, 0x00};
 constexpr uint32_t kRvaThac0Ac = 0x414888, kOffStatThac0 = 0x10, kOffStatAc = 0x06;
+// Effects we apply (trip / knockdown prone, standing up): CGameEffect::DecodeEffect(Item_effect_st*,
+// CPoint const& source pos, int source id, CPoint const& target pos, int) lin 2012B0, win 1401FE380
+// (prologue, 16 bytes); Item_effect_st is the 0x30-byte feature block (CGameEffect::ClearItemEffect lin
+// 1EE5A0 / win 1401ED360: probability +18 = 100). Added with the sprite's vtable +0xF0
+// CGameSprite::AddEffect(effect, EFFECT_LIST_TIMED, noSave, 1) as CMessageAddEffect::Run does (lin 2941E0,
+// win 140233232: movzx r8d, byte [1406490A8] = 1, `call [rax+0F0h]`, [rsp+20h] = 1; lin vtable slot 30).
+inline constexpr uint8_t kDecodeEffectBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C,
+                                                 0x24, 0x18, 0x56, 0x57, 0x41, 0x56, 0x48, 0x83};
+inline constexpr uint8_t kAddEffectCallBytes[] = {0x44, 0x0F, 0xB6, 0x05, 0x69, 0x5E, 0x41, 0x00, 0x48, 0x8B,
+                                                  0x53, 0x10, 0x48, 0x8B, 0x01, 0xC7, 0x44, 0x24, 0x20, 0x01,
+                                                  0x00, 0x00, 0x00, 0xFF, 0x90, 0xF0, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaDecodeEffect = 0x1FE380, kRvaAddEffectCall = 0x233237, kVtblAddEffect = 0xF0;
+constexpr uint8_t kEffectListTimed = 1;
+// CAIObjectType of a creature at sprite +0x30 (EA +0x38 = kOffSpriteEa): EA +8, general +9, race +10, class +11
+// (CAIObjectType::GetClass lin 5E4DE0), instance id dword +12, special cases +16..20, specifics +21, gender +22,
+// alignment +23 (CAIObjectType::Set lin 5E1A20, FlushToString lin 5E4960). SPECIFIC.IDS: 2 Nameless One, 9 Morte;
+// checked live with PSTF_Class (tests/ingame/tbc_moves.lua logs every party member's class and specifics).
+constexpr uint32_t kOffSpriteClass = 0x3B, kOffSpriteSpecific = 0x45;
 // Saving throws: CGameEffect::CheckSave(effect, sprite, u8& x6) lin 1FBED0, win 1401EC460; returns
 // 0 = saved. Save flags effect +0x40 (bits 0..4), bonus +0x44 (lin L177/L226).
 inline constexpr uint8_t kCheckSaveBytes[] = {0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55};
@@ -924,6 +946,8 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("Swing.hit3", kRvaSwingHit3, kSwingHit3Bytes, "win 14043422D"),
     PSTF_SYM("Hit.thac0ac", kRvaThac0Ac, kThac0AcBytes, "lin 4C29F0 / win 140414888"),
     PSTF_SYM("CGameEffect::CheckSave", kRvaCheckSave, kCheckSaveBytes, "lin 1FBED0 / win 1401EC460"),
+    PSTF_SYM("CGameEffect::DecodeEffect", kRvaDecodeEffect, kDecodeEffectBytes, "lin 2012B0 / win 1401FE380"),
+    PSTF_SYM("CMessageAddEffect::Run.AddEffect", kRvaAddEffectCall, kAddEffectCallBytes, "lin 2941E0 / win 140233237"),
     PSTF_SYM("tolua.GetButtonArray", kRvaButtonArray, kButtonArrayBytes, "win 14046102E"),
     PSTF_SYM("PostRenderButton.icon", kRvaBarIcon, kBarIconBytes, "lin 3602F0 / win 1402C82F5"),
     PSTF_SYM("PostRenderButton.disabled", kRvaBarDisabled, kBarDisabledBytes, "win 1402C8097"),

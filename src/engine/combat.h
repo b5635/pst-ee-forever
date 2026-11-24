@@ -106,10 +106,40 @@ struct RollEvent {
   int needs = 0;        // attack: THAC0 - AC of the target (the total that hits)
   bool success = false; // hit / saved
   int save_type = 0;    // bit index of the save (0 spell .. 4 polymorph)
+  uint8_t outcome = 0;  // attack: 0 as the engine rolled, 1 blocked, 2 takedown (hit, no damage)
+  uint8_t site = 0;     // attack: which of Swing's Hit calls rolled it (1..3, symbols.h Swing.hitN)
 };
 bool InstallRollHooks();
 bool InstallFeedbackLog();  // debug: log every CGameSprite::FeedBack (env PSTF_FEEDBACK_LOG=1)
 std::vector<RollEvent> TakeRollEvents();
+
+// Melee swings (Swing's first Hit call, the melee branch): `thac0_add(attacker, target)` is added to the
+// attacker's THAC0 for that one roll (trip: +2); after the engine's roll, `outcome(attacker, target, hit,
+// d20)` may turn a hit into no damage (1 blocked, 2 takedown; 0 = as rolled). Needs InstallRollHooks.
+using MeleeThac0Fn = int (*)(int32_t attacker, int32_t target);
+using MeleeOutcomeFn = uint8_t (*)(int32_t attacker, int32_t target, bool hit, int roll);
+void SetMeleeHitFilter(MeleeThac0Fn thac0_add, MeleeOutcomeFn outcome);
+
+// An effect from a feature block, added to the creature's timed list the engine's way
+// (CGameEffect::DecodeEffect + CGameSprite::AddEffect, as CMessageAddEffect::Run): saves, immunities and
+// feedback are the engine's. `source` = the creature it comes from (-1 none).
+struct EffectSpec {
+  uint16_t opcode = 0;
+  uint32_t param1 = 0, param2 = 0;
+  uint8_t timing = 0;        // 0 duration (s), 1 permanent, ...
+  uint32_t duration = 0;
+  uint32_t save_type = 0;    // feature block bits: 1 spell, 2 breath, 4 death, 8 wand, 16 polymorph
+  int32_t save_bonus = 0;
+  uint32_t special = 0;
+};
+bool EffectsAvailable();
+bool ApplyEffect(int32_t target, int32_t source, const EffectSpec& e);
+
+// CAIObjectType class (CLASS.IDS) and specifics (SPECIFIC.IDS) of a creature.
+bool SpriteClass(int32_t id, uint8_t* cls, uint8_t* specific);
+// General state of the derived stats in use (STATE.IDS: 0x1 sleeping, 0x4 panic, 0x8 stunned, 0x20 helpless,
+// 0x40 frozen, 0x80 stone, 0x800 dead); -1 when there is no such creature.
+int64_t SpriteState(int32_t id);
 
 // Derived stats for the hover card and hit chance.
 struct CombatStats {
