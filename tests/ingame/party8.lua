@@ -62,7 +62,12 @@ function pstfTestTick()
 			C:Eval('CreateCreature("' .. c[1] .. '",[' .. (x + 30 * i) .. '.' .. (y + 20) .. '],0)', 0)
 		end
 	elseif f == 6 then
-		for _, c in ipairs(missing) do C:Eval('ActionOverride("' .. c[2] .. '",JoinParty())', 0) end
+		for _, c in ipairs(missing) do
+			-- VHAIL.CRE is the chained statue (ANIMATE 0xF062 cl_1_Vhailor_Still: no STP portrait, no paper
+			-- doll); his memory dialogue (DVHAIL actions 27/31/35/41) turns him into the playable 0xF047 first.
+			if c[1] == 'VHAIL' then C:Eval('ActionOverride("Vhail",Polymorph(Vhailor))', 0) end
+			C:Eval('ActionOverride("' .. c[2] .. '",JoinParty())', 0)
+		end
 	elseif f == 40 then
 		local names = PSTF_PartyNames()
 		PSTF_Note('party8: after joins ' .. names)

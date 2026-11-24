@@ -137,5 +137,9 @@ use of a portrait number as an index:
 - The world screen's first-3/last-3 group hotkeys and portrait number keys stay 6 (members 7/8 are
   selected through their portraits). Banter selection is count-based already.
 - The save list (`BuildGameSlot`) shows PORTRT0..5 only.
-- HUD: checked on screen with 8 (party8_fight shots). Vhailor's initiative card shows his name: the
-  bestiary gives no image for him at this point (tbc card art, not party size).
+- HUD: checked on screen with 8 (party8_fight shots).
+- Test content, not party size: `CreateCreature("VHAIL")` is the chained statue (ANIMATE 0xF062
+  cl_1_Vhailor_Still). The record portrait is "STP" + the body animation resref[4:] (lin UpdateLuaStats
+  566420) and the inventory doll comes from the animation too, so the statue had neither (STPTDB). His
+  memory dialogue (DVHAIL) runs `Polymorph(Vhailor)` (0xF047) before he can join; party8.lua does the same.
+  The 8-member save for playing/recording: `tests\saves\000000200-PSTF-8-Party` (party8.lua's quick save).

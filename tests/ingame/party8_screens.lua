@@ -44,6 +44,9 @@ for k = 0, 7 do
 		if currentID ~= order[k + 1] then return fail('record ' .. k .. ': currentID ' .. tostring(currentID) .. ', want ' .. order[k + 1]) end
 		local c = characters[currentID]
 		if not c or not c.name or c.name == '' then return fail('record ' .. k .. ': no character data') end
+		-- record portrait = "STP" + the body animation's resref[4:] (lin UpdateLuaStats 566420): the statue
+		-- Vhailor (VHAIL.CRE, 0xF062) gives STPTDB, which does not exist; party8.lua polymorphs him first.
+		if c.name == 'Vhailor' and c.pstPortrait ~= 'STPVHA' then return fail('Vhailor portrait ' .. tostring(c.pstPortrait)) end
 		note('record ' .. k .. ' ' .. c.name)
 	end, 2)
 end

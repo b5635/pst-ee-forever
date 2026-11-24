@@ -253,7 +253,9 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   tests with `e:GetActiveEngine():OnLeftPanelButtonClick(N)` (1 map, 3 inventory, 4 record, 5 mage, 6 priest),
   not `SelectEngine` (skips the screen's portrait update: empty record sheet).
   Screen objects with per-member arrays grown for 8 (party_patches.tsv): CScreenInventory ground-pile cache,
-  CScreenMap markers. `CheckSymbol` accepts bytes the party layout retargeted (manifest rewrite).
+  CScreenMap markers. Stable 8-member save: `-Save 000000200` (`tests\saves\000000200-PSTF-8-Party`; the
+  quick saves 000000001-* get overwritten by party8.lua). Spawned companions need their joining dialogue's
+  own actions (Vhailor: `Polymorph(Vhailor)`, else the statue animation has no portrait/paper doll). `CheckSymbol` accepts bytes the party layout retargeted (manifest rewrite).
 - Maneuvers (`[tbc] maneuvers`, `opportunity_attacks`; rules in `src/modules/tbc/maneuvers.h`, GemRB fork port): Run,
   Withdraw (party side only), Block, Trip/Knockdown on the hotbar (Block wears the engine's Guard icon; Guard is left out),
   directed AI (`DirectedAi`: run to close, block when hurt and surrounded, 20 % takedowns), attacks of opportunity.
