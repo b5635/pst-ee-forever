@@ -2627,6 +2627,12 @@ int __cdecl LuaCenterOn(engine::LuaState* L) {
   engine::LuaPushBool(L, ok);
   return 1;
 }
+// PSTF_CenterAt(x, y): centre the view on world point x,y (showcase recordings: a point to click on).
+int __cdecl LuaCenterAt(engine::LuaState* L) {
+  g.cam_t0 = 0;
+  engine::CenterView(static_cast<int>(engine::LuaNumberArg(L, 1, 0)), static_cast<int>(engine::LuaNumberArg(L, 2, 0)));
+  return 0;
+}
 // PSTF_TbcAttacks() -> attacks this round (0: unknown), swings so far, APR x2 of the active creature.
 int __cdecl LuaTbcAttacks(engine::LuaState* L) {
   engine::LuaPushNumber(L, g.running ? g.econ.want_swings : 0);
@@ -2908,6 +2914,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_HoverAt", &LuaHoverAt);
   dev::AddLuaFunction("PSTF_RollProbe", &LuaRollProbe);
   dev::AddLuaFunction("PSTF_CenterOn", &LuaCenterOn);
+  dev::AddLuaFunction("PSTF_CenterAt", &LuaCenterAt);
   dev::AddLuaFunction("PSTF_IconSize", &LuaIconSize);
   dev::AddLuaFunction("PSTF_Status", &LuaStatus);
   dev::AddLuaFunction("PSTF_TbcAttacks", &LuaTbcAttacks);

@@ -86,9 +86,18 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - Installing tools is allowed (debuggers, analyzers, Python packages): ask nothing, note them here.
   Installed: WinDbg + `cdb` (`winget install Microsoft.WinDbg`; `%LOCALAPPDATA%\Microsoft\WindowsApps\cdbX64.exe`).
   Also ffmpeg (`C:\ffmpeg\bin`, Gyan full build) and gifski 1.34 (copied there from the GitHub release; winget's MSI hangs).
+  PyAudioWPatch (`python -m pip install --user PyAudioWPatch`; run `tools/audio_loop.py` with `python -P`, not `-I`: user site).
 - README media: `tools\record.ps1 -Out build\rec\X.mp4 -Width 1920 -Launch @{Save=..; Lua=..; Env=@{..}; Until=..}` records the
   screen with ffmpeg ddagrab while launch.ps1 runs (ffmpeg starts at `autoload: world ready`: the full-screen switch kills
-  Desktop Duplication before that). Discord/NVIDIA overlay toasts show for ~15 s after launch: the scenarios in
+  Desktop Duplication before that). It records the game sound too (`tools/audio_loop.py`, WASAPI loopback of the default
+  output; synced by the wall clock of the first sample vs the first frame, log `record: audio offset N ms`; `-NoAudio` = video
+  only). `AcquireNextFrame failed: 887a0026` at the end is the game closing, not a cut. Each recording also writes
+  `<name>.events.txt` (lua notes / voice lines at their second in the video: use it for cut points). `-Clicks -DrawMouse`:
+  a log line `showcase_click: DX,DY` (px from the screen centre) glides the real mouse there and clicks (probe `PSTF_CenterAt(x,y)`).
+  YouTube Short: `tools\showcase\record_short.ps1 [-Only hammer,spells,moves,blood,dice,voice,party8]` records each clip
+  alone (game music 0 while recording, put back after) to `build\rec\short\`; `python -I tools/showcase/make_short.py
+  [--preview]` cuts `short.mp4` (1080x1920 60 fps; SEGMENTS table = clip, times, crop focus, titles, volumes; music
+  `sounds/planescape main title ambient guitar lofi.mp3`). Discord/NVIDIA overlay toasts show for ~15 s after launch: the scenarios in
   `tools\showcase\` wait that long. `python -I tools/readme_gifs.py [--only X.gif]` cuts docs/media GIFs (clip times in
   its table), `tools/readme_media.py` the stills. Blood clip: set `[tbc] start_radius=0`/`join_radius=0` while recording (real-time melee).
 - The engine writes a full minidump per crash to `Documents\Infinity Engine - Enhanced Edition\crash\dump.3.2.2.0.NNNN.dmp`.
