@@ -78,9 +78,14 @@ Spell effects glow and bloom.
 <p align="center"><img src="docs/media/lighting_night.png" alt="The Hive at night: vanilla (flat blue tint) vs PST Forever (Ignus lighting the street)"></p>
 <p align="center"><img src="docs/media/lighting_spell.gif" alt="Spiritual Hammer at night, vanilla vs lit" width="900"></p>
 
-Lighting needs per-area data (height, normals, baked lights), so it ships as a separate
-`pst_forever-…-lighting.zip` (about 1.4 GB) and is **off by default**. I will need to upload this somewhere, stay tuned. Turn it on in the options window
-after installing it.
+Lighting needs per-area data (height, normals, baked lights, sprite depth), so it is a separate download and
+is **off by default**. To use it:
+
+1. Install the mod first (see [Installing](#installing)).
+2. Download [`pst_forever-v0.1.1-lighting.zip`](https://github.com/b5635/pst-ee-forever/releases/download/v0.1.1/pst_forever-v0.1.1-lighting.zip)
+   (690 MB, about 1.4 GB unpacked).
+3. Unzip it into the same game folder, next to `Torment.exe`.
+4. Run `pst_forever_config.exe` and switch lighting on.
 
 ### And more
 
