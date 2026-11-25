@@ -54,7 +54,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - Release zip: `tools\package.ps1 [-Version V] [-Assets '<game>\pst_forever\assets']` -> `build\package\pst_forever-V.zip`
   (layout = the game folder: players unzip it next to Torment.exe; same files as deploy). `-Assets` also writes
   `-lighting.zip` (GemRB maps + sprite depth, ~1.4 GB, not in git). `.github/workflows/release.yml`: a pushed `v*` tag
-  builds (VS 2022 runner), runs unit tests, packages and makes the GitHub release; the lighting zip is uploaded by hand.
+  builds (VS 2022 runner), runs unit tests, packages and makes the GitHub release; the lighting zip is uploaded by hand to the `b5635/pst-ee-forever-assets` release as `pst_forever-assets.zip` (README and `docs/RELEASE_INSTALL.md` link its `latest/download` URL).
 - `tools\deploy.ps1` copies `version.dll`, `pst_forever.dll`, `pst_forever_config.exe` and `pst_forever\` into the game folder (closes the game first).
 - Options window `pst_forever_config.exe` (`src/config_tool/`, logic `src/core/ini_doc.*`, tests `test_ini_doc.cpp`): the shipped
   `data/pst_forever.ini` is embedded as its schema (sections, defaults, the comment above a key = its help; 0/1 defaults are

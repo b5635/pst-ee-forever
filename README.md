@@ -3,7 +3,9 @@
 **Turn-based combat, real lighting, dice rolls and a bigger party for _Planescape: Torment: Enhanced Edition_.**
 
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/AgRUs6wwVM)
+[![YouTube Short](https://img.shields.io/badge/YouTube-Watch%20the%20showcase-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/shorts/Tl6QsnAJjfI)
 <p align="center"><img src="docs/media/tbc_fight.gif" alt="A turn-based fight in the Hive: initiative cards along the top, each character moving and attacking on its own turn" width="600"></p>
+<p align="center"><a href="https://www.youtube.com/shorts/Tl6QsnAJjfI">▶ Watch the one-minute showcase on YouTube</a></p>
 
 Torment has one of the best stories in any cRPG but after playing a lot of modern games and Baldur's Gate 3 I found the game to be very... clunky. Which is why I made this: fights become turn-based, the Hive gets torch light and
 night shadows, and the stat checks hidden in dialogue become dice you can roll.
