@@ -11,7 +11,7 @@ builds are not supported. Back up your saves first, especially before using the 
 **Options:** run `pst_forever_config.exe` in the game folder.
 
 **Dynamic lighting (optional):** also download
-[`pst_forever-v0.1.1-lighting.zip`](https://github.com/b5635/pst-ee-forever/releases/download/v0.1.1/pst_forever-v0.1.1-lighting.zip)
+[`pst_forever-assets.zip`](https://github.com/b5635/pst-ee-forever-assets/releases/latest/download/pst_forever-assets.zip)
 (690 MB, about 1.4 GB unpacked), unzip it into the same game folder, and switch lighting on in the options window. You
 only need to download it once; updating the mod keeps it.
 

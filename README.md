@@ -82,7 +82,7 @@ Lighting needs per-area data (height, normals, baked lights, sprite depth), so i
 is **off by default**. To use it:
 
 1. Install the mod first (see [Installing](#installing)).
-2. Download [`pst_forever-v0.1.1-lighting.zip`](https://github.com/b5635/pst-ee-forever/releases/download/v0.1.1/pst_forever-v0.1.1-lighting.zip)
+2. Download [`pst_forever-assets.zip`](https://github.com/b5635/pst-ee-forever-assets/releases/latest/download/pst_forever-assets.zip)
    (690 MB, about 1.4 GB unpacked).
 3. Unzip it into the same game folder, next to `Torment.exe`.
 4. Run `pst_forever_config.exe` and switch lighting on.
