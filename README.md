@@ -1,4 +1,4 @@
-# PST Forever
+# Planescape: Torment Enhanced Edition Forever
 
 **Turn-based combat, real lighting, dice rolls and a bigger party for _Planescape: Torment: Enhanced Edition_.**
 
@@ -103,8 +103,11 @@ I don't offer support for anything other than this version, feel free to fork or
 
 Works alongside WeiDU mods (tested with PST-UB-Reloaded).
 
-**To uninstall:** delete `version.dll`, `pst_forever.dll`, `pst_forever_config.exe` and the `pst_forever`
-folder from the game folder.
+**To update:** unzip the new version over the old one. This replaces `pst_forever\pst_forever.ini` with the
+defaults, so copy it somewhere else first if you changed settings, then set them again in the options window.
+
+**To uninstall:** delete `version.dll`, `pst_forever.dll`, `pst_forever_config.exe`, the `pst_forever` folder,
+and `override\PF*.*`, `override\PORTRT6.BMP` and `override\PORTRT7.BMP` from the game folder.
 
 Please backup your saves before trying this, in case something screws up or future saves become messed up. This is especially the case if you have 8 party members enabled.
 
@@ -132,6 +135,10 @@ or ask on [Discord](https://discord.gg/AgRUs6wwVM).
 ---
 
 ## For developers
+
+**Setting up for the first time?** Follow [`docs/DEVELOPING.md`](docs/DEVELOPING.md). With Claude Code, run
+`/setup` in the repository; with Cursor or another agent, ask it to follow that guide ([`AGENTS.md`](AGENTS.md)
+points it there).
 
 PST Forever is a C++ DLL loaded through a small `version.dll` proxy. Every hook is checked byte-for-byte
 against the on-disk `Torment.exe` before it is installed. Game logic lives in pure functions with unit tests;

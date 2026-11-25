@@ -47,4 +47,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: build/package/*.zip
+          body_path: docs/RELEASE_INSTALL.md
           generate_release_notes: true
