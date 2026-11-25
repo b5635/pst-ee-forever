@@ -817,6 +817,10 @@ bool MayBlockId(int32_t id) {
   uint8_t c, s;
   return ClassOf(id, &c, &s) && MayBlock(c, s);
 }
+bool MayOpportunityId(int32_t id) {
+  uint8_t c, s;
+  return !ClassOf(id, &c, &s) || MayOpportunity(s);
+}
 bool MayKnockdownId(int32_t id) {
   const Combatant* c = g.dir ? g.dir->Find(id) : nullptr;
   engine::CombatStats st;
@@ -1119,7 +1123,7 @@ void HoldStance(int32_t id) {
 
 // A foe that may react to `mover` now: alive, able, its reaction unused, standing.
 bool MayReact(int32_t id, int32_t mover, const engine::SpriteInfo& me, engine::SpriteInfo* o) {
-  if (id == mover || !Foes(id, mover)) return false;
+  if (id == mover || !Foes(id, mover) || !MayOpportunityId(id)) return false;
   if (!engine::GetSprite(id, o) || !o->alive || o->area != me.area || !CanReact(engine::SpriteState(id))) return false;
   const auto st = g.stance.find(id);
   return st == g.stance.end() || (!st->second.reaction_used && !st->second.prone);
@@ -1173,7 +1177,7 @@ void CheckOpportunity(int32_t cur, const engine::SpriteInfo& me) {
   const bool withdrawn = g.stance[cur].withdrawn;
   const int ps_me = PersonalSpace(cur);
   for (int32_t id : g.in) {
-    if (id == cur || !Foes(id, cur)) continue;
+    if (id == cur || !Foes(id, cur) || !MayOpportunityId(id)) continue;
     engine::SpriteInfo o;
     if (!engine::GetSprite(id, &o) || !o.alive || o.area != me.area) continue;
     const int64_t state = engine::SpriteState(id);

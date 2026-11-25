@@ -8,7 +8,7 @@
 //   Run       spends the action; remaining movement += max movement (31/31 -> 62/31, 0/31 -> 31/31).
 //   Withdraw  the party side only (enemies never withdraw); spends the action; a third of the remaining movement is left (2/3 go); walks (walk animation and speed); no attacks
 //             of opportunity until its next turn. Refused with no movement left (a wasted action).
-//   Block     fighters (the Nameless One while a fighter; not Morte); spends the action; the attacks left this round
+//   Block     fighters (the Nameless One while a fighter; not Morte or Nordom); spends the action; the attacks left this round
 //             become block stacks until its next turn. Each melee hit on it uses one stack: a d20 with its
 //             own THAC0 vs AC 4 (1 fails, 20 succeeds) that also comes up at least the attack's d20 stops it.
 //   Trip      fighters (the Nameless One while a fighter): the first melee swing of the attack round gets -2 to hit
@@ -21,7 +21,8 @@
 //             in search-map cells) along a path that leaves it, without Withdraw, first turns toward its way
 //             and waits: every such enemy swings once, one after the other, then it walks. A walker that only
 //             passes through a reach later on its way provokes nothing. One per reactor until its own
-//             next turn, a single swing whatever its APR; prone (asleep) reactors do not react.
+//             next turn, a single swing whatever its APR; prone (asleep) reactors do not react, nor do Nordom
+//             (crossbows) and Ignus (fire): neither holds a melee threat.
 #pragma once
 #include <algorithm>
 #include <cmath>
@@ -65,9 +66,13 @@ inline bool FighterClass(uint8_t cls) {
 // SPECIFIC.IDS: NAMELESS_ONE 2, MORTE 9. The Nameless One's CLASS byte is his current class (FIGHTER 2,
 // MAGE 1, THIEF 4: the trainers' replies test Class(Protagonist,FIGHTER), DDAKKON/DANNAH/DGRACE), so he
 // trips and blocks while he is a fighter, like anyone else.
-constexpr uint8_t kSpecificNameless = 2, kSpecificMorte = 9;
+constexpr uint8_t kSpecificNameless = 2, kSpecificNordom = 4, kSpecificIgnus = 5, kSpecificMorte = 9;
 inline bool MayTrip(uint8_t cls, uint8_t /*specific*/) { return FighterClass(cls); }
-inline bool MayBlock(uint8_t cls, uint8_t specific) { return MayTrip(cls, specific) && specific != kSpecificMorte; }
+inline bool MayBlock(uint8_t cls, uint8_t specific) {
+  return MayTrip(cls, specific) && specific != kSpecificMorte && specific != kSpecificNordom;
+}
+// Attacks of opportunity: everyone but Nordom and Ignus (SPECIFIC.IDS 4, 5).
+inline bool MayOpportunity(uint8_t specific) { return specific != kSpecificNordom && specific != kSpecificIgnus; }
 constexpr int kKnockdownThac0 = 15;
 inline bool MayKnockdown(bool party, int thac0) { return !party && thac0 <= kKnockdownThac0; }
 

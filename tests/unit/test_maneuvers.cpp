@@ -46,6 +46,11 @@ TEST_CASE("tbc block: fighters but Morte (the Nameless One while a fighter); att
   CHECK(MayBlock(2, 3));    // Vhailor, fighter
   CHECK(MayBlock(7, 7));    // Dak'kon, fighter/mage
   CHECK(!MayBlock(2, 9));   // Morte
+  CHECK(!MayBlock(2, 4));   // Nordom, fighter
+  CHECK(MayBlock(2, 5));    // Ignus as a fighter could (he is a mage)
+  CHECK(!MayOpportunity(4));  // Nordom
+  CHECK(!MayOpportunity(5));  // Ignus
+  CHECK(MayOpportunity(2) && MayOpportunity(9) && MayOpportunity(1));  // the Nameless One, Morte, anyone
   CHECK(MayBlock(2, 2));    // the Nameless One as a fighter
   CHECK(!MayBlock(1, 2));   // ... as a mage
   CHECK(!MayBlock(4, 2));   // ... as a thief
