@@ -552,6 +552,9 @@ TEST_CASE("tbc hud: menu text and Lua data") {
   CHECK(lua.find("{id=7,best=43,name=274,hp=5,maxhp=10,foe=false,active=true,done=false,str=\"a b\"}") !=
         std::string::npos);
   CHECK(lua.find("dots={1,2},rdots={}") != std::string::npos);
+  CHECK(lua.find(",aoo=false") != std::string::npos);
+  v.provokes = true;  // the previewed walk leaves a foe's reach: the "Provokes attack of opportunity" line
+  CHECK(BuildHudLua(v).find(",aoo=true") != std::string::npos);
 }
 
 #include "modules/tbc/path_preview.h"
@@ -925,6 +928,10 @@ TEST_CASE("tbc status: the drained frame and fitted icons") {
   const std::string lua = BuildStatusLua({{}, {v}}, h);
   CHECK(lua.find("pstfStat = {[0]={},[1]={{b=\"SPWI101C\",n=274,r=3,d=false,fit={3,3,16,16},f={") != std::string::npos);
   CHECK(lua.find("pstfHov = {on=true,fight=false,name=5,") != std::string::npos);
+  CHECK(lua.find("aim=false,cx=-1,cy=-1,") != std::string::npos);
+  // the hit chance goes next to the cursor (BG3), not on the card
+  h.foe = true, h.fight = true, h.chance = 80, h.aim = true, h.cur_x = 400, h.cur_y = 300;
+  CHECK(BuildStatusLua({}, h).find("chance=80,ac=0,needs=0,lv=0,aim=true,cx=400,cy=300,") != std::string::npos);
 }
 
 TEST_CASE("tbc preview: a creature is dear ground, the path goes round it and stays round") {

@@ -126,6 +126,7 @@ function pstfDotOn(i) return pstfTbc.on and pstfTbc.dots[2 * i] ~= nil end
 function pstfRDotOn(i) return pstfTbc.on and pstfTbc.rdots[2 * i] ~= nil end
 function pstfPathLabelOn() return pstfTbc.on and (pstfTbc.pathFt or 0) > 0 and (pstfTbc.lx or -1) >= 0 end
 function pstfPathText() return tostring(pstfTbc.pathFt or 0) .. ' ft' end
+function pstfPathAooOn() return pstfPathLabelOn() and pstfTbc.aoo end
 function pstfMsgOn() return pstfTbc.on and (pstfTbc.msg or '') ~= '' end
 function pstfMsg() return pstfTbc.msg or '' end
 local function area(name, x, y, w, h) Infinity_SetArea(name, x, y, w, h) end
@@ -167,6 +168,7 @@ function pstfTbcLayout()
 	end
 	area('pstfMsg', 0, sh - 85 - (pstfBg3 and 32 or 160), sw, 22)
 	if pstfPathLabelOn() then area('pstfPathLabel', pstfTbc.lx - 40, pstfTbc.ly - 30, 80, 20) end
+	if pstfPathAooOn() then area('pstfPathAoo', pstfTbc.lx - 160, pstfTbc.ly - 50, 320, 20) end  -- above the distance, off the line's end
 	pstfBarLayout(sw, sh)
 	-- dice panel on the right, above the bottom bar (the d20 itself is drawn by the engine in the world pass)
 	local dx, dy = sw - 16 - 346, math.floor(sh * 0.30)
@@ -534,10 +536,11 @@ function pstfHovLv() return 'Lv. ' .. tostring(pstfHov.lv or 0) end
 function pstfHovSubOn() return pstfHov.on and (pstfHov.sub or '') ~= '' end
 function pstfHovHpOn() return pstfHov.on and (pstfHov.max or 0) > 0 end
 function pstfHovHp() return tostring(pstfHov.hp or 0) .. '/' .. tostring(pstfHov.max or 0) end
-function pstfHovHitOn() return pstfHov.on and pstfHov.foe and (pstfHov.chance or -1) >= 0 end
-function pstfHovHit()
-	return string.format('Hit chance %d%%     AC %d     needs %d', pstfHov.chance, pstfHov.ac, pstfHov.needs)
+-- BG3: the hit chance sits next to the attack cursor, not on the card
+function pstfHovHitOn()
+	return pstfHov.on and pstfHov.foe and pstfHov.aim and (pstfHov.chance or -1) >= 0 and (pstfHov.cx or -1) >= 0
 end
+function pstfHovHit() return string.format('%d%%', pstfHov.chance) end
 function pstfHovIconName(i)
 	local s = pstfSt(-1, i)
 	if not s then return '' end
@@ -612,10 +615,7 @@ function pstfHovLayout(sw, sh)
 	else
 		hide('pstfHoverTipL') hide('pstfHoverTipR') hide('pstfHoverKnobL') hide('pstfHoverKnobR')
 	end
-	if pstfHovHitOn() then
-		area('pstfHoverHit', cx - 200, y, 400, 18)
-		y = y + 20
-	end
+	if pstfHovHitOn() then area('pstfHoverHit', pstfHov.cx + 24, pstfHov.cy - 4, 80, 26) end
 	local n = #(pstfHov.icons or {})
 	if n > PSTF_HOV_ICONS then n = PSTF_HOV_ICONS end
 	if n > 0 then
@@ -906,7 +906,7 @@ std::string BuildHudMenu(bool bg3, int party_max) {
   m += Label("pstfHoverBar", "pstfHovHpOn()", "\t\tfill 168 26 24 255\n");
   m += Label("pstfHoverBarHi", "pstfHovHpOn()", "\t\tfill 222 84 70 110\n");
   m += Label("pstfHoverHp", "pstfHovHpOn()", text("pstfHovHp()", 14, "0xF4F4F4", "center center"));
-  m += Label("pstfHoverHit", "pstfHovHitOn()", text("pstfHovHit()", 14, "0xB8C8D2", "center center"));
+  m += Label("pstfHoverHit", "pstfHovHitOn()", text("pstfHovHit()", 20, "0xF4F4F4", "left center"));
   for (int i = 1; i <= kHoverIcons; ++i) {
     m += StatusIconItems("-1", i);
     const std::string n = std::to_string(i);
@@ -918,6 +918,9 @@ std::string BuildHudMenu(bool bg3, int party_max) {
   m += "\tonopen \"pstfTbcOpen = true\"\n\tonclose \"pstfTbcOpen = false\"\n";
   m += Label("pstfPathLabel", "pstfPathLabelOn()",
              "\t\ttext lua \"pstfPathText()\"\n\t\ttext style \"normal\"\n\t\talign center center\n");
+  m += Label("pstfPathAoo", "pstfPathAooOn()",
+             "\t\ttext lua \"'Provokes attack of opportunity'\"\n\t\ttext style \"normal\"\n\t\ttext shadow 1\n"
+             "\t\ttext color lua \"0x4A5AE8\"\n\t\talign center center\n");
   for (int i = 1; i <= kHudFloats; ++i) {
     const std::string n = std::to_string(i);
     m += Label("pstfFloat" + n, "pstfFloatOn(" + n + ")",
@@ -1000,9 +1003,10 @@ std::string BuildStatusLua(const std::vector<std::vector<StatusIconView>>& party
     s += ",";
   }
   char b[256];
-  std::snprintf(b, sizeof b, "} pstfHov = {on=%s,fight=%s,name=%d,hp=%d,max=%d,foe=%s,chance=%d,ac=%d,needs=%d,lv=%d,sub=\"",
+  std::snprintf(b, sizeof b,
+                "} pstfHov = {on=%s,fight=%s,name=%d,hp=%d,max=%d,foe=%s,chance=%d,ac=%d,needs=%d,lv=%d,aim=%s,cx=%d,cy=%d,sub=\"",
                 h.on ? "true" : "false", h.fight ? "true" : "false", h.name_ref, h.hp, h.max_hp, h.foe ? "true" : "false",
-                h.chance, h.ac, h.needs, h.level);
+                h.chance, h.ac, h.needs, h.level, h.aim ? "true" : "false", h.cur_x, h.cur_y);
   s += b;
   AppendEscaped(&s, h.sub);
   s += "\",str=\"";
@@ -1017,10 +1021,10 @@ std::string BuildHudLua(const HudView& v) {
   std::string s = "pstfTbc = {on=";
   s += v.on ? "true" : "false";
   char b[256];
-  std::snprintf(b, sizeof b, ",round=%u,slot=%d,party=%s,move=%.2f,maxMove=%.2f,used=%s,acting=%s,pathFt=%d,lx=%d,ly=%d",
+  std::snprintf(b, sizeof b, ",round=%u,slot=%d,party=%s,move=%.2f,maxMove=%.2f,used=%s,acting=%s,pathFt=%d,lx=%d,ly=%d,aoo=%s",
                 v.round, v.slot, v.party_turn ? "true" : "false", v.move_ft, v.max_ft,
                 v.action_used ? "true" : "false", v.acting ? "true" : "false", v.path_ft, v.label_x,
-                v.label_y);
+                v.label_y, v.provokes ? "true" : "false");
   s += b;
   auto str = [&](const char* key, const std::string& val) {
     s += ",";

@@ -1410,6 +1410,24 @@ bool WalkStartProvokes(int32_t cur) {
   return true;
 }
 
+// The move preview (the hover path before a click): would that walk provoke? Same rule as WalkStartProvokes
+// (foes that may react, path leaves their reach, Withdraw immune). -> the foes it would provoke.
+std::vector<int32_t> PreviewProvokes(int32_t cur, const engine::SpriteInfo& me, const std::vector<Pt>& nodes) {
+  std::vector<int32_t> out;
+  if (!g.running || !g.opportunity || !g.maneuvers || nodes.empty()) return out;
+  const auto sit = g.stance.find(cur);
+  if (sit != g.stance.end() && sit->second.withdrawn) return out;
+  std::vector<std::pair<int, int>> path;
+  for (const Pt& p : nodes) path.emplace_back(p.x, p.y);
+  const int ps_me = PersonalSpace(cur);
+  for (int32_t id : g.in) {
+    engine::SpriteInfo o;
+    if (!MayReact(id, cur, me, &o)) continue;
+    if (PathLeavesReach(o.x, o.y, me.x, me.y, path, ReachCells(kMeleeRangeField, PersonalSpace(id), ps_me))) out.push_back(id);
+  }
+  return out;
+}
+
 // Per tick while the current creature walks: who did it just walk out of reach of?
 void CheckOpportunity(int32_t cur, const engine::SpriteInfo& me) {
   if (!g.opportunity || !g.maneuvers) return;
@@ -1981,6 +1999,14 @@ void FillHover(HoverView* v) {
     v->ac = t.ac;
     v->needs = NeedsToHit(a.thac0, t.ac);
     v->chance = HitChancePercent(a.thac0, t.ac);
+    // BG3: "80%" next to the attack cursor, on a party member's own turn while no spell/item is being aimed
+    v->aim = PartySlot(g.current) >= 0 && engine::GameCursorState() == 0 && engine::WorldToUi(wx, wy, &v->cur_x, &v->cur_y);
+    static int32_t logged = -1;
+    if (v->aim && logged != id) {
+      logged = id;
+      Log("tbc: hover %s: %d%% to hit for %s (THAC0 %d vs AC %d, needs %d)", Who(id).c_str(), v->chance, Who(me).c_str(), a.thac0,
+          t.ac, v->needs);
+    }
   }
 }
 
@@ -2124,7 +2150,25 @@ void UpdateHud(uint32_t now) {
     // Aiming a spell, ability or item: no hover line (the engine's own path shows once the order
     // needs a walk, e.g. a touch spell out of reach).
     const bool aiming = engine::GameCursorState() != 0;
-    if (show && nodes.empty() && g.econ.party && g.econ.MoveLeft() && !g.econ.acting && !aiming) nodes = HoverPreview(me);
+    bool preview = false;
+    if (show && nodes.empty() && g.econ.party && g.econ.MoveLeft() && !g.econ.acting && !aiming) {
+      nodes = HoverPreview(me);
+      preview = !nodes.empty();
+    }
+    // the walk under the cursor would leave a foe's reach: say so under the distance (BG3)
+    const std::vector<int32_t> prov = preview ? PreviewProvokes(g.current, me, nodes) : std::vector<int32_t>{};
+    v.provokes = !prov.empty();
+    if (preview) {  // logged when the walker or the foes it would provoke change
+      static std::string logged;
+      std::string who;
+      for (int32_t r : prov) who += (who.empty() ? "" : ", ") + Who(r);
+      const std::string key = Who(g.current) + "|" + who;
+      if (key != logged) {
+        logged = key;
+        Log("tbc: preview: %s walking to %d,%d %s", Who(g.current).c_str(), nodes.back().x, nodes.back().y,
+            v.provokes ? ("provokes attacks of opportunity from " + who).c_str() : "provokes nothing");
+      }
+    }
     const Pt from{me.x, me.y};
     g.line.clear();
     if (!nodes.empty()) {

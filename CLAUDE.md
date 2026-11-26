@@ -303,6 +303,12 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `PSTF_MoveStats()` (13th = AI short runs), `PSTF_AnimProbe(id)` (run flag, cycle, frame, sequence), `PSTF_Pose(id)`,
   `PSTF_Attached(id)` (PST attached spell objects: ticks to each end); env `PSTF_AOO_TRACE=N` (reach checks + reaction
   ticks); combat.log `MOVE`/`AOO`/`AI`/`PUSH` lines. Sounds `data/override/PFSND*.WAV` (Ogg in WAV, from the GemRB fork).
+- Cursor hints on a party turn (BG3): the hover card no longer lists hit chance/AC/needs; "NN%" sits next to the cursor
+  over a foe (plain cursor; Lua `pstfHov.aim/cx/cy`, log `tbc: hover X: N% to hit for Y`), and a move preview that leaves a
+  foe's reach shows "Provokes attack of opportunity" above its distance (`PreviewProvokes`, same rule as the walk start; Lua
+  `pstfTbc.aoo`, log `tbc: preview: X walking to x,y provokes ...` when the set changes). Test: `tools\launch.ps1 -Save
+  000000126 -Lua tests\ingame\tbc_preview_aoo.lua -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_preview_aoo: ok|TEST FAIL' -Close`
+  (Withdraw clears the warning: the toggle check).
 - Maneuver ground effects = filled noisy puffs (`src/modules/tbc/ground_fx.h`, `engine::DrawSoftPuffs`): Run dust burst +
   trail, Withdraw smoke burst + trail, knock-down dust. Look at them: `tools\launch.ps1 -Save 000000126 -Lua
   tests\ingame\tbc_groundfx.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'; PSTF_SHOT_DIR='<dir>'; PSTF_SHOT_EVERY_MS='150'}

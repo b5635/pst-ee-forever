@@ -57,6 +57,7 @@ struct HudView {
   std::vector<int> red_dots;   // x,y pairs, beyond the movement left
   int path_ft = 0;             // whole path length, shown at its end
   int label_x = -1, label_y = -1;
+  bool provokes = false;       // the previewed walk leaves a foe's reach: "Provokes attack of opportunity" under it
   // Dice panel: the last attack roll or saving throw.
   bool dice = false;
   int dice_kind = 0;           // 0 attack, 1 saving throw
@@ -83,13 +84,15 @@ struct StatusIconView {
 StatusIconView MakeIconView(const StatusIcon& s, const std::string& bam, int32_t name_ref, int bam_w, int bam_h, int box);
 
 // Hover card (BG3): the creature under the cursor, its HP, buffs/debuffs and, in a fight, for a foe,
-// the chance that the active party member hits it.
+// the chance that the active party member hits it ("80%" next to the cursor, on a party turn while not aiming).
 struct HoverView {
   bool on = false;
   int32_t name_ref = -1;
   std::string name;
   int hp = 0, max_hp = 0, chance = -1, ac = 0, needs = 0;
   bool foe = false, fight = false;
+  bool aim = false;            // a party member's turn, plain (attack) cursor: the chance shows at the cursor
+  int cur_x = -1, cur_y = -1;  // the cursor in UI coordinates
   int level = 0;               // "Lv. 5" after the name (0: not shown)
   std::string sub;             // the line under the name: class or stance (hover.h HoverSubtitle)
   std::vector<StatusIconView> icons;
