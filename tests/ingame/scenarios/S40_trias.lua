@@ -6,6 +6,7 @@
 -- b17: Trias_Sword 2 also runs his "Global(Trias_Sword,2) => Dialogue([EA=2])" block (a 2-reply dialogue holds the world):
 -- 3 keeps the fight branch (GlobalGT 1) without it.
 -- b16: the protagonist's attack opens Trias' dialogue (no hit; Game_Over stayed 0): made hostile instead.
+S.clickReplies = true  -- the save opens in the Trias talk (2-reply nodes): click through it
 S.brawl{name = 'Trias', provoke = false, hostile = true, hp = 200, rounds = 4, partyHp = true, set = {{'Trias_Sword', 'GLOBAL', 3}}, maxFrames = 9000}
 local inner = S.tick
 local over = false
