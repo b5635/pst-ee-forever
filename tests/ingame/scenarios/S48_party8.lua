@@ -3,9 +3,9 @@
 -- S48 8-member party (test save 200) against 6 spawned Starved Dog thugs: party slots 7 and 8 get turns, every turn
 -- completes, the fight ends. The thugs get 60 HP so the fight lasts long enough for every slot.
 local before, more, seen = nil, {}, {}
-S.steps[2] = function() before = S.ids() end
-S.steps[3] = function() for i = 2, 6 do S.spawn('SDTHUG' .. i, 160 + 30 * i, 20 * i) end end
-S.steps[8] = function()
+S.steps[32] = function() before = S.ids() end
+S.steps[33] = function() for i = 2, 6 do S.spawn('SDTHUG' .. i, 160 + 30 * i, 20 * i) end end
+S.steps[44] = function()
 	local party = {}
 	for i = 0, 7 do local p = PSTF_PartyId(i) if p and p ~= -1 then party[p] = true end end
 	for id in pairs(S.ids()) do

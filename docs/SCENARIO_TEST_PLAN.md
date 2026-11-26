@@ -78,8 +78,8 @@ an ISSUE, and add new ones here:
 - **Expected counts:** check what the creature really has (a spent `Spell` falls through: Shilandra knows 3 of 5).
 - **Provoke kills the target:** a 4-HP patron dies to the protagonist's first hit; give it `hp` so it lives to run its
   own AttackedBy response.
-- **No script name** (Curst citizens): `Attack("None")` does nothing; the provoke jumps the protagonist beside it
-  and orders `Attack(Nearest([NEUTRAL]))`.
+- **No script name** (Curst citizens): `Attack("None")` does nothing and `Attack(Nearest([NEUTRAL]))` found no target
+  either; play its AttackedBy response instead (`hostile = true` = Enemy(), then `PSTF_EvalAs(id, 'Help()')`).
 - **Spawned creatures:** find them by `S.ids()` before/after the spawn, not by the CRE name (S.find misses them).
 - **Crowds too big to finish in a run:** `S.brawl{rounds = N}` = ok once round N begins with no stuck turn.
 - **Frame budget:** a step caster with one step per turn needs ~1050 ticks a turn with a 4-member party; set
@@ -144,7 +144,7 @@ These only matter while the creature is already a combatant, so each scenario st
 
 | ID | Save (area) | Setup / forcing | Expected | Watch | Outcome |
 |---|---|---|---|---|---|
-| S27 | 000700165 Rescue Mission (AR0700) | Attack a Curst civilian (0704RUN-type: `Enemy(); Help(); RunAwayFrom`) | The Help call turns nearby civilians hostile and they flee. The fight should stay playable: fleers leave the fight once far, real fighters fight. | Joiners count, rounds, fight end; endless = ISSUE | - |
+| S27 | 000700165 Rescue Mission (AR0700) | Attack a Curst civilian (0704RUN-type: `Enemy(); Help(); RunAwayFrom`) | The Help call turns nearby civilians hostile and they flee. The fight should stay playable: fleers leave the fight once far, real fighters fight. | Joiners count, rounds, fight end; endless = ISSUE | ok: a citizen's AttackedBy response played (Enemy + Help; it has no script name to be attacked by), guards join, 8 combatants, fight over after 3 rounds |
 | S28 | 000700110 Starting One By One (AR0605) | Attack a brothel patron (0605FLEE) | `Brothel_Alarm`=1, `Brothel_Guards`=1, everyone flees; guards come | Number of fleeing combatants; does the fight end? | ok (re-run): Brothel_Alarm = 1, round 3 of the crowd fight began with no stuck turn. Before: the provoke hit killed Vivian (4 HP) before her flee turn; now HP 40 and ok = round 3 of the 20-combatant fight begins (`rounds` goal in `S.brawl`) |
 | S29 | 000700097 Inside the Foundry (AR0502) | Attack a Godsman worker (0503WORK/0502GENA) | `Alarm2`=1, `Alarm2_Timer` 14400 set; some fight, some flee | Global timer runs on world time; fight end | ok: attack Thildon -> Alarm2 = 1 at tick 183, guards join, fight over after 3 rounds (7 combatants) |
 | S30 | 000700088 Lower Ward (AR0500) | Attack Giltspur (GILTSP, 0500GILT) | `Call_MK`=1 once; Sarge + 4 patrols spawn at (175,2000), run to Player1 in real time, join on arrival; no second spawn | Spawn count; join timing; RunningAttack | ok (playable): Call_MK = 1 once, Sergeant + officers spawn and join on arrival, Giltspur dies; the Nameless One dies and gets up again (vanilla), so the fight runs past 14 rounds; no stuck/held/fault. Found: the lead-Wait skip ran his chatter routine (FIXED: needs a real action behind the Wait) |
@@ -152,7 +152,7 @@ These only matter while the creature is already a combatant, so each scenario st
 | S32 | 000700083 Got The Key (AR0403) | Walk up to the 12 Starved Dogs (EA 255) | 4 party vs 12: initiative, every turn completes, the fight ends; frame rate stays fine | Turn caps, held, endless; combat.log size | ok: 5 combatants in this save (the rest of the dogs already dead), 3 rounds, fight over (one side gone), 1616 ticks |
 | S33 | 000700073 Found the Bronze Sphere (AR1700) | Ghouls in the Drowned Nations; hurt one (1700TRO9 flees at 50 %) | A cornered fleeing hostile within 1100 px: the fight still ends in a sensible way | endless | ok (thin): 4 combatants, one ghoul died in round 1, fight over; the cornered fleer was not reached in this run |
 | S34 | 000700036 Got Ingress Teeth (AR0400) | Hurt a Hive tout made hostile (0400TOUT `EscapeArea` when hurt) | Walks to the exit 31 ft a turn, leaves the area, leaves the fight | Attacks of opportunity on the way; fight end | ok: hostile tout and 3 others; one leaves the area mid-fight (`leaves the fight (left the area)`), fight over after 3 rounds |
-| S35 | 000700187 Got Ancient Scroll (AR0902) or 000700186 (AR0900) | Curst lynch mob (0900MOB) | `Lynch_Float` steps; the mob fights | Variable lost behind a Wait | - |
+| S35 | 000700187 Got Ancient Scroll (AR0902) or 000700186 (AR0900) | Curst lynch mob (0900MOB) | `Lynch_Float` steps; the mob fights | Variable lost behind a Wait | ok: same setup in AR0900 (save 186), 7 combatants, fight over in round 1 |
 
 ## D. Dialogue and cutscenes inside a fight
 
@@ -170,7 +170,7 @@ These only matter while the creature is already a combatant, so each scenario st
 |---|---|---|---|---|---|
 | S41 | 000700104 Coaxmetal (AR0501) | Coaxmetal's arm (IGARM: `CreateCreatureImpassable`, sparks with `ForceSpellRESNoFeedback`) | Spawned arm joins; spark spells resolve on their owner's turn | Impassable creature in path previews | - |
 | S42 | 000700184 Curst Again (AR0800) | Moridor's box demon fight | Boss fight to the end | Big HP; AoO; spells | - |
-| S43 | 000700181 Spoke To Fjull (AR1101) / 000700182 Baator (AR1000) | The Pillar of Skulls (1001PILL) and Baator creatures | No movement for the Pillar; the fight is possible or vanilla | Immobile creatures: turns end, no stuck | - |
+| S43 | 000700181 Spoke To Fjull (AR1101) / 000700182 Baator (AR1000) | The Pillar of Skulls (1001PILL) and Baator creatures | No movement for the Pillar; the fight is possible or vanilla | Immobile creatures: turns end, no stuck | ok (vanilla, playable): the Pillar (spawned, 1001PILL) stands; its turns end at ~51 ticks, no stuck; the party needs 31+ to hit it so the fight runs on (swings every round: not a stalemate). ok = round 4 begins |
 | S44 | 000700196 First Companion (AR1201) | Fortress shadows plus companion fights (Dak'kon/Annah shadows) | Shadows (many, weak) and the companion fight end; no endless spawns | endless, spawns | ok (thin): the Nameless One and one Greater Shadow in range (the other 12 out of the join radius), 3 rounds, fight over |
 | S45 | 000700120 Modron Maze (AR13FY) | Maze modrons, rogue modrons (12 hostile) | Big fight in tight corridors: paths, no push, no stuck | stuck, path preview vs engine | ok: the save's one modron made hostile in the maze corridors, 6 combatants, fight over after 2 rounds, no stuck turn |
 
@@ -180,7 +180,7 @@ These only matter while the creature is already a combatant, so each scenario st
 |---|---|---|---|---|---|
 | S46 | 000700083 (AR0403) | Set TNO HP 1, let a thug kill him mid-fight | TNO's death: Mortuary area change; the fight ends; no held creature left over | Fight end reason; HUD gone | - |
 | S47 | 000700083 (AR0403) | Kill Morte mid-fight (HP 1) | The dead leave the fight, turn order goes on; Morte's own script on death | Order, no stuck | - |
-| S48 | 000000200 PSTF-8-Party (test save) | Spawn 6 Starved Dog thugs (CRE of the AR0403 thugs) next to the 8-member party | 8 party turns plus 6: party slots 7 and 8 get turns and cards | HUD cards, initiative | - |
+| S48 | 000000200 PSTF-8-Party (test save) | Spawn 6 Starved Dog thugs (CRE of the AR0403 thugs) next to the 8-member party | 8 party turns plus 6: party slots 7 and 8 get turns and cards | HUD cards, initiative | ok: 8-member party vs 6 thugs (60 HP), 14 combatants, every slot 1-8 had 4-5 turns, fight over after 5 rounds |
 | S49 | 000700083 (AR0403) | Charm a thug (`ApplySpell` with op 5) mid-fight, then let the charm end | Changes sides on charm (`tbc: X changes sides`), fights for the party, goes back when it ends | Sides, nudge target | - |
 | S50 | 000700083 (AR0403) | Make a thug invisible (op 20) mid-fight | Party scripts cannot see it; its turns still run (nudge `Attack(PlayerN)` needs no sight) | No stuck turn; HUD | - |
 
