@@ -9,6 +9,7 @@ $logs = Join-Path $build 'logs'
 New-Item -ItemType Directory -Force $logs | Out-Null
 
 # The user PATH has a stray quote (Nsight entry); use a clean PATH. The VS generator finds MSBuild itself.
+$callerPath = $env:PATH  # put back at the end: a dot-less call still shares the caller's environment
 $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0;C:\Program Files\CMake\bin"
 
 $fail = 0
@@ -32,5 +33,6 @@ if ($ok) {
   Step 'verify' { & "$build\Release\pstf_verify.exe" $Exe } | Out-Null
   Get-Content "$logs\unit.log", "$logs\verify.log" | Select-String -Pattern '^(unit|verify):' | ForEach-Object { Write-Host $_ }
 }
+$env:PATH = $callerPath
 if ($fail) { Write-Host "check: $fail step(s) failed"; exit 1 }
 Write-Host 'check: ok'

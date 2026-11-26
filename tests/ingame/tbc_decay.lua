@@ -18,6 +18,7 @@ local tracks = {}
 local pending = nil    -- {track(s), caster}
 local phase = 'A'
 local dot = nil        -- phase C: Adder's Kiss hits on the foe
+local prayerFoe = nil  -- the foe's HITBONUS without Prayer's curse
 local casts = {}       -- per caster: list of {track names}, issued in order on its turns
 local function fail(msg) PSTF_Note('TEST FAIL: tbc_decay: ' .. msg) pstfTestTick = nil end
 local function note(msg) PSTF_Note('tbc_decay: ' .. msg) end
@@ -176,6 +177,16 @@ function pstfTestTick()
 			elseif h ~= dot.last and not (id == dot.victim and frames < turnStart + 3) then
 				return fail(string.format("Adder's Kiss: foe HP %d -> %d outside its turn start", dot.last, h))
 			end
+		end
+	end
+	-- Prayer's aura curses the foe every round it lasts: at each foe turn start while Grace's Prayer icon shows, the
+	-- foe's HITBONUS is one lower (the aura pulses once per owner round: StepEffectClock's extra 0-tick call)
+	if phase == 'B' and id == foe and frames == turnStart + 3 and tracks.Prayer and #tracks.Prayer.seen > 0 then
+		if icon(grace, 'SPPR303') > 0 then
+			prayerFoe = prayerFoe or stat(foe, 151) + 1
+			local v = stat(foe, 151)
+			note(string.format('Prayer: foe turn start: HITBONUS %d (uncursed %d)', v, prayerFoe))
+			if v ~= prayerFoe - 1 then return fail('Prayer: the foe is not cursed at its turn start while the aura lasts') end
 		end
 	end
 	-- readings at owner turn starts

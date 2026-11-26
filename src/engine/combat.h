@@ -167,6 +167,9 @@ bool InstallRollHooks();
 // removed, -1 unavailable) and end its PST attached spell objects (shields, mantles) on the next tick.
 int UnapplySpell(int32_t id, const char* res);
 int EndAttached(int32_t id);
+// Test cleanup (PSTF_Unapply): timed effects with no parent resref (an attached spell object's, Power of One's) run
+// out on the next tick. -> how many. They outlive EndAttached on their own clocks, as in play.
+int ExpireOrphans(int32_t id);
 // CGameSprite::FeedBack hook: counts each creature's casts (feedback 5, sent by Spell/SpellPoint/SpellPST/
 // SpellPointPST when the spell goes off); `log` = also log every FeedBack (debug, env PSTF_FEEDBACK_LOG=1).
 bool InstallFeedbackHook(bool log);

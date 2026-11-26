@@ -27,6 +27,26 @@ inline constexpr Expect kExpect[] = {
     {"SPPR202", "-", 0x0U, "none", 11, 11, 0, "Cure Moderate Wounds: op 17 +11 in the cast turn"},
     {"SPPR401", "-", 0x0U, "none", 17, 17, 0,
      "Cure Serious Wounds: op 17 +17 in the cast turn (an r2 icon seen in a full run was the previous spell's)"},
+    {"SPPR105", "2:+2", 0x0U, "r56:debuff", 0, 0, 56,
+     "Halo of Lesser Revelation (projectile 259): hostiles AC +2, no save, 20 s/level (4200 ticks at 14); the caster "
+     "untouched; icon via the spell being cast (CurrentSpell read the CResHelper's inline resref, fixed 2026-11-25)"},
+    {"SPPR106", "2:-2,9:-1,10:-2,11:-2,12:-2,13:-2", 0x0U, "r28:buff", 0, 0, 28,
+     "Protection from Evil (op 375 PROT): the engine's AC -2 and saves +2 (not only vs evil, vanilla), 10 s/level; "
+     "save vs death 1 -> 0 floors at 0"},
+    {"SPPR201", "1:+8,7:-1,9:-1,10:-1,11:-1,12:-1,13:-1,50:+1", 0x8000000U, "r30:buff", 8, 8, 30,
+     "Aid (op 129): +1 hit/damage/saves, +8 max HP and HP (CGameEffectNon_CumulativeAid: 8 x param, not 1-8 as the "
+     "text says; vanilla); 10 s + 10 s/level"},
+    {"SPPR204", "-", 0x0U, "none", -65, -20, 0,
+     "Spiritual Hammer (projectile 260): (level + 2) / 3 hammers (5 at 14), each its own to-hit roll and 4-10 "
+     "(+enchantment), save 1/2 (52-54 failed, 24 saved); the turn waits for the last one (~200 ticks)"},
+    {"SPPR301", "-", 0x0U, "none", -128, -16, 0,
+     "Call Lightning: 16d8 at level 14 (2d8 + 1d8/level), 10 ft, save 1/2 (76-87 failed, 38 saved)"},
+    {"SPPR302", "-", 0x0U, "r30:buff", 0, 0, 30,
+     "Flamewalk (op 375 FTRL): +50% fire resistance and op 84 for 10 s + 10 s/level (Morte 0 -> 50, spell_follow); "
+     "the suite's Grace already has 100 so the engine adds none (it skips when > 49)"},
+    {"SPPR303", "9:-1,10:-1,11:-1,12:-1,13:-1,50:+1,151:+1", 0x800000U, "r14:buff", 0, 0, 14,
+     "Prayer (op 378): friends +1 hit/damage/saves, foes -1 hit/damage every round for 5 s/level (14 rounds at 14, "
+     "spell_follow on the foe); the aura pulses once per owner round (StepEffectClock's extra 0-tick call)"},
     {"SPWI115", "2:+4,7:+4", 0x40000U, "r12:debuff", 0, 0, 12,
      "Blindness (op 74, 60 s): THAC0 +4, AC +4, STATE_BLIND (CGameEffectBlindness::ApplyEffect); a save negates it "
      "all (-Saves pass: no effect, no icon); decay as Vilquar's Eye's op 74 (tbc_decay.lua)"},

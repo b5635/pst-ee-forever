@@ -282,6 +282,22 @@ int EndAttached(int32_t id) {
   return ended;
 }
 
+int ExpireOrphans(int32_t id) {
+  const uint64_t p = ClockSymbolsOk() ? LookupSprite(id) : 0;
+  const uint64_t g = GameObject();
+  if (!p || !g) return 0;
+  const uint32_t now = R<uint32_t>(g + 0x7820);
+  int n = 0;
+  ForEachEffect(p, [&](uint64_t eff) {
+    if (!ClockedType(R<uint32_t>(eff + sym::kOffEffType)) || R<uint64_t>(eff + sym::kOffEffParentRes) != 0) return;
+    if (static_cast<int32_t>(R<uint32_t>(eff + sym::kOffEffTick) - now) <= 1) return;
+    W<uint32_t>(eff + sym::kOffEffTick, now + 1);
+    ++n;
+  });
+  if (n) W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
+  return n;
+}
+
 void StepEffectClock(int32_t id, uint32_t ticks) {
   const uint64_t p = g_clock ? LookupSprite(id) : 0;
   if (!p) return;
@@ -306,6 +322,12 @@ void StepEffectClock(int32_t id, uint32_t ticks) {
   // so one call with 75 ticks ran its pulses 75 times too slowly. Durations (+40) take the ticks either way.
   using HandleFn = int64_t(__fastcall*)(uint64_t, uint32_t);
   for (uint32_t i = 0; i < ticks; ++i) reinterpret_cast<HandleFn>(Va(sym::kRvaHandlePersist))(p, 1);
+  // ... plus one 0-tick call (counters step, no duration passes): a period counter fires on the call AFTER it
+  // reaches 0 (CPersistantEffectPrayer::AIUpdate lin 214660 l.42-49: decrement while non-zero, else pulse and reset to
+  // 75), so a 5 s pulse is 76 calls apart. With 75 per round the pulse came due at the end of the owner's turn start
+  // and fired only if a world tick ran in its turn: the round after Prayer's cast its 6 s curse ran out on the foe
+  // (spell_follow.lua, 2026-11-25). Now a 5 s aura pulses once per owner round, at its turn start.
+  if (ticks > 0) reinterpret_cast<HandleFn>(Va(sym::kRvaHandlePersist))(p, 0);
   W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
 }
 

@@ -60,8 +60,8 @@ function pstfTestTick()
 		PSTF_Note(string.format('turn of %s round %d: thug hp %d %d %d', name(id), r, hp(thugs[1]), hp(thugs[2]), hp(thugs[3])))
 	end
 	if id ~= -1 and itemTurns[id] and itemTurns[id].round == round and used then itemTurns[id].used = true end
-	-- Adder's Kiss: any other combatant (snapshot at the cast: it may die and leave the fight) losing
-	-- HP in Dak'kon's Adder turn (the three thugs are the swarm's)
+	-- Adder's Kiss: any combatant (snapshot at the cast: it may die and leave the fight) losing HP in Dak'kon's
+	-- Adder turn (the swarm is cast in a later turn)
 	if adderRound == round and cur == dak and adderSnap then
 		for w, h0 in pairs(adderSnap) do
 			local h = hp(w)
@@ -103,7 +103,7 @@ function pstfTestTick()
 				local w = PSTF_FightId(n)
 				if w == -1 then break end
 				n = n + 1
-				if w ~= thugs[1] and w ~= thugs[2] and w ~= thugs[3] then adderSnap[w] = hp(w) end
+				adderSnap[w] = hp(w)  -- NearestEnemyOf picks any foe, a thug too (the swarm comes after it)
 			end
 			PSTF_EvalAs(dak, 'SpellNoDec(NearestEnemyOf(Myself),2201)')
 		elseif what == 'orb' then

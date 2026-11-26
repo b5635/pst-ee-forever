@@ -516,17 +516,16 @@ bool CastState(int32_t id, int32_t* in_progress, int16_t* counter, bool* running
 
 // The CSpell being cast: CGameSprite::SpellPST lin 4CDDC0 l.202 `this + 2300` (+0x47E0 on Linux), win 14042E632
 // `mov rdi, [rbx+47F8h]` right after the in-progress test (+0x46AC, Linux +0x4694: Windows is +0x18 here);
-// CRes::GetResRef lin 643910 / win 14047E9E0: the name pointer at CRes +8.
+// The holder is a 16-byte CResHelper (SpellPST lin l.356-379: operator new(0x10), +0 CRes*, +8 the CResRef itself,
+// 8 inline chars, upper case, NUL-padded), not a CRes: reading +8 as a name pointer found nothing, ever.
 std::string CurrentSpell(int32_t id) {
   const uint64_t p = Lookup(id);
   if (!p) return "";
-  const uint64_t res = R<uint64_t>(p + 0x47F8);
-  if (!PlausiblePtr(res)) return "";
-  const uint64_t name = R<uint64_t>(res + 8);  // a char*: any alignment
-  if (name < 0x10000 || name >= 0x00007FFFFFFF0000ull) return "";
+  const uint64_t helper = R<uint64_t>(p + 0x47F8);
+  if (!PlausiblePtr(helper)) return "";
   std::string out;
   for (int i = 0; i < 8; ++i) {
-    const char c = R<char>(name + i);
+    const char c = R<char>(helper + 8 + i);
     if (!c) break;
     if (c < 0x20 || c > 0x7E) return "";
     out += c;

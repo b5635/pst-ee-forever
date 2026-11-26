@@ -1835,8 +1835,14 @@ void OnTick(uint64_t frame) {
   if (g.round_effects && engine::EffectClockInstalled() && dt > 0 && dt < 1000)
     for (int32_t id : g.in) engine::ShiftEffectClock(id, static_cast<int32_t>(dt));
   // The spell being cast now: parentless effects its projectile builds take it for their icon (status.h NoteCast).
-  if (g.current != -1 && g.res) {
+  if (g.current != -1 && g.res && g.econ.acting && IsCastAction(g.econ.act_action)) {  // +0x47F8 outlives the cast
     const std::string res = engine::CurrentSpell(g.current);
+    static std::string last_cast;
+    if (res != last_cast) {
+      Log("tbc: %s: spell being cast %s (parentless effects' fallback parent)", Who(g.current).c_str(),
+          res.empty() ? "none" : res.c_str());
+      last_cast = res;
+    }
     if (!res.empty()) {
       const SpellFacts* f = g.res->Spell(res);
       g.orphans.NoteCast(res, f ? f->flags : 0, now);
@@ -2611,7 +2617,9 @@ int __cdecl LuaUnapply(engine::LuaState* L) {
   const std::string res = engine::LuaStringArg(L, 2);
   const int n = engine::UnapplySpell(id, res.c_str());
   const int a = engine::EndAttached(id);
-  Log("lua: PSTF_Unapply(%X, %s) -> %d effects, %d attached", static_cast<unsigned>(id), res.c_str(), n, a);
+  const int o = engine::ExpireOrphans(id);
+  Log("lua: PSTF_Unapply(%X, %s) -> %d effects, %d attached, %d parentless", static_cast<unsigned>(id), res.c_str(), n,
+      a, o);
   engine::LuaPushNumber(L, n);
   engine::LuaPushNumber(L, a);
   return 2;

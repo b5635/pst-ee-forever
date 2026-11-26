@@ -77,14 +77,14 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 | SPPR102 | Cure Light Wounds | heal 8 | INSTANT | - | HP +8 (capped at max) | U1 U2 | yes 2026-11-25 |
 | SPPR103 | Curse | foes in 50 ft: -1 hit, -1 saves, 30 s, non-cumulative | DEBUFF | D 6 | THAC0 +1, saves -1 on foes only; a 2nd cast does not stack | U1 U2 | yes 2026-11-25 |
 | SPPR104 | Detect Evil | reveals evil creatures (op 376) for a time | OOC | B? | engine highlight on; does not stall the turn | U2 G |  |
-| SPPR105 | Halo of Lesser Revelation | foes in area outlined, easier to hit (hardcoded projectile 259) | HARDCODED DEBUFF | D (20 s/lvl) | foes' AC worse by the engine's value; icon via the projectile's effects | U2 G |  |
-| SPPR106 | Protection from Evil | +2 AC/saves vs evil, 10 s/lvl (op 375 PROT) | ATTACHED | B | AC/saves change; ends on its stamp shifted by rounds | U2 |  |
-| SPPR201 | Aid | +1 hit, +1 saves, + HP (only if not already fighting), 10 s + 10 s/lvl | BUFF | B | THAC0/saves/max HP; check the "not in combat" condition in a tbc fight (is a tbc fight "in combat"?) | U1 U2 |  |
+| SPPR105 | Halo of Lesser Revelation | foes in area outlined, easier to hit (hardcoded projectile 259) | HARDCODED DEBUFF | D (20 s/lvl) | foes' AC worse by the engine's value; icon via the projectile's effects | U2 G | yes 2026-11-25 |
+| SPPR106 | Protection from Evil | +2 AC/saves vs evil, 10 s/lvl (op 375 PROT) | ATTACHED | B | AC/saves change; ends on its stamp shifted by rounds | U2 | yes 2026-11-25 |
+| SPPR201 | Aid | +1 hit, +1 saves, + HP (only if not already fighting), 10 s + 10 s/lvl | BUFF | B | THAC0/saves/max HP; check the "not in combat" condition in a tbc fight (is a tbc fight "in combat"?) | U1 U2 | yes 2026-11-25 |
 | SPPR202 | Cure Moderate Wounds | heal 11 | INSTANT | - | HP +11 | U1 U2 | yes 2026-11-25 |
-| SPPR204 | Spiritual Hammer | hammer hits 4-10 per 3 levels, save 1/2 (projectile 260) | HARDCODED, INSTANT | - | HP loss within bounds; lands in the caster's turn (long: 200 ticks today) | U2 |  |
-| SPPR301 | Call Lightning | 2d8 + 1d8/lvl electric, save 1/2, 10 ft | INSTANT | - | HP loss within 27d8 bounds (half on save) | U1 U2 |  |
-| SPPR302 | Flamewalk | +2 saves vs fire, fire resistance (op 375 FTRL) | ATTACHED | B | fire resistance stat; Ignus' fire deals less | U2 |  |
-| SPPR303 | Prayer | allies +1 hit/dmg/saves, foes -1, 5 s/lvl, 60 ft | BUFF+DEBUFF | B on allies, D on foes | both sides change, opposite signs | U1 U2 |  |
+| SPPR204 | Spiritual Hammer | hammer hits 4-10 per 3 levels, save 1/2 (projectile 260) | HARDCODED, INSTANT | - | HP loss within bounds; lands in the caster's turn (long: 200 ticks today) | U2 | yes 2026-11-25 |
+| SPPR301 | Call Lightning | 2d8 + 1d8/lvl electric, save 1/2, 10 ft | INSTANT | - | HP loss within 27d8 bounds (half on save) | U1 U2 | yes 2026-11-25 |
+| SPPR302 | Flamewalk | +2 saves vs fire, fire resistance (op 375 FTRL) | ATTACHED | B | fire resistance stat; Ignus' fire deals less | U2 | yes 2026-11-25 |
+| SPPR303 | Prayer | allies +1 hit/dmg/saves, foes -1, 5 s/lvl, 60 ft | BUFF+DEBUFF | B on allies, D on foes | both sides change, opposite signs | U1 U2 | yes 2026-11-25 |
 | SPPR304 | Speak with Dead | talk to a corpse (projectile 205) | OOC | - | dialogue opens on a corpse | G |  |
 | SPPR307 | Remove Curse | lets cursed items be removed | OOC | - | cursed item unequips after | G |  |
 | SPPR401 | Cure Serious Wounds | heal 17 | INSTANT | - | HP +17 | U1 U2 | yes 2026-11-25 |

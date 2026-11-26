@@ -175,6 +175,11 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   ability for the caster level and refuses a spell whose first ability needs more, without a word (SpellPST).
 - Test save: the Hive, `-Save 000000126` (many Hive thugs to turn hostile; `tbc_rules`, `tbc_sim`, `tbc_hive`).
   `tbc_hive.lua`: Swarm Curse pacing, Adder's Kiss, Whispering Flask/Embalming take the action, save sound.
+- Vetting a spell by hand: `python -I tools/spell_vet.py RES ...` (description, the suite caster's SPL header, plan row,
+  last measurement, vetted?), `python -I tools/spell_vet.py --log` (per spell of the last suite run: effects before/after
+  as op:type:ticks, onsets, saves, holds), `tools\spell_follow.ps1 -Caster Grace -Cast 'SpellNoDec("Morte",1302)' -Owner
+  Morte|self|foe|hit -Stats 14,84 -Turns N [-Level L] [-Saves pass]` (one spell turn by turn: effects, stats, state,
+  icons of its owner at each of its turn starts). Vetted spells: `tests/unit/spell_expect.h`.
 - Game resources: `python -I tools/ieres.py spl|itm NAME` (effects per header), `desc NAME` (TLK description),
   `named REGEX` (SPL/ITM by TLK name), `find REGEX [EXT]`, `raw NAME.EXT [OUT]` (override, then chitin.key/BIFs).
 - Lighting (`[lighting] enabled=1`, `docs/VISUALS_PLAN.md`): `tools\launch.ps1 -Save 000000076|126|164 -Lua tests\ingame\lighting.lua

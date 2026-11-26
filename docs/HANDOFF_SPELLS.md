@@ -52,6 +52,10 @@ For each spell (and each special ability):
 - Hand-vetted (plan column "Vetted", rows in `tests/unit/spell_expect.h`, checked against spell_results.h):
   SPPR101 Blessing, SPPR102/202/401 cures, SPPR103 Curse, SPWI115 Blindness, SPWI201 Adder's Kiss.
   `tbc_decay.lua` now also checks Blessing's/Curse's exact values and who they spare, and Adder's Kiss hit by hit.
+- Batch 2 vetted: SPPR105 Halo, SPPR106 Protection from Evil, SPPR201 Aid, SPPR204 Spiritual Hammer, SPPR301 Call
+  Lightning, SPPR302 Flamewalk, SPPR303 Prayer. Fixed on the way: `CurrentSpell` (Halo/Black-Barbed icons), Prayer's
+  aura missed a round (StepEffectClock's extra 0-tick call), the suite's cleanup left attached spells' parentless
+  effects (`ExpireOrphans`), check.ps1 left PATH without python.
 - Next: continue the per-spell pass (item 4) with the rest of section 3.
 
 ## Next, in order
