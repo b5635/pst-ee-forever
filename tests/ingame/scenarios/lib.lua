@@ -317,9 +317,22 @@ end
 -- turns = own turns before giving up, maxFrames}. Finishes ok when every expect holds (and check, if any).
 function S.plot(o)
 	o.casts, o.turns = 0, 1000
+	if o.provoke then
+		-- as the player would: the protagonist attacks it while it is still neutral (a hostile creature's See block
+		-- outranks its AttackedBy response); its own script makes it an enemy
+		o.hostile = false
+		local setup = o.setup
+		o.setup = function(i)
+			local _, _, _, _, sn = PSTF_Side(i)
+			S.note('provoke: protagonist attacks ' .. tostring(sn))
+			PSTF_EvalAs(S.tno(), 'Attack("' .. tostring(sn) .. '")', 1)
+			if setup then setup(i) end
+		end
+	end
 	local want = o.expect or {}
 	local id
-	o.setup = function(i) id = i end
+	local setup0 = o.setup
+	o.setup = function(i) id = i if setup0 then setup0(i) end end
 	S.chainCaster(o)
 	local inner = S.tick
 	local seen = {}

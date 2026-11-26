@@ -7,3 +7,5 @@ S.plot{name = 'Ravel', hp = 60, maxFrames = 5000, check = function(id)
 	if PSTF_TbcCurrent() == -1 and S.frame > 200 then dead = dead + 1 end
 	return dead > 150, 'fight over for ' .. dead .. ' ticks'
 end}
+
+S.steps[400] = function() if S.caster then PSTF_SetHp(S.caster, 1, 60) end end

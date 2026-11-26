@@ -1372,3 +1372,12 @@ TEST_CASE("tbc economy: a spent Spell gives its action back") {
   CHECK(!st.end_turn);
 }
 
+TEST_CASE("tbc economy: a flight still searching its path is not nudged at once") {
+  Economy e(31.0, 51, false);
+  bool nudge = false;
+  for (int i = 0; i < 20; ++i) nudge = nudge || e.Feed(1, 0, false, 355).nudge;  // RunAwayFromNoLeaveArea, no step yet
+  CHECK(!nudge);
+  for (int i = 0; i < 15; ++i) nudge = nudge || e.Feed(1, 0, false, 355).nudge;  // still not moving at 30 ticks
+  CHECK(nudge);
+}
+

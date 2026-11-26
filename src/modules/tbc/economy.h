@@ -305,7 +305,9 @@ struct Economy {
     if (party) {
       out.end_turn = spent && !has_path;
     } else {
-      if (!did_something && !nudged && total >= kAiThinkTicks) {
+      // A walk or flight in hand is not idling (its path search can take a few ticks: Berrog's RunAwayFromNoLeaveArea
+      // had not stepped by tick 15 and was turned into an attack); it gets kAiThinkTicks more to start moving.
+      if (!did_something && !nudged && total >= kAiThinkTicks && !(walk_action && total < 2 * kAiThinkTicks)) {
         nudged = true;
         out.nudge = true;
         idle = 0;
