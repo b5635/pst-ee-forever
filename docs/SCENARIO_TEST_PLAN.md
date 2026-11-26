@@ -78,6 +78,9 @@ an ISSUE, and add new ones here:
 - **Expected counts:** check what the creature really has (a spent `Spell` falls through: Shilandra knows 3 of 5).
 - **Provoke kills the target:** a 4-HP patron dies to the protagonist's first hit; give it `hp` so it lives to run its
   own AttackedBy response.
+- **No script name** (Curst citizens): `Attack("None")` does nothing; the provoke jumps the protagonist beside it
+  and orders `Attack(Nearest([NEUTRAL]))`.
+- **Spawned creatures:** find them by `S.ids()` before/after the spawn, not by the CRE name (S.find misses them).
 - **Crowds too big to finish in a run:** `S.brawl{rounds = N}` = ok once round N begins with no stuck turn.
 - **Frame budget:** a step caster with one step per turn needs ~1050 ticks a turn with a 4-member party; set
   `maxFrames` to steps x 1100 + setup, or a pass reads as stuck a few ticks before the last step.
@@ -143,11 +146,11 @@ These only matter while the creature is already a combatant, so each scenario st
 |---|---|---|---|---|---|
 | S27 | 000700165 Rescue Mission (AR0700) | Attack a Curst civilian (0704RUN-type: `Enemy(); Help(); RunAwayFrom`) | The Help call turns nearby civilians hostile and they flee. The fight should stay playable: fleers leave the fight once far, real fighters fight. | Joiners count, rounds, fight end; endless = ISSUE | - |
 | S28 | 000700110 Starting One By One (AR0605) | Attack a brothel patron (0605FLEE) | `Brothel_Alarm`=1, `Brothel_Guards`=1, everyone flees; guards come | Number of fleeing combatants; does the fight end? | ok (re-run): Brothel_Alarm = 1, round 3 of the crowd fight began with no stuck turn. Before: the provoke hit killed Vivian (4 HP) before her flee turn; now HP 40 and ok = round 3 of the 20-combatant fight begins (`rounds` goal in `S.brawl`) |
-| S29 | 000700097 Inside the Foundry (AR0502) | Attack a Godsman worker (0503WORK/0502GENA) | `Alarm2`=1, `Alarm2_Timer` 14400 set; some fight, some flee | Global timer runs on world time; fight end | - |
+| S29 | 000700097 Inside the Foundry (AR0502) | Attack a Godsman worker (0503WORK/0502GENA) | `Alarm2`=1, `Alarm2_Timer` 14400 set; some fight, some flee | Global timer runs on world time; fight end | ok: attack Thildon -> Alarm2 = 1 at tick 183, guards join, fight over after 3 rounds (7 combatants) |
 | S30 | 000700088 Lower Ward (AR0500) | Attack Giltspur (GILTSP, 0500GILT) | `Call_MK`=1 once; Sarge + 4 patrols spawn at (175,2000), run to Player1 in real time, join on arrival; no second spawn | Spawn count; join timing; RunningAttack | ok (playable): Call_MK = 1 once, Sergeant + officers spawn and join on arrival, Giltspur dies; the Nameless One dies and gets up again (vanilla), so the fight runs past 14 rounds; no stuck/held/fault. Found: the lead-Wait skip ran his chatter routine (FIXED: needs a real action behind the Wait) |
 | S31 | 000700041 The Red Thugs (AR0400) | Hive thugs (0400THG8 `StartTimer(1,15)` random aggro) | Thugs pick fights on their timer; the turn-based fight runs | TIMER `1:` frozen while held (timer only counts in their own turns) | STALEMATE found, fixed: the made-hostile thug and the party could not reach each other (party Attack dropped at once, the thug's path 0 at a 4-cell gap) and the fight ran 25 rounds with nothing happening. New `[tbc] stalemate_rounds` (3): whole rounds with no walk, swing, cast or HP change end the fight; no new fight until one of those creatures moved, was hurt or a new one came (`StaleHold`). Re-run pending |
 | S32 | 000700083 Got The Key (AR0403) | Walk up to the 12 Starved Dogs (EA 255) | 4 party vs 12: initiative, every turn completes, the fight ends; frame rate stays fine | Turn caps, held, endless; combat.log size | ok: 5 combatants in this save (the rest of the dogs already dead), 3 rounds, fight over (one side gone), 1616 ticks |
-| S33 | 000700073 Found the Bronze Sphere (AR1700) | Ghouls in the Drowned Nations; hurt one (1700TRO9 flees at 50 %) | A cornered fleeing hostile within 1100 px: the fight still ends in a sensible way | endless | - |
+| S33 | 000700073 Found the Bronze Sphere (AR1700) | Ghouls in the Drowned Nations; hurt one (1700TRO9 flees at 50 %) | A cornered fleeing hostile within 1100 px: the fight still ends in a sensible way | endless | ok (thin): 4 combatants, one ghoul died in round 1, fight over; the cornered fleer was not reached in this run |
 | S34 | 000700036 Got Ingress Teeth (AR0400) | Hurt a Hive tout made hostile (0400TOUT `EscapeArea` when hurt) | Walks to the exit 31 ft a turn, leaves the area, leaves the fight | Attacks of opportunity on the way; fight end | ok: hostile tout and 3 others; one leaves the area mid-fight (`leaves the fight (left the area)`), fight over after 3 rounds |
 | S35 | 000700187 Got Ancient Scroll (AR0902) or 000700186 (AR0900) | Curst lynch mob (0900MOB) | `Lynch_Float` steps; the mob fights | Variable lost behind a Wait | - |
 
@@ -168,8 +171,8 @@ These only matter while the creature is already a combatant, so each scenario st
 | S41 | 000700104 Coaxmetal (AR0501) | Coaxmetal's arm (IGARM: `CreateCreatureImpassable`, sparks with `ForceSpellRESNoFeedback`) | Spawned arm joins; spark spells resolve on their owner's turn | Impassable creature in path previews | - |
 | S42 | 000700184 Curst Again (AR0800) | Moridor's box demon fight | Boss fight to the end | Big HP; AoO; spells | - |
 | S43 | 000700181 Spoke To Fjull (AR1101) / 000700182 Baator (AR1000) | The Pillar of Skulls (1001PILL) and Baator creatures | No movement for the Pillar; the fight is possible or vanilla | Immobile creatures: turns end, no stuck | - |
-| S44 | 000700196 First Companion (AR1201) | Fortress shadows plus companion fights (Dak'kon/Annah shadows) | Shadows (many, weak) and the companion fight end; no endless spawns | endless, spawns | - |
-| S45 | 000700120 Modron Maze (AR13FY) | Maze modrons, rogue modrons (12 hostile) | Big fight in tight corridors: paths, no push, no stuck | stuck, path preview vs engine | - |
+| S44 | 000700196 First Companion (AR1201) | Fortress shadows plus companion fights (Dak'kon/Annah shadows) | Shadows (many, weak) and the companion fight end; no endless spawns | endless, spawns | ok (thin): the Nameless One and one Greater Shadow in range (the other 12 out of the join radius), 3 rounds, fight over |
+| S45 | 000700120 Modron Maze (AR13FY) | Maze modrons, rogue modrons (12 hostile) | Big fight in tight corridors: paths, no push, no stuck | stuck, path preview vs engine | ok: the save's one modron made hostile in the maze corridors, 6 combatants, fight over after 2 rounds, no stuck turn |
 
 ## F. Engine-level edge cases (any save)
 

@@ -101,6 +101,15 @@ local lastCur, turnStart, started, lastRound = -2, 0, false, 0
 function pstfTestTick()
 	if finished then return end
 	S.frame = S.frame + 1
+	if S.provokeNearest then  -- a few ticks after the jump (see S.plot provoke)
+		S.provokeNearest = S.provokeNearest - 1
+		if S.provokeNearest == 0 then
+			S.provokeNearest = nil
+			PSTF_EvalAs(S.tno(), 'Attack(Nearest([NEUTRAL]))', 1)
+			local _, t = PSTF_Side(S.tno())
+			S.note('provoke: protagonist target ' .. S.hx(t or -1))
+		end
+	end
 	-- Walkthrough saves can open inside a party banter dialogue (the world waits for it): step it closed first.
 	-- (any time: a banter can start mid-fight; scenarios that test a dialogue set S.keepDialog)
 	if S.frame % 3 == 1 and not S.keepDialog and not (S.keepDialogAfter and S.frame >= S.keepDialogAfter) and worldScreen and worldScreen.StepDialog and
@@ -330,8 +339,16 @@ function S.plot(o)
 		local setup = o.setup
 		o.setup = function(i)
 			local _, _, _, _, sn = PSTF_Side(i)
-			S.note('provoke: protagonist attacks ' .. tostring(sn))
-			PSTF_EvalAs(S.tno(), 'Attack("' .. tostring(sn) .. '")', 1)
+			if sn == nil or sn == '' or sn == 'None' then
+				-- no script name to name it by (Curst citizens): stand beside it and attack the nearest neutral
+				local x, y = PSTF_SpritePos(i, 1)
+				PSTF_EvalAs(S.tno(), 'JumpToPoint([' .. math.floor(x + 30) .. '.' .. math.floor(y) .. '])', 1)
+				S.note('provoke: protagonist attacks the nearest neutral (it has no script name)')
+				S.provokeNearest = 4
+			else
+				S.note('provoke: protagonist attacks ' .. tostring(sn))
+				PSTF_EvalAs(S.tno(), 'Attack("' .. tostring(sn) .. '")', 1)
+			end
 			if setup then setup(i) end
 		end
 	end
