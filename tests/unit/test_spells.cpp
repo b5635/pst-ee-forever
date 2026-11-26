@@ -13,6 +13,7 @@
 #include "mini_test.h"
 #include "modules/tbc/round_rules.h"
 #include "modules/tbc/status.h"
+#include "spell_expect.h"
 #include "spell_results.h"
 #include "spell_table.h"
 
@@ -279,4 +280,22 @@ TEST_CASE("spells: damage lands in the caster's turn, heals heal") {
   }
   for (const auto& b : bad) std::printf("  %s\n", b.c_str());
   CHECK(bad.empty());
+}
+
+TEST_CASE("spells: every hand-vetted spell still measures as vetted (spell_expect.h vs spell_results.h)") {
+  int n = 0;
+  for (const auto& e : spellexpect::kExpect) {
+    const auto* r = ResultOf(e.res);
+    CHECK(r != nullptr);
+    if (!r) continue;
+    ++n;
+    const bool ok = std::strcmp(r->verdict, "ok") == 0 && std::strcmp(r->stats, e.stats) == 0 && r->state == e.state &&
+                    std::strcmp(r->icon, e.icon) == 0 && r->hp >= e.hp_min && r->hp <= e.hp_max &&
+                    (IconRounds(e.icon) == 0 || IconRounds(e.icon) == e.rounds);
+    if (!ok)
+      std::printf("  %s: measured %s st=%s state=%X icon=%s hp=%d; vetted st=%s state=%X icon=%s hp %d..%d\n", e.res,
+                  r->verdict, r->stats, r->state, r->icon, r->hp, e.stats, e.state, e.icon, e.hp_min, e.hp_max);
+    CHECK(ok);
+  }
+  CHECK(n == static_cast<int>(sizeof spellexpect::kExpect / sizeof spellexpect::kExpect[0]));
 }

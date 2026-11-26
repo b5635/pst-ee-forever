@@ -17,6 +17,7 @@ local turns = {}       -- turns started per creature
 local tracks = {}
 local pending = nil    -- {track(s), caster}
 local phase = 'A'
+local dot = nil        -- phase C: Adder's Kiss hits on the foe
 local casts = {}       -- per caster: list of {track names}, issued in order on its turns
 local function fail(msg) PSTF_Note('TEST FAIL: tbc_decay: ' .. msg) pstfTestTick = nil end
 local function note(msg) PSTF_Note('tbc_decay: ' .. msg) end
@@ -40,12 +41,14 @@ local function icon(id, res)
 end
 local function on(t)
 	if t.bit then return math.floor((PSTF_State(t.owner, 1) or 0) / t.bit) % 2 == 1 end
+	if not t.stat then return true end  -- followed another way (Adder's Kiss: `dot`)
 	local v = stat(t.owner, t.stat)
 	return (t.sign > 0 and v > t.base) or (t.sign < 0 and v < t.base)
 end
 local function track(name, owner, res, expect, how)
 	local t = {name = name, owner = owner, res = res, expect = expect, seen = {}, done = false, lag = how.lag or 0,
-		stat = how.stat, sign = how.sign, bit = how.bit, steps = how.steps}
+		stat = how.stat, sign = how.sign, bit = how.bit, steps = how.steps,
+		exact = how.exact, spare = how.spare}  -- exact = {{stat, delta}} on the owner; spare = an id it must not change
 	tracks[name] = t
 	return t
 end
@@ -88,9 +91,12 @@ function pstfTestTick()
 		C:Eval('ChangeStat(Myself,LEVEL,5,SET)', slotOf('Grace'))
 		casts[grace] = {{'Blessing', 'SpellNoDec(Myself,1101)'}, {'Curse', 'SpellNoDec(NearestEnemyOf(Myself),1103)'}}
 		casts[tno] = {{"Vilquar's Eye", 'SpellNoDec(NearestEnemyOf(Myself),2120)'}}
-		track('Blessing', grace, 'SPPR101', 6, {stat = 151, sign = 1})
+		-- Blessing (op 130, 30 s): to hit +1 (HITBONUS 151), saves +1 (death..spell 9-13 one lower), not on the foe
+		track('Blessing', grace, 'SPPR101', 6, {stat = 151, sign = 1, spare = foe,
+			exact = {{151, 1}, {9, -1}, {10, -1}, {11, -1}, {12, -1}, {13, -1}}})
 		track("Vilquar's Eye", foe, 'SPWI120', 6, {bit = 0x40000})
-		track('Curse', foe, 'SPPR103', 6, {stat = 151, sign = -1})  -- to hit -1 (its save +1 sits at the rigged foe's cap)
+		-- Curse (op 379, 30 s): to hit -1 (its save -1 sits at the rigged foe's cap of 30), not on Grace who cast it
+		track('Curse', foe, 'SPPR103', 6, {stat = 151, sign = -1, spare = grace, exact = {{151, -1}}})
 	end
 	-- ChangeStat is queued: it must run before the fight (a turn start clears a party member's queue)
 	if frames == 30 then
@@ -119,12 +125,58 @@ function pstfTestTick()
 				note(string.format('%s: end of the cast turn: icon %d, on %s', t.name, r, tostring(o)))
 				if not o then return fail(t.name .. ' is not on at the end of its cast turn') end
 				if t.expect and r ~= t.expect then return fail(string.format('%s: icon %d rounds after the cast, want %d', t.name, r, t.expect)) end
+				for _, e in ipairs(t.exact or {}) do
+					local d = stat(t.owner, e[1]) - t.before[e[1]]
+					if d ~= e[2] then return fail(string.format('%s: stat %d changed %+d, want %+d', t.name, e[1], d, e[2])) end
+				end
+				if t.spare then
+					local d = stat(t.spare, t.stat) - t.spareBase
+					if d ~= 0 then return fail(string.format('%s: reached %X too (stat %d %+d)', t.name, t.spare, t.stat, d)) end
+					note(string.format('%s: %X untouched (stat %d)', t.name, t.spare, t.stat))
+				end
 				t.seen[1] = {r = r, on = o}
 			end
 			pending = nil
 		end
 		cur, turnStart = id, frames
 		turns[id] = (turns[id] or 0) + 1
+	end
+	-- Adder's Kiss hits: read the foe's HP at each of its turn starts (3 frames in) and at the end of the cast turn
+	if dot and dot.h0 then
+		if dot.castTurn and id ~= tno then
+			dot.castTurn = false
+			for w, h0 in pairs(dot.snap) do
+				if hp(w) < h0 then dot.victim, dot.h0 = w, h0 end
+			end
+			if not dot.victim then return fail("Adder's Kiss: nobody lost HP in the cast turn") end
+			local h = hp(dot.victim)
+			dot.hits[1] = dot.h0 - h
+			dot.last = h
+			note(string.format("Adder's Kiss: cast turn hit %X for %d (%d -> %d), want 2-8", dot.victim, dot.hits[1], dot.h0, h))
+			if dot.hits[1] < 2 or dot.hits[1] > 8 then return fail("Adder's Kiss: first hit " .. dot.hits[1] .. ', want 2-8') end
+		elseif not dot.castTurn and not dot.over then
+			local h = hp(dot.victim)
+			if id == dot.victim and frames == turnStart + 3 then
+				dot.foeTurns = dot.foeTurns + 1
+				local d = dot.last - h
+				dot.last = h
+				note(string.format("Adder's Kiss: foe turn start %d: hit %d", dot.foeTurns, d))
+				if d > 0 then
+					if d < 2 or d > 8 then return fail("Adder's Kiss: hit " .. d .. ', want 2-8') end
+					if #dot.hits ~= dot.foeTurns then return fail("Adder's Kiss: a hit after a turn without one") end
+					dot.hits[#dot.hits + 1] = d
+				end
+				if dot.foeTurns >= dot.want + 2 then
+					if #dot.hits ~= dot.want then
+						return fail(string.format("Adder's Kiss: %d hits, want %d (caster level %d)", #dot.hits, dot.want, dot.level))
+					end
+					note(string.format("Adder's Kiss: ok, %d hits, one per foe turn", #dot.hits))
+					dot.over = true
+				end
+			elseif h ~= dot.last and not (id == dot.victim and frames < turnStart + 3) then
+				return fail(string.format("Adder's Kiss: foe HP %d -> %d outside its turn start", dot.last, h))
+			end
+		end
 	end
 	-- readings at owner turn starts
 	if frames == turnStart + 3 then
@@ -154,6 +206,27 @@ function pstfTestTick()
 			local c = table.remove(q, 1)
 			local t = tracks[c[1]]
 			if t.stat then t.base = stat(t.owner, t.stat) end  -- just before the cast (the foe's rigged saves are in)
+			t.before = {}
+			for _, e in ipairs(t.exact or {}) do t.before[e[1]] = stat(t.owner, e[1]) end
+			if t.spare then t.spareBase = stat(t.spare, t.stat) end
+			if dot and c[1] == "Adder's Kiss" then
+				-- NearestEnemyOf picks any thug: the victim is the one that loses HP in the cast turn
+				dot.castTurn, dot.snap = true, {}
+				for i = 1, 40 do  -- PSTF_FightId is 1-based
+					local w = PSTF_FightId(i)
+					if not w or w == -1 then break end
+					local member = false
+					for k = 0, 7 do if PSTF_PartyId(k) == w then member = true end end
+					if not member then
+						PSTF_SetHp(w, 1000, 1000)  -- seven hits must not kill a 20 HP thug
+						dot.snap[w] = 1000
+					end
+				end
+				dot.h0 = 0
+				dot.level = stat(id, 68)  -- the Nameless One's mage level (LEVEL2)
+				dot.want = 1 + math.floor(dot.level / 3)
+				note(string.format("Adder's Kiss: caster mage level %d: want %d hits", dot.level, dot.want))
+			end
 			pending = {caster = id, tracks = {t}, frame = frames, idle = 0}
 			note(c[1] .. ': cast by ' .. string.format('%X', id) .. ' (LEVEL ' .. stat(id, 34) .. ', LEVEL2 ' .. stat(id, 68) .. ', LEVEL3 ' .. stat(id, 69) .. '): ' .. c[2])
 			PSTF_EvalAs(id, c[2], 1)
@@ -176,6 +249,15 @@ function pstfTestTick()
 		casts[grace] = {{'Prayer', 'SpellNoDec(Myself,1303)'}}
 		casts[tno] = {{'Submerge the Will', 'SpellNoDec(Myself,2119)'}}
 	elseif phase == 'B' and all and #(casts[grace]) == 0 and #(casts[tno]) == 0 and not pending then
+		-- Phase C: Adder's Kiss (op 374, hardcoded): a 2-8 acid hit in the cast turn, then another 2-8 per 5 s for
+		-- 5 s per 3 caster levels: one hit at each of the victim's turn starts, then nothing
+		phase = 'C'
+		note('phase B ok')
+		dot = {hits = {}, foeTurns = 0}
+		casts[tno] = {{"Adder's Kiss", 'SpellNoDec(NearestEnemyOf(Myself),2201)'}}
+		track("Adder's Kiss", foe, 'SPWI201', nil, {steps = 0})
+		tracks["Adder's Kiss"].done = true  -- followed by `dot`, not by an icon
+	elseif phase == 'C' and dot and dot.over then
 		note('ok')
 		pstfTestTick = nil
 	end

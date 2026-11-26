@@ -175,8 +175,8 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   ability for the caster level and refuses a spell whose first ability needs more, without a word (SpellPST).
 - Test save: the Hive, `-Save 000000126` (many Hive thugs to turn hostile; `tbc_rules`, `tbc_sim`, `tbc_hive`).
   `tbc_hive.lua`: Swarm Curse pacing, Adder's Kiss, Whispering Flask/Embalming take the action, save sound.
-- Game resources: `python -I tools/ieres.py spl|itm NAME` (effects per header), `named REGEX` (SPL/ITM by TLK
-  name), `find REGEX [EXT]`, `raw NAME.EXT [OUT]` (override, then chitin.key/BIFs).
+- Game resources: `python -I tools/ieres.py spl|itm NAME` (effects per header), `desc NAME` (TLK description),
+  `named REGEX` (SPL/ITM by TLK name), `find REGEX [EXT]`, `raw NAME.EXT [OUT]` (override, then chitin.key/BIFs).
 - Lighting (`[lighting] enabled=1`, `docs/VISUALS_PLAN.md`): `tools\launch.ps1 -Save 000000076|126|164 -Lua tests\ingame\lighting.lua
   -Env @{PSTF_TEST_TICK='1'} -Until 'lighting: ok|TEST FAIL' -Close` (round trip 0 px, lit changes pixels, GPU = CPU model,
   shots `pst_forever\logs\light_<AREA>_{off,lit,light,falloff}.bmp`). Probes: `PSTF_LightDebug(0 lit|1 light|2 roundtrip|3 falloff|4 off)`,

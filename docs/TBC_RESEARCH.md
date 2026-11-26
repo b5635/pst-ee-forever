@@ -400,8 +400,10 @@ become 4 (no expiry during someone else's turn).
   ticks from each of the caster's turn starts (75 from landing too: any 75 ticks hold exactly one swarm
   pulse; 120 gave two in the cast round); the AIUpdate gate (`SetProjectileGate`) skips it once spent.
   Verified: one pulse per thug per round, in Dak'kon's turns (`tbc_hive.lua`).
-- Flying projectiles (Adder's Kiss circles 60 ticks before it flies) hold the caster's turn up to 300
-  ticks, so the first hit lands in the cast turn; lingering ones and onsets up to 120.
+- A turn never ends before its spell has finished for the round (`TurnWaitsForSpell`, economy.h): still casting,
+  a projectile about to appear (25 ticks) or flying (Adder's Kiss circles 60 ticks before it flies), a landed
+  cloud with this round's pulse left, an onset that resolves now. One safety cap, 4 rounds after the end was asked
+  (log `WARNING spell hold cap`; spell_suite.ps1 fails on it). Before: lingering spells and onsets were cut at 120.
 
 - Adder's Kiss was deferred a round (the user's report): its op374 casting feature sits 3 ticks out (type
   7), and the onset rule's "within 3 ticks of a 75-tick step" read that as step 0. Now <= 3 ticks = now.

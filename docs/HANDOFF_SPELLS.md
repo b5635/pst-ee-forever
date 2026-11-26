@@ -43,6 +43,17 @@ For each spell (and each special ability):
    `spell_results.h`). `-Only` results must merge into `spell_results.h` (step 3 below) so each spot run refreshes it.
 5. Mark the spell done in the plan table (a "checked" column) and commit.
 
+## Done since (2026-11-25, later)
+
+- Items 1-3 below: first pulse once per creature per turn (no hang); `spell_suite.ps1 -Only A,B` merges its rows into
+  `spell_results.h` (quiet output, fails when no spell ran or a turn hit the spell hold cap).
+- Turns (anyone's, normal play too) wait until their spell has finished for the round: `TurnWaitsForSpell`
+  (economy.h), one 4-round safety cap instead of the 120-tick cut.
+- Hand-vetted (plan column "Vetted", rows in `tests/unit/spell_expect.h`, checked against spell_results.h):
+  SPPR101 Blessing, SPPR102/202/401 cures, SPPR103 Curse, SPWI115 Blindness, SPWI201 Adder's Kiss.
+  `tbc_decay.lua` now also checks Blessing's/Curse's exact values and who they spare, and Adder's Kiss hit by hit.
+- Next: continue the per-spell pass (item 4) with the rest of section 3.
+
 ## Next, in order
 
 1. **Bug: the game hangs/exits in the full run after SPWI217** (next spell SPWI218 area with op25 poison onsets):

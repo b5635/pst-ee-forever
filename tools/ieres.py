@@ -6,6 +6,7 @@
   python -I tools/ieres.py eff NAME | raw NAME.EXT [OUT]
   python -I tools/ieres.py find REGEX [EXT]   resource names matching
   python -I tools/ieres.py name SPWI105       TLK name of a spell/item
+  python -I tools/ieres.py desc SPWI105       TLK description of a spell/item (what it should do)
 """
 import os, re, struct, sys
 
@@ -146,6 +147,10 @@ def main(a):
     for ext in ("SPL", "ITM"):
       d = read(a[1], ext)
       if d: print(ext, tlk(struct.unpack_from("<I", d, 0x0C if ext == "ITM" else 0x08)[0]))
+  elif c == "desc":  # SPL description +0x50; ITM identified description +0x54
+    for ext in ("SPL", "ITM"):
+      d = read(a[1], ext)
+      if d: print(ext, tlk(struct.unpack_from("<I", d, 0x54 if ext == "ITM" else 0x50)[0]))
 
 
 if __name__ == "__main__":
