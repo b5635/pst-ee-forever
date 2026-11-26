@@ -16,6 +16,7 @@
 #include "core/log.h"
 #include "core/patch.h"
 #include "engine/sprite_ptr.h"
+#include "engine/sprites.h"
 #include "engine/symbols.h"
 #include "modules/tbc/round_rules.h"
 
@@ -248,6 +249,71 @@ int AttachedLeft(int32_t id, std::vector<int32_t>* out) {
           end ? static_cast<int32_t>(end - now) : 0);
   }
   return n;
+}
+
+std::vector<uint16_t> ActionQueue(int32_t id) {
+  std::vector<uint16_t> out;
+  static const int ok = AllOk({sym::kRvaQueueList, sym::kRvaQueueCount, sym::kRvaClearAICurAction}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p) return out;
+  out.push_back(R<uint16_t>(p + sym::kOffSpriteCurAction));
+  const int n = R<int32_t>(p + sym::kOffSpriteQueueCount);
+  uint64_t node = R<uint64_t>(p + sym::kOffSpriteQueueHead);
+  for (int i = 0; node && i < n && i < 64; ++i) {
+    const uint64_t a = R<uint64_t>(node + 0x10);
+    out.push_back(a ? R<uint16_t>(a) : 0);
+    node = R<uint64_t>(node);
+  }
+  return out;
+}
+
+// CGameSprite::ClearAI(0) without its ClearActions: the queue's CPtrList {head +8, tail +16, count +24, free +32,
+// blocks +40} (CPtrList::RemoveAll win 14048E660) is taken out of the sprite before the call and put back after, with
+// the running response's markers (CGameAIBase words +0x3E0/+0x3E2/+0x3E4: InsertResponse lin 1849E0 compares
+// +0x3E2/+0x3E4 with the firing response's and does not re-queue the same block; ClearActions sets them -1).
+bool ClearAIKeepQueue(int32_t id) {
+  static const int ok = AllOk({sym::kRvaQueueList, sym::kRvaQueueCount, sym::kRvaClearAICurAction, sym::kRvaSetNullAction}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p) return false;
+  const uint64_t list = p + sym::kOffSpriteQueueHead - 8;
+  uint64_t saved[5];
+  for (int i = 0; i < 5; ++i) saved[i] = R<uint64_t>(list + 8 + 8 * i);
+  const uint32_t mark = R<uint32_t>(p + 0x3E0);
+  const uint16_t mark2 = R<uint16_t>(p + 0x3E4);
+  for (int i = 0; i < 5; ++i) W<uint64_t>(list + 8 + 8 * i, 0);
+  ClearAI(id);
+  if (R<uint64_t>(list + 8) != 0 || R<int32_t>(list + 24) != 0) return false;  // something queued during ClearAI: keep it
+  for (int i = 0; i < 5; ++i) W<uint64_t>(list + 8 + 8 * i, saved[i]);
+  W<uint32_t>(p + 0x3E0, mark);
+  W<uint16_t>(p + 0x3E4, mark2);
+  return true;
+}
+
+// CGameSprite::SetCurrAction(NULL_ACTION) only (ClearAI's third call, vtable +0x120 at win 140404BC0): the running
+// action ends, the queue stays; the engine takes the next one with GetNextAction on the creature's next AI update.
+bool EndCurrentAction(int32_t id) {
+  static const int ok = AllOk({sym::kRvaSetNullAction}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p) return false;
+  const uint64_t vt = R<uint64_t>(p);
+  const uint64_t fn = R<uint64_t>(vt + 0x120);
+  if (!PlausiblePtr(fn)) return false;
+  reinterpret_cast<void(__fastcall*)(uint64_t, uint64_t)>(fn)(p, reinterpret_cast<uint64_t>(Va(sym::kRvaNullAction)));
+  return true;
+}
+
+std::vector<std::pair<int, int>> ScriptTimers(int32_t id) {
+  std::vector<std::pair<int, int>> out;
+  static const int ok = AllOk({sym::kRvaTimerList}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p) return out;
+  uint64_t node = R<uint64_t>(p + sym::kOffSpriteTimerHead);
+  for (int i = 0; node && i < 64; ++i) {
+    const uint64_t t = R<uint64_t>(node + 0x10);
+    if (t) out.emplace_back(R<uint8_t>(t + 4), R<int32_t>(t));
+    node = R<uint64_t>(node);
+  }
+  return out;
 }
 
 std::vector<AttachedView> AttachedObjects(int32_t id) {

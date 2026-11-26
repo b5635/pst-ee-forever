@@ -698,6 +698,38 @@ TEST_CASE("tbc combat log: line format and action names") {
   CHECK(CombatLogLine(12, 5, 3, 7, 808714, 2, 12, "TURN", "Dak'kon (880088) hp 35/42") ==
         "12:05:03.007 w808714 R2 +0012 | TURN   Dak'kon (880088) hp 35/42");
   CHECK(ActionName(368) == "WaitRandom" && ActionName(3) == "Attack" && ActionName(999) == "action 999");
+  // 0403MAGE's step: Spell; Wait(1); IncrementGlobal -> the turn ends at the Wait and the step counter is lost
+  const uint16_t q[] = {63, 109};
+  int lost = -1;
+  CHECK(QueueText(q, 2, &lost) == "Wait, IncrementGlobal" && lost == 1);
+  const uint16_t q2[] = {3, 63, 368};
+  CHECK(QueueText(q2, 3, &lost) == "Attack, Wait, WaitRandom" && lost == 0);
+  CHECK(IsStateAction(111) && IsStateAction(10) && !IsStateAction(425));
+}
+
+TEST_CASE("tbc script queue: an AI keeps its sequence across turns, a lead Wait is skipped") {
+  // 0403MAGE at its turn end: [Wait, IncrementGlobal] -> kept for its next turn (the step counter climbs)
+  const uint16_t mage[] = {63, 109};
+  CHECK(KeepQueueAtTurnEnd(false, false, mage, 2));
+  CHECK(!KeepQueueAtTurnEnd(true, false, mage, 2));   // party: cleared as before
+  CHECK(!KeepQueueAtTurnEnd(false, true, mage, 2));   // our nudge order: cleared
+  const uint16_t alone[] = {3};
+  CHECK(!KeepQueueAtTurnEnd(false, false, alone, 1));  // nothing queued
+  // 0601JUMB step 2: Wait(1); Spell -> the Wait is skipped; Wait; WaitRandom alone -> nudged as before
+  const uint16_t lead[] = {63, 31};
+  CHECK(SkipLeadWait(lead, 2));
+  const uint16_t waits[] = {63, 368};
+  CHECK(!SkipLeadWait(waits, 2));
+  const uint16_t act[] = {31, 63};
+  CHECK(!SkipLeadWait(act, 2));
+  // the step counter after its spell is bookkeeping, not a second action (no "No action left" stop)
+  Economy e(31.0, 51, false);
+  for (int i = 0; i < 10; ++i) e.Feed(1, 0, false, 31);
+  e.Feed(1, 0, false, 0);
+  CHECK(e.action_used);
+  CHECK(e.Feed(1, 0, false, 109).stop == Stop::None);
+  CHECK(IsIdleAction(109) && IsIdleAction(10) && !IsIdleAction(31));
+  CHECK(KeepCurrentAtTurnEnd(109) && !KeepCurrentAtTurnEnd(63) && !KeepCurrentAtTurnEnd(3));
 }
 
 TEST_CASE("tbc APR: 1.5 attacks = 2 swings, then 1, the attack ends after its swings") {

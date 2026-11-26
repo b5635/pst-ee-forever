@@ -4,6 +4,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace pstf::engine {
@@ -301,6 +302,16 @@ bool ActionBarScroll(int index);
 int ActionBarStateId();  // the state the bar is in (+0x1FE4)
 std::string ActiveFlags(int32_t id);
 std::string ScanBarStrings();                    // probe: resref-like strings in the button array
+// Probes: the creature's current action then its queued ones (ACTION.IDS ids, empty = none or symbols off), and its
+// script timers {timer id, seconds left} (StartTimer/StartRandomTimer; symbols.h kRvaQueueList, kRvaTimerList).
+std::vector<uint16_t> ActionQueue(int32_t id);
+std::vector<std::pair<int, int>> ScriptTimers(int32_t id);
+// ClearAI(0) that keeps the queued actions (and the running response's markers, so the same script block is not
+// queued again): an AI turn that ends inside a real-time sequence (Spell; Wait; IncrementGlobal) goes on with the
+// rest of it at its next turn. false = symbols off / not kept (then it was a plain ClearAI).
+bool ClearAIKeepQueue(int32_t id);
+// Ends the running action only (SetCurrAction(NULL_ACTION)); the queue stays: a script's Wait before its action.
+bool EndCurrentAction(int32_t id);
 bool SetHpForTest(int32_t id, int hp, int max_hp = 0);  // max_hp > 0: base max HP too          // test probe only (PSTF_SetHp)            // probe: sprite +0x3904..+0x3910 (Spell's target check)
 
 }  // namespace pstf::engine

@@ -206,6 +206,10 @@ struct State {
   bool maneuvers = true;             // [tbc] maneuvers
   bool opportunity = true;           // [tbc] opportunity_attacks
   bool no_push = true;               // [tbc] no_push: walkers never push combatants aside in a fight
+  bool keep_queue = true;            // [tbc] keep_queue: an AI's script sequence goes on at its next turn
+  int lead_skips = 0;                // Waits skipped before the current creature's action this turn
+  bool freeze_ai = false;            // the current AI's turn is over (spell still landing): no ProcessAI
+  bool keep_current = false;         // its turn ended at a second action: that action and the queue wait for its next turn
   int aoo_trace = 0;                 // env PSTF_AOO_TRACE=N: log the first N reach checks of each turn
   int aoo_trace_react = 0;           // ... and the ticks of a reaction
   std::map<int32_t, Stance> stance;  // every combatant, from its turn start to the next
@@ -309,7 +313,10 @@ bool Rising(int32_t id) {
 }
 
 void __fastcall HookProcessAI(void* sprite) {
-  if (Held(engine::SpriteIdOf(sprite)) || (g.running && Rising(engine::SpriteIdOf(sprite)))) {
+  const int32_t sid = engine::SpriteIdOf(sprite);
+  // freeze_ai: an AI turn that is over but waits for its spell to land runs no more script (its queue is its next
+  // turn's: Spell; Wait; IncrementGlobal must not do the next step in the same turn).
+  if (Held(sid) || (g.running && Rising(sid)) || (g.running && g.freeze_ai && sid == g.current)) {
     // No scripts or actions while it waits, but spells cast on it land now (round clock frozen).
     if (g.round_effects) engine::HeldEffectsTick(sprite);
     return;
@@ -374,6 +381,7 @@ std::string Name(int32_t id) {
   return (it != g.names.end() && !it->second.empty() ? it->second : Who(id)) + b;
 }
 
+void StopKeepingScript(int32_t id, const char* why);
 void CLog(const char* kind, const std::string& text) {
   if (g.clog_path.empty()) return;
   if (!g.clog) {
@@ -583,7 +591,44 @@ void Scan(uint32_t now) {
 
 void OnTurnChange(int32_t prev, int32_t next) {
   if (prev != -1 && Contains(g.in, prev)) {
-    engine::ClearAI(prev);  // clean stop: no action, path or queue carried out of its turn
+    // Script audit probe: what the clean stop throws away (a real-time sequence cut short, e.g. a step counter
+    // queued after a Wait) and its script timers (they only count down inside its own turns).
+    const std::vector<uint16_t> q = engine::ActionQueue(prev);
+    if (q.size() > 1 || (!q.empty() && q[0] != 0)) {
+      int lost = 0;
+      const std::string t = QueueText(q.data(), static_cast<int>(q.size()), &lost);
+      const Combatant* pc0 = g.dir->Find(prev);
+      const bool party0 = Contains(g.party, prev) || (pc0 && pc0->r.side == Side::Party);
+      if (!g.keep_current && !(g.keep_queue && !party0 && prev != g.nudged && KeepCurrentAtTurnEnd(q[0])) &&
+          !(g.keep_queue && KeepQueueAtTurnEnd(party0, prev == g.nudged, q.data(), static_cast<int>(q.size())))) {
+        Log("tbc: %s: turn end drops queue [%s]%s", Who(prev).c_str(), t.c_str(), lost ? " (script state lost)" : "");
+        CLog("QUEUE", Name(prev) + " turn end drops [" + t + "]" + (lost ? " (script state lost)" : ""));
+      }
+    }
+    const auto timers = engine::ScriptTimers(prev);
+    if (!timers.empty()) {
+      std::string t;
+      for (const auto& tm : timers) t += (t.empty() ? "" : " ") + std::to_string(tm.first) + ":" + std::to_string(tm.second) + "s";
+      CLog("TIMER", Name(prev) + " script timers " + t);
+    }
+    // Clean stop: no action or path carried out of its turn. An AI creature's queued script actions stay for its
+    // next turn (economy.h KeepQueueAtTurnEnd): held, it runs none of them in between.
+    const Combatant* pc = g.dir->Find(prev);
+    const bool party = Contains(g.party, prev) || (pc && pc->r.side == Side::Party);
+    // its script's bookkeeping (IncrementGlobal) became the running action as the turn ended: it has not run yet
+    if (g.keep_queue && !party && prev != g.nudged && !q.empty() && KeepCurrentAtTurnEnd(q[0])) g.keep_current = true;
+    if (g.keep_current) {
+      const std::string t = QueueText(q.data(), static_cast<int>(q.size()));
+      Log("tbc: %s: turn end keeps its action and queue [%s] for its next turn", Who(prev).c_str(), t.c_str());
+      CLog("QUEUE", Name(prev) + " keeps [" + t + "] (action and queue) for its next turn");
+    } else if (g.keep_queue && KeepQueueAtTurnEnd(party, prev == g.nudged, q.data(), static_cast<int>(q.size())) &&
+        engine::ClearAIKeepQueue(prev)) {
+      const std::string t = QueueText(q.data() + 1, static_cast<int>(q.size()) - 1);
+      Log("tbc: %s: turn end keeps queue [%s] for its next turn", Who(prev).c_str(), t.c_str());
+      CLog("QUEUE", Name(prev) + " keeps [" + t + "] for its next turn");
+    } else {
+      engine::ClearAI(prev);
+    }
     engine::DropPath(prev);
   }
   MopFinish("turn over");  // a hovering Missile of Patience belongs to its caster's turn
@@ -594,6 +639,9 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.mop_shots.clear();
   g.mop_end = false;
   g.nudged = -1;
+  g.lead_skips = 0;
+  g.freeze_ai = false;
+  g.keep_current = false;
   g.steady_ai = false;
   g.apr_halves = 0;
   g.current = next;
@@ -1082,7 +1130,7 @@ void ApplyTrips() {
       ++g.ms.prone;
       g.poses[it->target].Fall();
       AddFxAtFeet(State::FxKind::KnockDust, it->target);  // dust thrown up when the body lands
-      engine::ClearAI(it->target);
+      StopKeepingScript(it->target, "knocked down");
       engine::DropPath(it->target);
     }
     FloatText(it->target, TakedownText(TakedownName(it->kind), down ? TakedownResult::Success : TakedownResult::Failed));
@@ -1092,6 +1140,22 @@ void ApplyTrips() {
   }
 }
 // Gets up: the die cycle backwards (its AC penalty ends with its round clock at this turn start).
+// Stops a creature outside its own turn (knocked down) the way a turn end does: an AI's script sequence that
+// has not run yet (its kept queue, a pending IncrementGlobal) stays for its next turn.
+void StopKeepingScript(int32_t id, const char* why) {
+  const std::vector<uint16_t> q = engine::ActionQueue(id);
+  const Combatant* c = g.dir ? g.dir->Find(id) : nullptr;
+  const bool party = Contains(g.party, id) || (c && c->r.side == Side::Party);
+  const int n = static_cast<int>(q.size());
+  if (g.keep_queue && !party && n && KeepCurrentAtTurnEnd(q[0])) {
+    CLog("QUEUE", Name(id) + " " + why + ": keeps [" + QueueText(q.data(), n) + "]");
+  } else if (g.keep_queue && KeepQueueAtTurnEnd(party, false, q.data(), n) && engine::ClearAIKeepQueue(id)) {
+    CLog("QUEUE", Name(id) + " " + why + ": keeps [" + QueueText(q.data() + 1, n - 1) + "]");
+  } else {
+    engine::ClearAI(id);
+  }
+}
+
 void StandUp(int32_t id) {
   g.stance[id].prone = false;
   auto it = g.poses.find(id);
@@ -2176,8 +2240,21 @@ void OnTick(uint64_t frame) {
   // position this tick recorded.
   g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
   // A quick item used between two frames still takes the action (UseItem = 34).
-  const uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
+  uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
   if (!g.econ.party) g.econ.engine_driven = EngineDrivesAi(engine::SpriteState(cur));
+  if (g.keep_queue && !g.econ.party && !g.econ.action_used && !g.econ.engine_driven && cur != g.nudged &&
+      IsWaitAction(s.action) && g.lead_skips < 8) {
+    // Its script waits before its action (Wait(1); Spell(...)): the wait is skipped, not replaced by an attack.
+    const std::vector<uint16_t> q = engine::ActionQueue(cur);
+    if (SkipLeadWait(q.data(), static_cast<int>(q.size())) && engine::EndCurrentAction(cur)) {
+      ++g.lead_skips;
+      const std::string t = QueueText(q.data(), static_cast<int>(q.size()));
+      Log("tbc: %s: skips its script's %s before its action [%s]", Who(cur).c_str(), ActionName(s.action).c_str(), t.c_str());
+      CLog("QUEUE", Name(cur) + " skips " + ActionName(s.action) + " before its action [" + t + "]");
+      fed = 0;
+      g.econ.total = 0;  // its script picks its action now: the think time starts again
+    }
+  }
   EconomyStep st = g.econ.Feed(dt, moved, s.has_path, fed);
   if (g.cast_feedback) {
     const int casts = engine::SpellCasts(cur);
@@ -2251,6 +2328,16 @@ void OnTick(uint64_t frame) {
     CLog("AI", Name(cur) + (s.action ? " only waits (" + ActionName(s.action) + ", ignored)" : " chose nothing") +
                    ": ordered " + order);
   }
+  if (st.stop == Stop::NoAction && g.keep_queue && !g.econ.party && cur != g.nudged && !g.econ.engine_driven) {
+    // Its script's next action after the one this turn had (Spell; Spell; Attack): the turn ends here and that
+    // action starts its next turn (real time would run it next as well), instead of the rest being thrown away.
+    if (!g.keep_current)
+      CLog("STOP", Name(cur) + ": No action left this turn: " + ActionName(s.action) + " waits for its next turn");
+    st.stop = Stop::None;
+    st.end_turn = true;
+    g.keep_current = true;
+    g.freeze_ai = true;
+  }
   if (st.stop != Stop::None) {
     static const char* kStop[] = {"", "Can't get there this turn: no movement left",
                                   "No action left this turn", "Attack round done"};
@@ -2316,6 +2403,10 @@ void OnTick(uint64_t frame) {
     }
     if (w != SpellWait::None && w != SpellWait::Capped) {
       wait_spell = true;
+      if (g.keep_queue && !g.econ.party && st.end_turn && !in.casting && cur != g.nudged && !g.freeze_ai) {
+        g.freeze_ai = true;
+        CLog("QUEUE", Name(cur) + ": turn over, its script waits while its spell lands");
+      }
       g.resolve_ticks += dt;
       if (w != g.resolving_why) {
         g.resolving_why = w;
@@ -2991,6 +3082,84 @@ int __cdecl LuaAnimProbe(engine::LuaState* L) {
   engine::LuaPushString(L, s.c_str());
   return 1;
 }
+// PSTF_FindActor(scriptName[, nth]) -> id of the nth (1-based) creature in the party's area with that script name
+// (case-insensitive; CreateCreature gives a spawn its CRE's), -1 none. Scenario tests find their actors with it.
+int __cdecl LuaFindActor(engine::LuaState* L) {
+  std::string want = engine::LuaStringArg(L, 1);
+  const int nth = static_cast<int>(engine::LuaNumberArg(L, 2, 1));
+  for (auto& c : want) c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+  engine::SpriteInfo me;
+  const auto party = engine::PartyIds();
+  const bool have = !party.empty() && engine::GetSprite(party[0], &me);
+  int seen = 0;
+  int32_t found = -1;
+  for (const auto& s : engine::AllSprites()) {
+    if (have && s.area != me.area) continue;
+    std::string n = engine::ScriptName(s.id);
+    for (auto& c : n) c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+    if (n == want && ++seen == nth) { found = s.id; break; }
+  }
+  Log("lua: PSTF_FindActor(%s, %d) -> %X", want.c_str(), nth, static_cast<unsigned>(found));
+  engine::LuaPushNumber(L, found);
+  return 1;
+}
+// PSTF_ActorRefs() -> "id,nameStrref;id,nameStrref;..." for every living creature in the party's area (Lua S.find
+// matches Infinity_FetchString(strref) against a creature's shown name when no script name fits).
+int __cdecl LuaActorRefs(engine::LuaState* L) {
+  engine::SpriteInfo me;
+  const auto party = engine::PartyIds();
+  const bool have = !party.empty() && engine::GetSprite(party[0], &me);
+  std::string t;
+  for (const auto& s : engine::AllSprites()) {
+    if ((have && s.area != me.area) || !s.alive) continue;
+    t += std::to_string(s.id) + "," + std::to_string(s.name_ref) + ";";
+  }
+  engine::LuaPushString(L, t.c_str());
+  return 1;
+}
+// PSTF_Actors([radius]) -> count; logs every creature in the party's area (within radius px of the protagonist, 0 = all):
+// id, script name, EA, hp, position, action, fight side. For picking a scenario's actors in a new save.
+int __cdecl LuaActors(engine::LuaState* L) {
+  const double r = engine::LuaNumberArg(L, 1, 0);
+  engine::SpriteInfo me;
+  const auto party = engine::PartyIds();
+  const bool have = !party.empty() && engine::GetSprite(party[0], &me);
+  int n = 0;
+  for (const auto& s : engine::AllSprites()) {
+    if (have && s.area != me.area) continue;
+    if (have && r > 0 && std::hypot(double(s.x - me.x), double(s.y - me.y)) > r) continue;
+    const Combatant* c = g.dir ? g.dir->Find(s.id) : nullptr;
+    Log("lua: actor %X %-12s ea %3u hp %4d at %5d,%5d action %-14s %s%s", static_cast<unsigned>(s.id),
+        engine::ScriptName(s.id).c_str(), s.ea, s.hp, s.x, s.y, ActionName(s.action).c_str(), s.alive ? "" : "dead ",
+        c ? (c->r.side == Side::Hostile ? "fight:hostile" : "fight:party") : "");
+    ++n;
+  }
+  engine::LuaPushNumber(L, n);
+  return 1;
+}
+// PSTF_Queue(id) -> "Spell, Wait, IncrementGlobal" (current action first; "" = none), queued count, state actions in it.
+int __cdecl LuaQueue(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const std::vector<uint16_t> q = engine::ActionQueue(id);
+  int lost = 0;
+  const std::string t = q.empty() ? "" : QueueText(q.data(), static_cast<int>(q.size()), &lost);
+  if (engine::LuaNumberArg(L, 2, 0) == 0) Log("lua: PSTF_Queue(%X) -> [%s] state %d", static_cast<unsigned>(id), t.c_str(), lost);
+  engine::LuaPushString(L, t.c_str());
+  engine::LuaPushNumber(L, q.empty() ? 0 : static_cast<double>(q.size() - 1));
+  engine::LuaPushNumber(L, lost);
+  return 3;
+}
+// PSTF_Timers(id) -> "1:12 3:5" (script timer id:seconds left; StartTimer/StartRandomTimer), count.
+int __cdecl LuaTimers(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  std::string t;
+  const auto timers = engine::ScriptTimers(id);
+  for (const auto& tm : timers) t += (t.empty() ? "" : " ") + std::to_string(tm.first) + ":" + std::to_string(tm.second);
+  if (engine::LuaNumberArg(L, 2, 0) == 0) Log("lua: PSTF_Timers(%X) -> %s", static_cast<unsigned>(id), t.c_str());
+  engine::LuaPushString(L, t.c_str());
+  engine::LuaPushNumber(L, static_cast<double>(timers.size()));
+  return 2;
+}
 // PSTF_Action(id) -> current action id (ACTION.IDS), 1 when it has a current or queued action, 1 with a walk path
 // (the log line adds SpellPST's cast-in-progress flag and counter; a second argument 1 = no log line).
 int __cdecl LuaAction(engine::LuaState* L) {
@@ -3233,6 +3402,7 @@ bool InstallTbc(const IniMap& ini) {
   g.maneuvers = IniBool(ini, "tbc.maneuvers", true);
   g.opportunity = IniBool(ini, "tbc.opportunity_attacks", true);
   g.no_push = IniBool(ini, "tbc.no_push", true);
+  g.keep_queue = IniBool(ini, "tbc.keep_queue", true);
   g.mop_limit = IniInt(ini, "tbc.mop_shots", 3);
   g.party_max = IniInt(ini, "party.size", 6) >= 8 && IniBool(ini, "party.enabled", false) ? 8 : 6;
   {
@@ -3366,6 +3536,11 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_Maneuver", &LuaManeuver);
   dev::AddLuaFunction("PSTF_AnimProbe", &LuaAnimProbe);
   dev::AddLuaFunction("PSTF_Action", &LuaAction);
+  dev::AddLuaFunction("PSTF_Queue", &LuaQueue);
+  dev::AddLuaFunction("PSTF_FindActor", &LuaFindActor);
+  dev::AddLuaFunction("PSTF_Actors", &LuaActors);
+  dev::AddLuaFunction("PSTF_ActorRefs", &LuaActorRefs);
+  dev::AddLuaFunction("PSTF_Timers", &LuaTimers);
   dev::AddLuaFunction("PSTF_Casts", &LuaCasts);
   dev::AddLuaFunction("PSTF_Unapply", &LuaUnapply);
   dev::AddLuaFunction("PSTF_Attached", &LuaAttached);

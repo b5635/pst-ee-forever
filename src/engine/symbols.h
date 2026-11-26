@@ -279,6 +279,22 @@ constexpr uint32_t kRvaCanSaveGame = 0x2D2EB0;
 constexpr uint32_t kRvaTriggerCtor = 0x13E7C0, kRvaEvalTrigger = 0x1656B0, kRvaCStringAssign = 0x484490;
 constexpr uint32_t kOffSpritePos = 0x0C, kOffSpriteArea = 0x18, kOffSpriteEa = 0x38, kOffSpriteId = 0x48;
 constexpr uint32_t kOffSpriteQueueCount = 0x348, kOffSpriteCurAction = 0x3F0;
+// Action queue (PSTF_Queue, turn-end "drops queued" log): CGameAIBase's CPtrList at sprite +0x330 (GetNextAction
+// lin 183B00 / win 140172D3E `lea rax,[rcx+330h]` before CPtrList::RemoveHead); MFC layout {vptr, head +0x338,
+// tail +0x340, count +0x348}; node {next, prev, CAIAction* data}; data +0 = u16 action id (140172D50).
+inline constexpr uint8_t kQueueListBytes[] = {0x48, 0x8D, 0x81, 0x30, 0x03, 0x00, 0x00};
+constexpr uint32_t kRvaQueueList = 0x172D3E, kOffSpriteQueueHead = 0x338;
+// Script timers (StartTimer / TimerActive; PSTF_Timers): CPtrList at sprite +0x3A8, head +0x3B0 (CGameAIBase::
+// CheckTimers lin 1912E0 this+118*8 / win 140164C0A `mov rbx,[rcx+3B0h]`); node data {i32 seconds left, u8 timer id}.
+// CheckTimers(1) runs from ProcessAI once every 15 of the creature's own AI updates: held creatures' timers stand still.
+inline constexpr uint8_t kTimerListBytes[] = {0x48, 0x8B, 0x99, 0xB0, 0x03, 0x00, 0x00};
+constexpr uint32_t kRvaTimerList = 0x164C0A, kOffSpriteTimerHead = 0x3B0;
+// CGameSprite::ClearAI win 140404BB6: `lea rdx, CAIAction::NULL_ACTION (14072C1A0); mov rcx, rdi; call [rax+120h]`
+// (SetCurrAction, lin 4A54C0; ClearAI lin 4A5320 passes &CAIAction::NULL_ACTION). engine::EndCurrentAction calls the
+// same slot with the same object: the running action ends, the queue stays (a Wait before a real action is skipped).
+inline constexpr uint8_t kSetNullActionBytes[] = {0x48, 0x8D, 0x15, 0xE3, 0x75, 0x32, 0x00, 0x48,
+                                                  0x8B, 0xCF, 0xFF, 0x90, 0x20, 0x01, 0x00, 0x00};
+constexpr uint32_t kRvaSetNullAction = 0x404BB6, kRvaNullAction = 0x72C1A0;
 constexpr uint32_t kOffSpriteStatsSel = 0x4BBC, kOffSpriteStatsA = 0xFE8, kOffSpriteStatsB = 0x1C98;
 constexpr uint32_t kStateDead = 0x800;
 // Current HP i16 at sprite+0x574 (CGameSprite::FloatingHP "%d/%d": lin this+698*2, win 14043A900).
@@ -1191,6 +1207,9 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("Enemy.ea", kRvaEnemyEa, kEnemyEaBytes, "lin 4AEA80 / win 140408B0A"),
     PSTF_SYM("Enemy.id", kRvaEnemyId, kEnemyIdBytes, "win 140408BED"),
     PSTF_SYM("GetNextAction.queueCount", kRvaQueueCount, kQueueCountBytes, "lin 183B00 / win 140172D31"),
+    PSTF_SYM("GetNextAction.queueList", kRvaQueueList, kQueueListBytes, "lin 183B00 / win 140172D3E"),
+    PSTF_SYM("CheckTimers.listHead", kRvaTimerList, kTimerListBytes, "lin 1912E0 / win 140164C0A"),
+    PSTF_SYM("ClearAI.setNullAction", kRvaSetNullAction, kSetNullActionBytes, "lin 4A5320 / win 140404BB6"),
     PSTF_SYM("ClearAI.curAction", kRvaClearAICurAction, kClearAICurActionBytes, "win 140404BC6"),
     PSTF_SYM("CGameSprite::ProcessAI", kRvaProcessAI, kProcessAIBytes, "lin 4FA830 / win 140421830"),
     PSTF_SYM("AIUpdate.walk1", kRvaWalkCall1, kWalkCall1Bytes, "lin 53A510 / win 1403B6211"),

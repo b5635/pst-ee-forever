@@ -118,6 +118,11 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   so it is testable without the game.
 - If something is hard to check, build the probe first (pipe command, in-game assert helper), then the
   test, and list the probe here.
+- **Logging and debugging are part of every change, never an afterthought.** When you cannot tell from the logs
+  why something happened, first add the log line or probe that would have told you (a `tbc:`/combat.log line, a
+  `PSTF_*` Lua probe, a tool), then investigate. Keep them: improve the existing lines when they mislead, list each
+  new probe/tool in "Saving tokens" below, and remove nothing a test or the plan docs rely on. New behaviour that a
+  script, dialogue or the player can observe gets a log line that names the creature and the reason.
 - Offsets live only in `src/engine/`; each one cites its evidence (Linux function + Windows EA).
 - Every hook goes through the symbol manifest with expected bytes. On a mismatch the module turns itself off; never crash the game.
 - License GPL-2.0-or-later (`COPYING`): every new source file starts with `// SPDX-License-Identifier: GPL-2.0-or-later`.
@@ -364,7 +369,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   and rest poses equal `make_dice_bams.py`'s; unit `test_die3d.cpp`), GL in `src/engine/die_draw.cpp`, drawn from the
   die item's `frame lua` (drawItem evaluates it mid-UI-pass: flush, draw, restore, so later items stay on top), frame 174
   of PFD20 = blank; the BAM is the fallback. Number atlas `data/d20_numbers.bin` (`make_dice_bams.py --only D20NUM`,
-  deployed to `pst_foreverssets\dice\`). Test: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\die3d.lua -Env
+  deployed to `pst_forever\assets\dice\`). Test: `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\die3d.lua -Env
   @{PSTF_DLG_TEST='1'; PSTF_TBC_NOFIGHT='1'} -Until 'die3d: ok|TEST FAIL' -Close` (shots `logs\die3d_*.bmp`; Lua
   `PSTF_DIE3D = false` = the toggle check). Probe `PSTF_DieState([1])` -> on/off, draws, failures, centre pixel, why.
 - Hotbar with long lists + right-click + hidden maneuvers: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\tbc_bar2.lua
@@ -447,8 +452,22 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - Neutrals in fights (census.h): a neutral (EA 31..199) joins only while fighting a combatant (its attack/spell target
   is one, or a combatant targets it: sprite +0x4940 target id, `UpdateTarget`), on the other side; a combatant whose EA
   crosses a cutoff changes sides (`Director::SetSide`, log `tbc: X changes sides`). Test: `tools\launch.ps1 -Save 000000126
-  -Lua tests\ingame	bc_neutral.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'tbc_neutral: ok|TEST FAIL' -Close
+  -Lua tests\ingame\tbc_neutral.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'tbc_neutral: ok|TEST FAIL' -Close
   -Timeout 600`. Probe `PSTF_Side(id)` -> side (0/1 party/2 hostile), target, action, EA, script name. Hive thug 0x140014's AI
   does not run as a neutral (actions never start): stage with 0x220022. PST EA.IDS has no GOODCUTOFF/EVILCUTOFF (`[ENEMY]` works).
+- Creature scripts: `python -I tools/bcs.py dump NAME | users NAME | who CRE | grep REGEX | audit` (BCS decompiler,
+  which CRE/area actor runs a script, turn-based risk audit; index cache `build/bcs_index.json`, delete it after a mod
+  changes scripts). Engine facts: INSTANT.IDS actions run at once; per-creature script timers (`StartTimer`) count down
+  only inside the creature's own ProcessAI (CheckTimers every 15 of its AI updates), so held creatures' timers stand
+  still; global timers run on world time. An AI turn ends at the first Wait after its action and ClearAI drops the
+  rest of its queue: log `tbc: X: turn end drops queue [...] (script state lost)`, combat.log `QUEUE` / `TIMER` lines.
+- Scenario tests in the player's walkthrough saves (`docs/SCENARIO_TEST_PLAN.md`: 50 hard fights/scripts, outcome per
+  scenario): `tools\install_walk_saves.ps1` copies `Documents\...\all saves\save` as slot + 700000 (`000700162` = "144
+  Spoke To Ravel"); `tools\scenario.ps1 -Id S14 [-Shots]` runs `tests\ingame\scenarios\S14_*.lua` behind `lib.lua`
+  (header `-- scenario: save=.. env=.. timeout=..`; invariants held/stuck/endless; log scan; exit 0 ok, 1 ISSUE, 2 FAIL);
+  `-Id S00 -Save PREFIX` lists a save's creatures. Probes: `PSTF_Queue(id)`, `PSTF_Timers(id)`, `PSTF_FindActor(name[, n])`,
+  `PSTF_Actors([r])`, `PSTF_ActorRefs()`; read a variable with `PSTF_Trigger(who, 0x400F, value, '', 'AR0403MortalKombat')`
+  (Lua `S.global`). Unattended fights need env `PSTF_TBC_AUTOPARTY=1`. Spawned CREs lack their area actor's script:
+  `ChangeAIScript("SCRIPT",0)` (see `bcs.py who CRE`).
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

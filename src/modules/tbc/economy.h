@@ -63,6 +63,11 @@ inline bool IsIdleAction(uint16_t id) {
   switch (id) {
     case 0: case 17: case 30: case 33: case 36: case 61: case 63: case 83: case 84: case 86: case 130:
     case 151: case 262: case 269: case 292: case 311: case 342: case 346: case 368:
+    // script bookkeeping the engine does at once (instant, no time in real time either): CreateCreature, Enemy,
+    // ChangeAIScript, IncrementGlobal, DestroySelf, SetGlobalTimer, Polymorph, ChangeEnemyAlly, StartRandomTimer,
+    // ChangeTeam, BitSet, BitClear, ForceAIScript (a "Spell; Wait; IncrementGlobal" step's counter is not an action)
+    case 7: case 10: case 60: case 109: case 111: case 115: case 146: case 153: case 369: case 392: case 404:
+    case 405: case 433:
       return true;
     default:
       return false;
@@ -97,6 +102,36 @@ inline bool IsWaitAction(uint16_t id) {
     default:
       return false;
   }
+}
+
+// Script sequences across turns (docs/SCENARIO_TEST_PLAN.md, audit finding 1). `q` = current action then the queued
+// ones (engine::ActionQueue). An AI creature's turn end keeps what is queued behind the running action for its next
+// turn (held creatures run no AI, so nothing of it runs in between): "Spell; Wait(1); IncrementGlobal" goes on with
+// the IncrementGlobal. Party members and a creature running our nudge order are cleared as before.
+inline bool KeepQueueAtTurnEnd(bool party, bool nudged, const uint16_t* q, int n) {
+  if (party || nudged || n < 2) return false;
+  for (int i = 1; i < n; ++i)
+    if (q[i] != 0) return true;
+  return false;
+}
+// The running action at an AI's turn end is script bookkeeping that has not run (the engine does it at once on its
+// next AI update): it stays, with the queue (combat_log.h IsStateAction, instant per IsIdleAction).
+inline bool KeepCurrentAtTurnEnd(uint16_t current) {
+  switch (current) {
+    case 7: case 10: case 30: case 60: case 61: case 109: case 111: case 115: case 146: case 153: case 369:
+    case 392: case 404: case 405: case 433:
+      return true;
+    default:
+      return false;
+  }
+}
+// A Wait before the creature's first action this turn, with a real action queued behind it: the Wait is skipped
+// (time passes in the others' turns) instead of the nudge replacing the whole sequence with an attack.
+inline bool SkipLeadWait(const uint16_t* q, int n) {
+  if (n < 2 || !IsWaitAction(q[0])) return false;
+  for (int i = 1; i < n; ++i)
+    if (q[i] != 0 && !IsWaitAction(q[i])) return true;
+  return false;
 }
 
 // One search-map cell is 16 x 12 pixels and one foot (Feet2Pixels in GemRB; the engine's own
