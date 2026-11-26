@@ -94,5 +94,41 @@ inline constexpr Expect kExpect[] = {
     {"SPWI201", "-", 0x0U, "none", -8, -2, 7,
      "Adder's Kiss (op 374): 2-8 in the cast turn, then one 2-8 hit at each of the victim's turn starts, "
      "1 + level/3 hits in all (7 at level 20), then none (tbc_decay.lua phase C); no status icon (vanilla)"},
+    {"SPWI202", "-", 0x0U, "none", -16, -4, 0,
+     "Black-Barbed Curse: 4d4 piercing, its 35-tick onset resolves in the cast turn (9-12 measured)"},
+    {"SPWI203", "2:-2", 0x0U, "r*:buff", 0, 0, 0,
+     "Black-Barbed Shield (op 375 type 2): AC -2 for 15 x (10..30) ticks (random); each melee hit on the caster "
+     "costs the attacker 1d6 on the same tick (CGameSprite::Swing; spell_follow -FoeAttacks Player1 -FoePre THAC0 0: "
+     "-2, -6), a takedown hit (no damage) none"},
+    {"SPWI204", "-", 0x0U, "none", 0, 0, 0,
+     "Blood Bridge (projectile 226, CGameEffectHealTransfer): the caster gives 20 HP at level 20 (87 -> 67, Morte "
+     "20 -> 40) in the cast turn; the suite casts it on the caster himself (no change)"},
+    {"SPWI205", "1:+40,2:-2", 0x0U, "r60:buff", 40, 40, 60,
+     "Greater Embalming (op 380 p2=1): +2 HP/level (40), AC -2, 300 s (the SPL's, not the text's hour)"},
+    {"SPWI207", "7:+2", 0x0U, "r12:debuff", -12, -3, 12,
+     "Ice Knife (projectile 221): 2d4 on a hit plus 1d4 cold and -2 to attack (THAC0 +2) on a failed save, 60 s; "
+     "icon via the spell being cast"},
+    {"SPWI209", "-", 0x0U, "r20:buff", 0, 0, 20,
+     "Pain Mirror (op 375 type 3): 5 s/level (100 s at 20); the first melee hit on the caster hurts the attacker as "
+     "much (-2 / -2 on the same tick, spell_follow -FoeAttacks), then the mirror is gone"},
+    {"SPWI211", "*", 0x0U, "r1200:buff", 0, 0, 1200,
+     "Strength (projectile 223): STR +1d8 for the fighter class (4 measured; capped below 19), the engine's long "
+     "duration (1200 rounds)"},
+    {"SPWI212", "51:+100,52:+100", 0x0U, "r3:debuff", -10, -7, 3,
+     "Swarm Curse: 1d4 + level/3 per 5 s pulse (7-10 at 20), 15 s, no casting inside (100% failure); one pulse per "
+     "caster round (tbc_hive.lua)"},
+    {"SPWI213", "-", 0x4U, "r6:debuff", 0, 0, 6,
+     "Horror (op 24): panic 30 s on a failed save (STATE_PANIC); the panicked foe flees on its turns"},
+    {"SPWI214", "*", 0x0U, "r20:buff", 0, 0, 20,
+     "Luck (op 22, one of seven rows): LUCK +2..8 (2 and 7 measured), 5 s/level (100 s at 20)"},
+    {"SPWI216", "2:-3,9:-1,10:-1,11:-1,12:-1,13:-1", 0x20000000U, "r23:buff", 0, 0, 23,
+     "Blur (op 65 + AC/saves): AC -3, saves +1, STATE_BLUR, 15 s + 5 s/level (115 s); decay in tbc_rules.lua"},
+    {"SPWI217", "-", 0x4U, "r6:debuff", 0, 0, 6, "Ignus' Terror (op 24): panic 30 s, save at -1 negates"},
+    {"SPWI218", "-", 0x0U, "none", -12, 0, 0,
+     "Infernal Orb (projectile 279): the caster's attack roll, then 1d8 + 1d4 fire (3-4 measured); the text's "
+     "STR/DEX -1 is not in the SPL (vanilla)"},
+    {"SPWI219", "*", 0x0U, "r600:buff", 0, 0, 600,
+     "Power of One (projectile 287): STR +1d8+1 for the fighter class (2-5 measured), the engine's duration "
+     "(600 rounds); its effects are parentless (named by the spell on its way)"},
 };
 }  // namespace pstf::spellexpect

@@ -42,6 +42,7 @@ local function rig(f)
 		first = 0
 	end
 	PSTF_EvalAs(f, 'ChangeStat(Myself,RESISTMAGIC,0,SET)', 0)
+	if F.foePre and F.foePre ~= '' then PSTF_EvalAs(f, F.foePre, 0) end  -- e.g. THAC0 0: every swing hits
 	PSTF_SetHp(f, 1000, 1000)
 end
 
@@ -51,6 +52,8 @@ function pstfTestTick()
 		local s = slotOf(F.caster or 'Grace')
 		if s < 0 then return fail('no ' .. tostring(F.caster) .. ' in the party (use save 000000990)') end
 		caster = PSTF_PartyId(s)
+		-- pre = an action on the caster before the fight (ChangeStat is queued: a turn start clears it)
+		if F.pre and F.pre ~= '' then C:Eval(F.pre, s) end
 		if F.level then
 			if (F.caster or 'Grace') == 'Nameless' then C:Eval('ChangeStat(Myself,LEVEL2,' .. F.level .. ',SET)', s)
 			else C:Eval('ChangeStat(Myself,LEVEL,' .. F.level .. ',SET)', s) end
@@ -74,6 +77,10 @@ function pstfTestTick()
 		end
 		cur, turnStart = id, frames
 	end
+	-- the foe attacks a chosen party member on its turns (Black-Barbed Shield's barbs: foeAttacks = 'Player1')
+	if castTurnOver and F.foeAttacks and id == foe and frames == turnStart + 2 then
+		PSTF_EvalAs(foe, 'Attack(' .. F.foeAttacks .. ')', 1)
+	end
 	if castTurnOver and id == owner and frames == turnStart + 3 then
 		ownerTurns = ownerTurns + 1
 		show(owner, 'owner turn start ' .. ownerTurns)
@@ -92,6 +99,7 @@ function pstfTestTick()
 			if not isParty(w) then PSTF_SetHp(w, 1000, 1000) end
 			snap0[w] = (not isParty(w)) and 1000 or hp(w)
 		end
+		if F.ownerHp then PSTF_SetHp(owner, F.ownerHp) end  -- room for a heal (Blood Bridge, cures)
 		show(owner, 'before the cast')
 		note('cast by ' .. string.format('%X', caster) .. ': ' .. F.cast)
 		PSTF_EvalAs(caster, F.cast, 1)

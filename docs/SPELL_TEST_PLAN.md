@@ -114,21 +114,21 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 | SPWI120 | Vilquar's Eye | blind 30 s, save -1 | DISABLE | D 6 | as Blindness | U1 U2 | yes 2026-11-25 |
 | SPWI121 | Reign of Anger | missiles 1d4+2 | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
 | SPWI201 | Adder's Kiss | acid hit, lingers 5 s / 3 lvls (op 374) | INSTANT + DOT | D | first hit in the cast turn, then one per victim round (exists: `tbc_hive`) | U2 (exists) | yes 2026-11-25 |
-| SPWI202 | Black-Barbed Curse | barbs 4d4 after 35 ticks | ONSET | - | HP within 4..16, in the caster's turn | U1 U2 |  |
-| SPWI203 | Black-Barbed Shield | barbs hurt attackers, 10-30 s (op 375) | ATTACHED | B | melee attacker loses HP | U2 G |  |
-| SPWI204 | Blood Bridge | caster gives HP to target (projectile 226) | HARDCODED INSTANT | - | caster HP down, target up, equal | U2 |  |
-| SPWI205 | Greater Embalming | TNO stronger embalm, 60 min | BUFF | B | as Minor, bigger | U1 U2 |  |
-| SPWI207 | Ice Knife | 2d4 cold + area, needs a hit roll | INSTANT | - | HP bounds; a miss does nothing | U1 U2 |  |
-| SPWI209 | Pain Mirror | damage taken reflected in 10 ft (op 375) | ATTACHED | B | hit the caster: nearby foes lose HP | G |  |
-| SPWI211 | Strength | STR up (projectile 223) | HARDCODED BUFF | B | STR up; icon via orphans | U2 |  |
-| SPWI212 | Swarm Curse | insects 15 s, spell failure | LINGER, DEBUFF | D | one pulse per caster round (exists); target's casts fail meanwhile | U2 (exists) |  |
-| SPWI213 | Horror | non-undead in 30 ft flee 30 s, save neg | DISABLE (AI) | D 6 | target runs on its turns, does not attack | U1 U2 G |  |
-| SPWI214 | Luck | luck +2..8, 5 s/lvl (op 22, one random row) | BUFF | B | luck +2..8 | U1 U2 |  |
+| SPWI202 | Black-Barbed Curse | barbs 4d4 after 35 ticks | ONSET | - | HP within 4..16, in the caster's turn | U1 U2 | yes 2026-11-25 |
+| SPWI203 | Black-Barbed Shield | barbs hurt attackers, 10-30 s (op 375) | ATTACHED | B | melee attacker loses HP | U2 G | yes 2026-11-25 |
+| SPWI204 | Blood Bridge | caster gives HP to target (projectile 226) | HARDCODED INSTANT | - | caster HP down, target up, equal | U2 | yes 2026-11-25 |
+| SPWI205 | Greater Embalming | TNO stronger embalm, 60 min | BUFF | B | as Minor, bigger | U1 U2 | yes 2026-11-25 |
+| SPWI207 | Ice Knife | 2d4 cold + area, needs a hit roll | INSTANT | - | HP bounds; a miss does nothing | U1 U2 | yes 2026-11-25 |
+| SPWI209 | Pain Mirror | damage taken reflected in 10 ft (op 375) | ATTACHED | B | hit the caster: nearby foes lose HP | G | yes 2026-11-25 |
+| SPWI211 | Strength | STR up (projectile 223) | HARDCODED BUFF | B | STR up; icon via orphans | U2 | yes 2026-11-25 |
+| SPWI212 | Swarm Curse | insects 15 s, spell failure | LINGER, DEBUFF | D | one pulse per caster round (exists); target's casts fail meanwhile | U2 (exists) | yes 2026-11-25 |
+| SPWI213 | Horror | non-undead in 30 ft flee 30 s, save neg | DISABLE (AI) | D 6 | target runs on its turns, does not attack | U1 U2 G | yes 2026-11-25 |
+| SPWI214 | Luck | luck +2..8, 5 s/lvl (op 22, one random row) | BUFF | B | luck +2..8 | U1 U2 | yes 2026-11-25 |
 | SPWI215 | Knock | unlock locks in area | OOC | - | `PSTF_Locks` locked -> 0 | G |  |
-| SPWI216 | Blur | AC +3, saves +1, 15 s + 5 s/lvl | BUFF | B | exact AC/saves; ends (exists in `tbc_rules`) | U1 U2 |  |
-| SPWI217 | Ignus' Terror | as Horror, save -1 | DISABLE (AI) | D 6 | as Horror | U1 U2 G |  |
-| SPWI218 | Infernal Orb | 1d8 + 1d4 fire, attack roll +3, slows | INSTANT | - | HP bounds | U1 U2 |  |
-| SPWI219 | Power of One | STR up (projectile 287, parentless) | HARDCODED BUFF | B | STR; icon via orphans (exists) | U2 |  |
+| SPWI216 | Blur | AC +3, saves +1, 15 s + 5 s/lvl | BUFF | B | exact AC/saves; ends (exists in `tbc_rules`) | U1 U2 | yes 2026-11-25 |
+| SPWI217 | Ignus' Terror | as Horror, save -1 | DISABLE (AI) | D 6 | as Horror | U1 U2 G | yes 2026-11-25 |
+| SPWI218 | Infernal Orb | 1d8 + 1d4 fire, attack roll +3, slows | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
+| SPWI219 | Power of One | STR up (projectile 287, parentless) | HARDCODED BUFF | B | STR; icon via orphans (exists) | U2 | yes 2026-11-25 |
 
 ### Mage, levels 4-6 (spell levels 3-6 in the files)
 
