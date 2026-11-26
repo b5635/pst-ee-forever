@@ -105,7 +105,11 @@ function pstfTestTick()
 	-- (any time: a banter can start mid-fight; scenarios that test a dialogue set S.keepDialog)
 	if S.frame % 3 == 1 and not S.keepDialog and not (S.keepDialogAfter and S.frame >= S.keepDialogAfter) and worldScreen and worldScreen.StepDialog and
 			(S.frame <= 24 or (PSTF_InDialog and PSTF_InDialog() == 1)) then
-		pcall(worldScreen.StepDialog, worldScreen)
+		-- a node with replies does not step: pick its last reply (usually the way out), as tests/ingame/dlgroll.lua does
+		local last
+		if dialogTable then for _, v in ipairs(dialogTable) do if v.marker ~= nil then last = v.marker end end end
+		if last and S.clickReplies and S.frame % 6 == 1 then  -- opt-in: a reply can be a plot choice pcall(worldScreen.OnDialogReplyClick, worldScreen, last)
+		else pcall(worldScreen.StepDialog, worldScreen) end
 		if S.frame > 24 and not S.stepped then S.stepped = true S.note('stepping a dialogue closed at tick ' .. S.frame) end
 	end
 	local f = S.steps[S.frame]
@@ -363,6 +367,7 @@ end
 -- dialogue is stepped closed and the fight must go on (or end) without a stuck turn.
 function S.talker(o)
 	S.keepDialogAfter = 61
+	S.clickReplies = true
 	local talked, after = false, 0
 	o.check = function(id)
 		if not talked and PSTF_InDialog() == 1 then
@@ -377,3 +382,26 @@ function S.talker(o)
 	S.plot(o)
 end
 
+
+-- Crowd fights (section C): the protagonist attacks one creature (provoke) or it is made hostile; the fight that
+-- grows from it must end (a side gone, fled or no longer hostile) without a stuck turn or endless rounds.
+-- o = {name, cre, spawn, provoke (default true), hostile, hp, expect = {{var, scope, v}}, maxFrames, notes}.
+-- ok = the fight ran and has been over for 90 ticks (and every expect held at some point).
+function S.brawl(o)
+	if o.provoke == nil then o.provoke = true end
+	local ran, over, most, rounds = false, 0, 0, 0
+	o.hp = o.hp or 0
+	o.maxFrames = o.maxFrames or 9000
+	o.check = function(id)
+		local cur, round = PSTF_TbcCurrent()
+		if cur ~= -1 then
+			ran = true over = 0
+			local n = S.fighters()
+			if n > most then most = n end
+			if round and round > rounds then rounds = round end
+		elseif ran then over = over + 1 end
+		return ran and over > 90, string.format('fight over (%d rounds, up to %d combatants)', rounds, most)
+	end
+	if o.hp == 0 then o.hp = nil end
+	S.plot(o)
+end

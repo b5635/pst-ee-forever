@@ -97,8 +97,8 @@ before the first action is replaced by an ordered attack (the nudge). Real-time 
 
 | ID | Save (area) | Setup / forcing | Expected (correct behaviour) | Watch | Outcome |
 |---|---|---|---|---|---|
-| S01 | 000700162 Spoke To Ravel (AR0610) | Make Ravel hostile (`PSTF_MakeEnemy`); HP 400; party HP 400; watch Ravel | Spell steps advance (LOCALS `Scd_int_1` 1..N); `StartTimer(1,20)` self-spell recurs; at HP < 50 % casts 1601; at death the `0610cut2` cutscene plays and the fight ends cleanly | QUEUE lines (Spell, Wait, IncrementGlobal), TIMER `1:`, cutscene, fight end | - |
-| S02 | 000700204 Ready For Final Fight (AR1204) | Turn the Transcendent One hostile (1204TRNA then 1204TRNF); HP 2000 | Signature spells 2902, 2506, 2805, 2802 cast once each, about 30 s of its own time apart; melee between them (`TimerActive(2)`); self-heal 1601 under 51 %; at death `Quit_Game` | TIMER `2:` counts down across its turns; how many turns between big spells | FIXED: timer 2 (30 s) drained ~3 s per own turn (11 turns between big spells); now `[tbc] script_timers` pays each round's missing time at turn start (`CheckTimers(seconds)`); re-run pending |
+| S01 | 000700162 Spoke To Ravel (AR0610) | Make Ravel hostile (`PSTF_MakeEnemy`); HP 400; party HP 400; watch Ravel | Spell steps advance (LOCALS `Scd_int_1` 1..N); `StartTimer(1,20)` self-spell recurs; at HP < 50 % casts 1601; at death the `0610cut2` cutscene plays and the fight ends cleanly | QUEUE lines (Spell, Wait, IncrementGlobal), TIMER `1:`, cutscene, fight end | ok: Ravel spawned (the save's counts as dead), cd_int_1 1 -> 8 in 9 turns. One earlier run crashed in `CGameArea::SortLists` (all sprites gone at once, dump empty); not reproduced |
+| S02 | 000700204 Ready For Final Fight (AR1204) | Turn the Transcendent One hostile (1204TRNA then 1204TRNF); HP 2000 | Signature spells 2902, 2506, 2805, 2802 cast once each, about 30 s of its own time apart; melee between them (`TimerActive(2)`); self-heal 1601 under 51 %; at death `Quit_Game` | TIMER `2:` counts down across its turns; how many turns between big spells | FIXED: timer 2 (30 s) drained ~3 s per own turn (11 turns between big spells); now `[tbc] script_timers` pays each round's missing time at turn start (`CheckTimers(seconds)`): big spells 7 rounds apart, ok |
 | S03 | 000700117 Exotic Shopping (AR0609) | Vrischika: set LOCALS `Scd_int_1` 14, make her hostile | Casts 2209 (close), 2405, 2207 (far), each gated by `StartTimer(1,1..4)` | TIMER `1:`; casts per turn | ok (after the MultiFireLeft null fix: the first run faulted the tick handler) |
 | S04 | 000700136 Spoke to Splinter (AR0601) | Jumble (in the area), LOCALS `cd_int_0` 1, hostile, HP 3000 | Step 1 (2102 self), step 2 (`Wait(1)` then 2115), step 3 ... counter climbs once per turn | Wait-first steps | ok: 1 -> 7 in 9 turns, one spell each; the 2 turns without a step were knockdowns (stand up = the action) |
 | S05 | 000700145 Extravagant Ones Complete (AR0603) | Lady Thorncombe (0603LADY), same as S04 | Same as S04 | Same | ok: one spell per turn (5 steps in 10 turns: 3 knockdowns, 1 step lost inside the engine's cinematic freeze, vanilla) |
@@ -123,14 +123,14 @@ These only matter while the creature is already a combatant, so each scenario st
 | ID | Save (area) | Setup / forcing | Expected | Watch | Outcome |
 |---|---|---|---|---|---|
 | S18 | 000700070 Spoke with Hargrimm (AR1500) | Fight a hostile next to Soego, then attack Soego | Poof, wererat polymorph, `GLOBALSoego`=4, `Enemy()`, `LOCALS Scd_int_0`=1; attacks the party | `SmallWait` drops `GLOBALSoego`=4 and `Enemy()` = plot ISSUE | - |
-| S19 | 000700195 In The Fortress (AR1200) | A hostile shadow next to the party, then attack Deionarra (DEIONS, 1200DEIO) | PlaySequence, then `GLOBALGame_Over`=3 and `DestroySelf` | She stays and gets nudged into melee = ISSUE | - |
+| S19 | 000700195 In The Fortress (AR1200) | A hostile shadow next to the party, then attack Deionarra (DEIONS, 1200DEIO) | PlaySequence, then `GLOBALGame_Over`=3 and `DestroySelf` | She stays and gets nudged into melee = ISSUE | OPEN (setup): a spawned DEIONS with 1200DEIO is not attacked by a scripted Attack("DeionS") order |
 | S20 | 000700106 It's Adahn Finally (AR0402) | Attack O in the Smoldering Corpse bar during a fight | `AR0402SC_Hostile`=1, fade, O destroyed; the Mercykiller patrons (0402MKGS) turn hostile; Ilquix polymorphs (0402ILQX) | Whole bar joins; fade-out lost = ISSUE; Ilquix card picture after the polymorph | - |
 | S21 | 000700186 Carceri Return (AR0900) | Thokola slavers (0900SLV1-3) at `AR0900Curst_Slavers` 24/26/27, see the party | Counter steps 25, 27, 28 | Counter lost behind a Wait | - |
-| S22 | 000700091 Got the Grimoire (AR0508) | Attack Lothar | `Kill(Player1)`: TNO dies, wakes in the Mortuary (area change) and the fight ends cleanly | No fault on death or area change; turns stop | - |
-| S23 | 000700172 Got The Key (AR0704) | Berrog (0704BER1) sees the party during a fight | `ChangeAIScript("0704ber2")` happens | Script swap lost | - |
-| S24 | 000700178 Prison Exploration (AR0702) | Attack Vhailor (VHAIL, 0702VHAI) | Polymorph 61511, hostile, attacks | HUD card and name after the polymorph; save banner position | - |
+| S22 | 000700091 Got the Grimoire (AR0508) | Attack Lothar | `Kill(Player1)`: TNO dies, wakes in the Mortuary (area change) and the fight ends cleanly | No fault on death or area change; turns stop | ok: the fight ended cleanly after his response |
+| S23 | 000700172 Got The Key (AR0704) | Berrog (0704BER1) sees the party during a fight | `ChangeAIScript("0704ber2")` happens | Script swap lost | n/a in this save: Berrog already runs his flee script. Found: a flight still finding its path was nudged into an attack at tick 15 (FIXED) |
+| S24 | 000700178 Prison Exploration (AR0702) | Attack Vhailor (VHAIL, 0702VHAI) | Polymorph 61511, hostile, attacks | HUD card and name after the polymorph; save banner position | ok with `provoke` (attacked while neutral: a hostile Vhailor's See block outranks AttackedBy): animation changes |
 | S25 | 000700202 Spoke With Practical One (AR1203) | Attack the Incarnation (INCAR2, 1203INC2) | Polymorph 61521, `SetAnimState(36)`, Help; the others answer the Help call (1203INC1/3) | Random `StartRandomTimer(1,15,45)` floats; timers | - |
-| S26 | 000700161 I See Ravel (AR0610) | Ravel dies during the fight | `StartCutSceneMode` + `0610cut2`: the fight ends or pauses; after the cutscene nobody is held and the HUD is gone | Cutscene with turn-based on | - |
+| S26 | 000700161 I See Ravel (AR0610) | Ravel dies during the fight | `StartCutSceneMode` + `0610cut2`: the fight ends or pauses; after the cutscene nobody is held and the HUD is gone | Cutscene with turn-based on | ok: HP dropped to 1 mid-fight, she dies, the fight ends cleanly |
 
 ## C. Crowds, alarms, fleeing (audit finding 3)
 
@@ -150,9 +150,9 @@ These only matter while the creature is already a combatant, so each scenario st
 
 | ID | Save (area) | Setup / forcing | Expected | Watch | Outcome |
 |---|---|---|---|---|---|
-| S36 | 000700130 Inventory Management (AR0600) | Fight a hostile, then attack Aelwyn (0600AELN) | `AR0600Attack_Aelwyn`=1 and `Dialogue(Player1)`: she walks up (more than 31 ft?) and talks; after the dialogue the fight goes on | The dialogue never starts (walk capped, AttackedBy used up) = ISSUE | - |
+| S36 | 000700130 Inventory Management (AR0600) | Fight a hostile, then attack Aelwyn (0600AELN) | `AR0600Attack_Aelwyn`=1 and `Dialogue(Player1)`: she walks up (more than 31 ft?) and talks; after the dialogue the fight goes on | The dialogue never starts (walk capped, AttackedBy used up) = ISSUE | re-run (first run: the provoke order opened another dialogue) |
 | S37 | 000700136 Spoke to Splinter (AR0601) | Attack Splinter | `Call_MK`=1, `GLOBALSplinter`=1, dialogue | Same as S36 | - |
-| S38 | 000700103 Get Hamrys Senior Plans (AR0510) | Attack the Vault 9 guard (0510VALT) | `Vault_Attack`=1 + dialogue | Same | - |
+| S38 | 000700103 Get Hamrys Senior Plans (AR0510) | Attack the Vault 9 guard (0510VALT) | `Vault_Attack`=1 + dialogue | Same | ok: Vault_Attack = 1, his dialogue opens in his own turn, closes, the fight goes on |
 | S39 | 000700123 Exploring Maze (AR1342) / 000700128 (AR13WZ) | Modron constructs (CHIGH/CMED/CLOW, 1300CONS) near (686,498) | Help, Dialogue, Enemy, Attack in one response: dialogue first, then the fight | Dialogue inside the turn | - |
 | S40 | 000700189 Trias Time (AR0901) | Trias fight as the walkthrough plays it | Dialogue, then the fight; Trias' sword variable (`Trias_Sword`) decides Game_Over vs fight | No early Game_Over | - |
 
@@ -203,6 +203,10 @@ toggling `[tbc] enabled=0` (vanilla behaviour must come back, the toggle check).
   the missing time at its next turn start (`TimerClock`, `[tbc] script_timers`).
 - Cosmetic and bookkeeping actions (ChangeColor, StickySinisterPoof, FaceObject, PlaySequence, CreateItem, ...) are
   no longer the turn's action (Soego's poof-and-recolour, Jumble's FaceObject).
+- **Setup lessons:** attack a neutral as the player would (`provoke`: the protagonist's Attack order) when its
+  See-enemy block would outrank AttackedBy (Vhailor); a scripted Attack order on some creatures never starts
+  (Deionarra). Never auto-click dialogue replies outside dialogue scenarios: one returned the game to the main menu
+  (S37 first run).
 - Engine (vanilla): a cinematic spell freeze (`CPlanescape::SetGameFreeze`) pops and replaces queued actions of the
   sprites in the area; a step queued behind it can be lost the same way in real time (seen in S05).
 

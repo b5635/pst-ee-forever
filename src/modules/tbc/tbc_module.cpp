@@ -174,6 +174,7 @@ struct State {
   std::map<int32_t, uint32_t> persist_pulsed;
   uint32_t turn_w0 = 0;
   uint16_t clog_action = 0xFFFF;
+  uint16_t prev_action = 0xFFFF;     // the action before clog_action (a Spell that just ended)
   bool follow = false;               // the camera keeps the active creature centred while it moves
   std::wstring sound_dir;            // <game>/pst_forever/sounds/
   uint32_t resolve_ticks = 0;        // world ticks the turn has waited for its spell to land
@@ -687,6 +688,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.since_action = 1000;
   g.turn_w0 = g.last_time;
   g.clog_action = 0xFFFF;
+  g.prev_action = 0xFFFF;
   g.follow = false;
   if (next == -1) return;
   if (g.round_effects) {
@@ -2302,6 +2304,7 @@ void OnTick(uint64_t frame) {
   g.last_x = s.x, g.last_y = s.y;
   if (s.action != g.clog_action) {
     CLog("ACTION", Name(cur) + " " + ActionName(s.action) + (s.has_path ? " (walking)" : ""));
+    g.prev_action = g.clog_action;
     g.clog_action = s.action;
   }
   if (g.maneuvers) {
@@ -2332,11 +2335,13 @@ void OnTick(uint64_t frame) {
   if (!g.econ.party) g.econ.engine_driven = EngineDrivesAi(engine::SpriteState(cur));
   // A Spell that ended without a cast (spent): its action comes back (economy.h Refund).
   if (g.keep_queue && !g.econ.party && cur != g.nudged && g.econ.action_used && !g.cast_done && !g.cast_live &&
-      IsCastAction(g.econ.act_action) && IsCastAction(g.clog_action) && s.action != g.clog_action &&
+      IsCastAction(g.econ.act_action) && IsCastAction(g.prev_action) && g.clog_action == s.action &&
+      !IsCastAction(s.action) && g.prev_action != 0xFFFF &&
       !(g.cast_feedback && engine::SpellCasts(cur) > g.turn_casts) && g.refunds < 8) {
     ++g.refunds;
     g.econ.Refund();
-    CLog("QUEUE", Name(cur) + ": its " + ActionName(g.clog_action) + " ended without a cast (spent): the action is not used");
+    CLog("QUEUE", Name(cur) + ": its " + ActionName(g.prev_action) + " ended without a cast (spent): the action is not used");
+    g.prev_action = 0xFFFF;
   }
   if (g.keep_queue && !g.econ.party && !g.econ.action_used && !g.econ.engine_driven && cur != g.nudged &&
       IsWaitAction(s.action) && g.lead_skips < 8 && !g.cast_done &&
