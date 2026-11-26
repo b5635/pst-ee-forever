@@ -80,6 +80,7 @@ an ISSUE, and add new ones here:
   own AttackedBy response.
 - **No script name** (Curst citizens): `Attack("None")` does nothing and `Attack(Nearest([NEUTRAL]))` found no target
   either; play its AttackedBy response instead (`hostile = true` = Enemy(), then `PSTF_EvalAs(id, 'Help()')`).
+- **Attack opens a dialogue** (Adahn): no hit lands; play its AttackedBy response (`set` the variable, `hostile`).
 - **Spawned creatures:** find them by `S.ids()` before/after the spawn, not by the CRE name (S.find misses them).
 - **Crowds too big to finish in a run:** `S.brawl{rounds = N}` = ok once round N begins with no stuck turn.
 - **Frame budget:** a step caster with one step per turn needs ~1050 ticks a turn with a 4-member party; set
@@ -137,7 +138,7 @@ These only matter while the creature is already a combatant, so each scenario st
 | S22 | 000700091 Got the Grimoire (AR0508) | Attack Lothar | `Kill(Player1)`: TNO dies, wakes in the Mortuary (area change) and the fight ends cleanly | No fault on death or area change; turns stop | ok: the fight ended cleanly after his response |
 | S23 | 000700172 Got The Key (AR0704) | Berrog (0704BER1) sees the party during a fight | `ChangeAIScript("0704ber2")` happens | Script swap lost | n/a in this save: Berrog already runs his flee script. Found: a flight still finding its path was nudged into an attack at tick 15 (FIXED) |
 | S24 | 000700178 Prison Exploration (AR0702) | Attack Vhailor (VHAIL, 0702VHAI) | Polymorph 61511, hostile, attacks | HUD card and name after the polymorph; save banner position | ok with `provoke` (attacked while neutral: a hostile Vhailor's See block outranks AttackedBy): animation changes |
-| S25 | 000700202 Spoke With Practical One (AR1203) | Attack the Incarnation (INCAR2, 1203INC2) | Polymorph 61521, `SetAnimState(36)`, Help; the others answer the Help call (1203INC1/3) | Random `StartRandomTimer(1,15,45)` floats; timers | - |
+| S25 | 000700202 Spoke With Practical One (AR1203) | Attack the Incarnation (INCAR2, 1203INC2) | Polymorph 61521, `SetAnimState(36)`, Help; the others answer the Help call (1203INC1/3) | Random `StartRandomTimer(1,15,45)` floats; timers | ok (thin): provoked, LOCALS cd_int_1 = 1 at tick 132 (its AttackedBy response), round 3 began; only it and the protagonist fought (the other Incarnations did not answer the Help call from where they stand) |
 | S26 | 000700161 I See Ravel (AR0610) | Ravel dies during the fight | `StartCutSceneMode` + `0610cut2`: the fight ends or pauses; after the cutscene nobody is held and the HUD is gone | Cutscene with turn-based on | ok: HP dropped to 1 mid-fight, she dies, the fight ends cleanly |
 
 ## C. Crowds, alarms, fleeing (audit finding 3)
