@@ -4,6 +4,7 @@
 -- 1 -> 2 (Spell(Myself,2102); Wait(1); IncrementGlobal) -> 3 (Spell([EA=2],2101); Wait(1); IncrementGlobal), then melee.
 -- Four counters in one fight: every apprentice must reach 3 (one step per turn), none stuck behind its Wait.
 local before, extra, done = nil, {}, {}
+local stepper = {}  -- 3012APR2/3 have the spell steps; 3012APR4 only sets 1 and attacks (melee)
 S.steps[32] = function() before = S.ids() end
 S.steps[33] = function() for i = 2, 4 do S.spawn('APPRENT' .. i, 160 + 40 * i, 30 * i) end end
 S.steps[44] = function()
@@ -14,6 +15,7 @@ S.steps[44] = function()
 	end
 	for k, id in ipairs(extra) do
 		PSTF_EvalAs(id, 'ChangeAIScript("3012APR' .. (k + 1) .. '",0)', 1)
+		if k + 1 <= 3 then stepper[id] = true end
 		PSTF_SetHp(id, 300, 300)
 	end
 	S.note(#extra .. ' more apprentices')
@@ -31,8 +33,9 @@ end
 local finish = S.finish
 S.finish = function(why)
 	local n = 0
-	for _, id in ipairs(extra) do if done[id] then n = n + 1 end end
-	if n < #extra and why ~= 'timeout' and S.frame < S.maxFrames - 60 then return end  -- the others are slower: wait
-	if n < #extra then S.issue(string.format('%d of %d other apprentices reached step 3', n, #extra)) end
+	local want = 0
+	for _, id in ipairs(extra) do if stepper[id] then want = want + 1 if done[id] then n = n + 1 end end end
+	if n < want and why ~= 'timeout' and S.frame < S.maxFrames - 60 then return end  -- the others are slower: wait
+	if n < want then S.issue(string.format('%d of %d other stepping apprentices reached step 3', n, want)) end
 	return finish(why)
 end
