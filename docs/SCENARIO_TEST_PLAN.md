@@ -79,8 +79,10 @@ an ISSUE, and add new ones here:
 - **Provoke kills the target:** a 4-HP patron dies to the protagonist's first hit; give it `hp` so it lives to run its
   own AttackedBy response.
 - **No script name** (Curst citizens): `Attack("None")` does nothing and `Attack(Nearest([NEUTRAL]))` found no target
-  either; play its AttackedBy response instead (`hostile = true` = Enemy(), then `PSTF_EvalAs(id, 'Help()')`).
+  either; the provoke now plays its AttackedBy response instead (Enemy(), then `Help()`), in `S.plot` itself.
 - **Attack opens a dialogue** (Adahn): no hit lands; play its AttackedBy response (`set` the variable, `hostile`).
+- **A plot variable that also opens a dialogue** (Trias_Sword 2 runs `Dialogue([EA=2])`): a dialogue with replies holds the
+  world and reads as a stuck turn (the issue line now says so); pick a value that keeps the fight branch only (3).
 - **Spawned creatures:** find them by `S.ids()` before/after the spawn, not by the CRE name (S.find misses them).
 - **Crowds too big to finish in a run:** `S.brawl{rounds = N}` = ok once round N begins with no stuck turn.
 - **Frame budget:** a step caster with one step per turn needs ~1050 ticks a turn with a 4-member party; set
@@ -162,7 +164,7 @@ These only matter while the creature is already a combatant, so each scenario st
 | S36 | 000700130 Inventory Management (AR0600) | Fight a hostile, then attack Aelwyn (0600AELN) | `AR0600Attack_Aelwyn`=1 and `Dialogue(Player1)`: she walks up (more than 31 ft?) and talks; after the dialogue the fight goes on | The dialogue never starts (walk capped, AttackedBy used up) = ISSUE | ok for turn-based: made hostile, her Dialogue runs in her own turn (walks up, then talks). Setup caveat: it came from another block (Attack_Aelwyn not set) and the conversation needs real replies, so the test cannot close it |
 | S37 | 000700136 Spoke to Splinter (AR0601) | Attack Splinter | `Call_MK`=1, `GLOBALSplinter`=1, dialogue | Same as S36 | ok for turn-based: Splinter = 1, his dialogue opens in his own turn. Same caveat as S36: the reply-driven conversation is not closed by the test (the turn waits on the open dialogue, as the world does) |
 | S38 | 000700103 Get Hamrys Senior Plans (AR0510) | Attack the Vault 9 guard (0510VALT) | `Vault_Attack`=1 + dialogue | Same | ok: Vault_Attack = 1, his dialogue opens in his own turn, closes, the fight goes on |
-| S39 | 000700123 Exploring Maze (AR1342) / 000700128 (AR13WZ) | Modron constructs (CHIGH/CMED/CLOW, 1300CONS) near (686,498) | Help, Dialogue, Enemy, Attack in one response: dialogue first, then the fight | Dialogue inside the turn | - |
+| S39 | 000700123 Exploring Maze (AR1342) / 000700128 (AR13WZ) | Modron constructs (CHIGH/CMED/CLOW, 1300CONS) near (686,498) | Help, Dialogue, Enemy, Attack in one response: dialogue first, then the fight | Dialogue inside the turn | ok: CHIGH/CMED/CLOW spawned with 1300CONS (no Dialogue in this script: Help, Enemy, Attack), Help brings the others in, 9 combatants, fight over after 3 rounds |
 | S40 | 000700189 Trias Time (AR0901) | Trias fight as the walkthrough plays it | Dialogue, then the fight; Trias' sword variable (`Trias_Sword`) decides Game_Over vs fight | No early Game_Over | - |
 
 ## E. Bosses and special mechanics

@@ -101,15 +101,6 @@ local lastCur, turnStart, started, lastRound = -2, 0, false, 0
 function pstfTestTick()
 	if finished then return end
 	S.frame = S.frame + 1
-	if S.provokeNearest then  -- a few ticks after the jump (see S.plot provoke)
-		S.provokeNearest = S.provokeNearest - 1
-		if S.provokeNearest == 0 then
-			S.provokeNearest = nil
-			PSTF_EvalAs(S.tno(), 'Attack(Nearest([NEUTRAL]))', 1)
-			local _, t = PSTF_Side(S.tno())
-			S.note('provoke: protagonist target ' .. S.hx(t or -1))
-		end
-	end
 	-- Walkthrough saves can open inside a party banter dialogue (the world waits for it): step it closed first.
 	-- (any time: a banter can start mid-fight; scenarios that test a dialogue set S.keepDialog)
 	if S.frame % 3 == 1 and not S.keepDialog and not (S.keepDialogAfter and S.frame >= S.keepDialogAfter) and worldScreen and worldScreen.StepDialog and
@@ -141,7 +132,8 @@ function pstfTestTick()
 		S.lastPos = {}
 	end
 	if cur ~= -1 then
-		if S.frame - turnStart > S.turnCap then S.issue(string.format('stuck: turn of %s runs > %d ticks', S.hx(cur), S.turnCap)) end
+		if S.frame - turnStart > S.turnCap then S.issue(string.format('stuck: turn of %s runs > %d ticks%s', S.hx(cur), S.turnCap,
+			(PSTF_InDialog and PSTF_InDialog() == 1) and ' (a dialogue with replies is open: the world waits for a reply)' or '')) end
 		if round and round > S.roundCap then S.issue('endless: fight passed round ' .. S.roundCap) end
 		for i = 1, 30 do
 			local id = PSTF_FightId(i)
@@ -340,11 +332,11 @@ function S.plot(o)
 		o.setup = function(i)
 			local _, _, _, _, sn = PSTF_Side(i)
 			if sn == nil or sn == '' or sn == 'None' then
-				-- no script name to name it by (Curst citizens): stand beside it and attack the nearest neutral
-				local x, y = PSTF_SpritePos(i, 1)
-				PSTF_EvalAs(S.tno(), 'JumpToPoint([' .. math.floor(x + 30) .. '.' .. math.floor(y) .. '])', 1)
-				S.note('provoke: protagonist attacks the nearest neutral (it has no script name)')
-				S.provokeNearest = 4
+				-- no script name to name it by (Curst citizens, spawned CREs; Attack(Nearest([NEUTRAL])) found no target
+				-- either): play the usual AttackedBy response, Enemy() then Help()
+				PSTF_MakeEnemy(i)
+				PSTF_EvalAs(i, 'Help()')
+				S.note('provoke: it has no script name: its AttackedBy response played (Enemy, Help)')
 			else
 				S.note('provoke: protagonist attacks ' .. tostring(sn))
 				PSTF_EvalAs(S.tno(), 'Attack("' .. tostring(sn) .. '")', 1)
