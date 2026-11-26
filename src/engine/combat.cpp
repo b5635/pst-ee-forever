@@ -329,6 +329,14 @@ bool RestoreQueue(QueueStash* st) {
   return true;
 }
 
+bool StepScriptTimers(int32_t id, int seconds) {
+  static const int ok = AllOk({sym::kRvaCheckTimers, sym::kRvaTimerList}) ? 1 : 0;
+  const uint64_t p = ok && seconds > 0 ? LookupSprite(id) : 0;
+  if (!p) return false;
+  reinterpret_cast<void(__fastcall*)(uint64_t, int)>(Va(sym::kRvaCheckTimers))(p, seconds);
+  return true;
+}
+
 int CurrentActionDone(int32_t id) {
   static const int ok = AllOk({sym::kRvaActionDone}) ? 1 : 0;
   const uint64_t p = ok ? LookupSprite(id) : 0;

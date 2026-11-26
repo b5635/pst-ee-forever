@@ -323,6 +323,8 @@ struct QueueStash {
 };
 bool StashQueue(int32_t id, QueueStash* out);
 bool RestoreQueue(QueueStash* st);  // clears what was queued meanwhile first
+// The engine's CheckTimers(seconds) on a creature: its script timers run `seconds` (expired ones fire TimerExpired).
+bool StepScriptTimers(int32_t id, int seconds);
 // 1 = the running action is done and the engine takes the next one on its next update (sprite +0x3E8), 0 not, -1 n/a.
 int CurrentActionDone(int32_t id);
 bool SetHpForTest(int32_t id, int hp, int max_hp = 0);  // max_hp > 0: base max HP too          // test probe only (PSTF_SetHp)            // probe: sprite +0x3904..+0x3910 (Spell's target check)

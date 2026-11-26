@@ -289,6 +289,11 @@ constexpr uint32_t kRvaQueueList = 0x172D3E, kOffSpriteQueueHead = 0x338;
 // CheckTimers(1) runs from ProcessAI once every 15 of the creature's own AI updates: held creatures' timers stand still.
 inline constexpr uint8_t kTimerListBytes[] = {0x48, 0x8B, 0x99, 0xB0, 0x03, 0x00, 0x00};
 constexpr uint32_t kRvaTimerList = 0x164C0A, kOffSpriteTimerHead = 0x3B0;
+// CGameAIBase::CheckTimers(int seconds) itself (lin 1912E0 / win 140164BF0): every script timer -= seconds; one at
+// <= 0 sets TIMEREXPIRED and is removed. ProcessAI calls it with 1 every 15 of the creature's AI updates; tbc calls it
+// at a creature's turn start with the round time its turn did not run (round_rules.h TimerCatchUp).
+inline constexpr uint8_t kCheckTimersBytes[] = {0x4C, 0x8B, 0xDC, 0x53, 0x55, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x70};
+constexpr uint32_t kRvaCheckTimers = 0x164BF0;
 // CGameSprite::ClearAI win 140404BB6: `lea rdx, CAIAction::NULL_ACTION (14072C1A0); mov rcx, rdi; call [rax+120h]`
 // (SetCurrAction, lin 4A54C0; ClearAI lin 4A5320 passes &CAIAction::NULL_ACTION). engine::EndCurrentAction calls the
 // same slot with the same object: the running action ends, the queue stays (a Wait before a real action is skipped).
@@ -1217,6 +1222,7 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("Enemy.id", kRvaEnemyId, kEnemyIdBytes, "win 140408BED"),
     PSTF_SYM("GetNextAction.queueCount", kRvaQueueCount, kQueueCountBytes, "lin 183B00 / win 140172D31"),
     PSTF_SYM("GetNextAction.queueList", kRvaQueueList, kQueueListBytes, "lin 183B00 / win 140172D3E"),
+    PSTF_SYM("CGameAIBase::CheckTimers", kRvaCheckTimers, kCheckTimersBytes, "lin 1912E0 / win 140164BF0"),
     PSTF_SYM("CheckTimers.listHead", kRvaTimerList, kTimerListBytes, "lin 1912E0 / win 140164C0A"),
     PSTF_SYM("ProcessPendingTriggers.actionDone", kRvaActionDone, kActionDoneBytes, "lin 4A24B0 / win 140425E55"),
     PSTF_SYM("ClearAI.setNullAction", kRvaSetNullAction, kSetNullActionBytes, "lin 4A5320 / win 140404BB6"),

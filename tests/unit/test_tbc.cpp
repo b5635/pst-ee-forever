@@ -1352,3 +1352,12 @@ TEST_CASE("combat text menu: one Lua chunk, a menu per line, balanced braces") {
   CHECK(h.find("pstfHovIN1") != std::string::npos);  // status names on the hover card
   CHECK(h.find("pstfHoverLv") != std::string::npos);
 }
+
+TEST_CASE("tbc script timers: one round of timer time per round") {
+  // a 75-tick round, its own turn ran 45 ticks (3 s counted by CheckTimers): 30 ticks owed = 2 s
+  TimerClock c;
+  CHECK(c.Owe(75, 45) == 2 && c.debt == 0);
+  CHECK(c.Owe(75, 68) == 0 && c.debt == 7);   // 7 ticks carried
+  CHECK(c.Owe(75, 67) == 1 && c.debt == 0);   // 7 + 8 = 15 -> 1 s
+  CHECK(c.Owe(75, 200) == 0 && c.debt == 0);  // a long turn (its spell landing) owes nothing
+}

@@ -36,6 +36,7 @@
 #include "core/patch.h"
 #include "core/tick.h"
 #include "engine/combat.h"
+#include "engine/dialog.h"
 #include "engine/frame.h"
 #include "engine/gl_world.h"
 #include "engine/lua.h"
@@ -209,6 +210,9 @@ struct State {
   bool opportunity = true;           // [tbc] opportunity_attacks
   bool no_push = true;               // [tbc] no_push: walkers never push combatants aside in a fight
   bool keep_queue = true;            // [tbc] keep_queue: an AI's script sequence goes on at its next turn
+  bool script_timers = true;         // [tbc] script_timers: script timers run one round per round
+  std::map<int32_t, TimerClock> timer_clock;
+  std::map<int32_t, int> timer_owed;  // whole seconds owed to its script timers at its next turn start
   int lead_skips = 0;                // Waits skipped before the current creature's action this turn
   bool freeze_ai = false;            // the current AI's turn is over (spell still landing): no ProcessAI
   bool keep_current = false;         // its turn ended at a second action: that action and the queue wait for its next turn
@@ -449,6 +453,8 @@ void LogHpChanges() {
 }
 
 void EndFight(const char* why) {
+  g.timer_clock.clear();
+  g.timer_owed.clear();
   if (!g.running) return;
   Log("tbc: fight %u over (%s) after %u rounds", g.fights, why, g.dir ? g.dir->Round() : 0);
   {
@@ -620,6 +626,10 @@ void OnTurnChange(int32_t prev, int32_t next) {
         CLog("QUEUE", Name(prev) + " turn end drops [" + t + "]" + (lost ? " (script state lost)" : ""));
       }
     }
+    if (g.script_timers) {
+      const int s = g.timer_clock[prev].Owe(g.effect_round_ticks, g.econ.total);
+      g.timer_owed[prev] += s;
+    }
     const auto timers = engine::ScriptTimers(prev);
     if (!timers.empty()) {
       std::string t;
@@ -679,6 +689,18 @@ void OnTurnChange(int32_t prev, int32_t next) {
     for (int32_t p : LingeringOf(next)) {
       g.pulses.NewRound(p);
       CLog("SPELL", Name(next) + ": lingering spell " + std::to_string(p) + " gets this round's pulse");
+    }
+  }
+  if (g.script_timers && g.timer_owed[next] > 0) {
+    // its script timers run the round time its turns did not (round_rules.h TimerClock)
+    const int s = g.timer_owed[next];
+    g.timer_owed[next] = 0;
+    const auto t0 = engine::ScriptTimers(next);
+    if (!t0.empty() && engine::StepScriptTimers(next, s)) {
+      std::string a, b;
+      for (const auto& t : t0) a += (a.empty() ? "" : " ") + std::to_string(t.first) + ":" + std::to_string(t.second) + "s";
+      for (const auto& t : engine::ScriptTimers(next)) b += (b.empty() ? "" : " ") + std::to_string(t.first) + ":" + std::to_string(t.second) + "s";
+      CLog("TIMER", Name(next) + " turn start: script timers run " + std::to_string(s) + " s: " + a + " -> " + (b.empty() ? "none" : b));
     }
   }
   if (g.round_effects && engine::EffectClockInstalled()) {
@@ -2305,7 +2327,8 @@ void OnTick(uint64_t frame) {
   uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
   if (!g.econ.party) g.econ.engine_driven = EngineDrivesAi(engine::SpriteState(cur));
   if (g.keep_queue && !g.econ.party && !g.econ.action_used && !g.econ.engine_driven && cur != g.nudged &&
-      IsWaitAction(s.action) && g.lead_skips < 8) {
+      IsWaitAction(s.action) && g.lead_skips < 8 && !g.cast_done &&
+      !(g.cast_feedback && engine::SpellCasts(cur) > g.turn_casts)) {  // an instant cast this tick is its action
     // Its script waits before its action (Wait(1); Spell(...)): the wait is skipped, not replaced by an attack.
     const std::vector<uint16_t> q = engine::ActionQueue(cur);
     if (SkipLeadWait(q.data(), static_cast<int>(q.size())) && engine::EndCurrentAction(cur)) {
@@ -3204,6 +3227,11 @@ int __cdecl LuaActors(engine::LuaState* L) {
   engine::LuaPushNumber(L, n);
   return 1;
 }
+// PSTF_InDialog() -> 1 while a dialogue runs (a party banter holds the world: scenario tests step it closed).
+int __cdecl LuaInDialog(engine::LuaState* L) {
+  engine::LuaPushNumber(L, engine::DialogActive() ? 1 : 0);
+  return 1;
+}
 // PSTF_AnimId(id) -> the creature's animation id (a polymorph changes it: Vhailor, Soego), -1 none.
 int __cdecl LuaAnimId(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
@@ -3478,6 +3506,7 @@ bool InstallTbc(const IniMap& ini) {
   g.opportunity = IniBool(ini, "tbc.opportunity_attacks", true);
   g.no_push = IniBool(ini, "tbc.no_push", true);
   g.keep_queue = IniBool(ini, "tbc.keep_queue", true);
+  g.script_timers = IniBool(ini, "tbc.script_timers", true);
   g.mop_limit = IniInt(ini, "tbc.mop_shots", 3);
   g.party_max = IniInt(ini, "party.size", 6) >= 8 && IniBool(ini, "party.enabled", false) ? 8 : 6;
   {
@@ -3622,6 +3651,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_Action", &LuaAction);
   dev::AddLuaFunction("PSTF_Queue", &LuaQueue);
   dev::AddLuaFunction("PSTF_AnimId", &LuaAnimId);
+  dev::AddLuaFunction("PSTF_InDialog", &LuaInDialog);
   dev::AddLuaFunction("PSTF_FindActor", &LuaFindActor);
   dev::AddLuaFunction("PSTF_Actors", &LuaActors);
   dev::AddLuaFunction("PSTF_ActorRefs", &LuaActorRefs);

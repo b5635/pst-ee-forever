@@ -102,8 +102,11 @@ function pstfTestTick()
 	if finished then return end
 	S.frame = S.frame + 1
 	-- Walkthrough saves can open inside a party banter dialogue (the world waits for it): step it closed first.
-	if S.frame <= 24 and S.frame % 3 == 1 and worldScreen and worldScreen.StepDialog and not S.keepDialog then
+	-- (any time: a banter can start mid-fight; scenarios that test a dialogue set S.keepDialog)
+	if S.frame % 3 == 1 and not S.keepDialog and worldScreen and worldScreen.StepDialog and
+			(S.frame <= 24 or (PSTF_InDialog and PSTF_InDialog() == 1)) then
 		pcall(worldScreen.StepDialog, worldScreen)
+		if S.frame > 24 and not S.stepped then S.stepped = true S.note('stepping a dialogue closed at tick ' .. S.frame) end
 	end
 	local f = S.steps[S.frame]
 	if f then

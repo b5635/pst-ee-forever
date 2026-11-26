@@ -189,6 +189,21 @@ inline int16_t StepCastAura(int16_t counter, uint32_t ticks, uint32_t round_leng
   return static_cast<int16_t>(c > 0x7FFF ? 0x7FFF : c);
 }
 
+// Script timers (StartTimer / StartRandomTimer, TimerActive) count down one second per 15 of the creature's own AI
+// updates (CGameAIBase::CheckTimers from ProcessAI), so in a fight they ran only during its turn: the Transcendent
+// One's StartTimer(2,30) lasted 11 of its turns instead of 6 rounds. Each round gives every combatant one round of
+// timer time, as it gives effects: what its own turn did not run (round_ticks - own_ticks) is owed and paid at its
+// next turn start in whole seconds (CheckTimers(seconds)), the rest carried.
+struct TimerClock {
+  uint32_t debt = 0;  // ticks owed, < 15 after a payment
+  int Owe(uint32_t round_ticks, uint32_t own_ticks) {
+    if (round_ticks > own_ticks) debt += round_ticks - own_ticks;
+    const int s = static_cast<int>(debt / 15);
+    debt -= static_cast<uint32_t>(s) * 15;
+    return s;
+  }
+};
+
 // Lingering spells (area clouds, Swarm Curse) pulse on a tick countdown once they have landed. Each
 // gets one round of ticks per round of its caster: kFirst from landing (the first pulse belongs to the
 // round it was cast in), then kRound from the start of each of the caster's turns. Swarm Curse pulses
