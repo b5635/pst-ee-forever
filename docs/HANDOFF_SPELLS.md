@@ -29,6 +29,15 @@ Plan and findings: `docs/SPELL_TEST_PLAN.md` (per-spell table, F1-F12). Rule fro
 
 ## How to work (the user's rule)
 
+**Focus (user, 2026-11-25): audit only what turn-based combat can break.** Does the spell land in the right turn
+(instant = the caster's turn; a DOT step = the victim's turn start), do buffs/debuffs/disables tick down one round
+per owner turn start and apply/end on the right turn, does the turn wait for the spell (no stall, nothing cut, nothing
+fired out of turn), and does it still **apply as EE applies it** (the stat/state/damage changes happen, on the creatures
+EE picks; a disabled creature is really disabled). EE itself is the reference and is not buggy; what our turn-based layer
+does (round clock, holds, gates, turn ends) may be. Do **not** chase vanilla behaviour: AI choices (confusion, panic),
+blast radii hitting the caster, effect stacking, numbers that differ from the description but match the SPL/engine.
+Note those as "vanilla" and move on; never change them.
+
 Go **spell by spell** and check each one closely; do not batch-run all spells (full run only when asked).
 For each spell (and each special ability):
 1. Run it alone: `tools\spell_suite.ps1 -Only RES` (plus `-Saves pass` for the save branch), and a `tbc_decay.lua`-style

@@ -536,6 +536,10 @@ void OnTurnChange(int32_t prev, int32_t next) {
     engine::DropPath(prev);
   }
   MopFinish("turn over");  // a hovering Missile of Patience belongs to its caster's turn
+  if (prev != -1 && engine::MultiFireLeft(prev) > 0) {  // so are the missiles a multi-fire spell left to aim
+    Log("tbc: %s: %d missiles not aimed: dropped (turn over)", Who(prev).c_str(), engine::MultiFireLeft(prev));
+    engine::MultiFireDrop(prev);
+  }
   g.mop_shots.clear();
   g.mop_end = false;
   g.nudged = -1;
@@ -1254,6 +1258,7 @@ bool ReactionTick(uint32_t dt) {
 constexpr int kAiPathWaitTicks = 10;
 void DirectedAi(int32_t cur, const engine::SpriteInfo& s) {
   if (!g.maneuvers || g.econ.party || g.ai_moved || !ActionFree(g.econ)) return;
+  if (EngineDrivesAi(engine::SpriteState(cur))) return;  // confused, panicked, berserk: the engine's choice stands
   const bool attack = IsAttackAction(s.action), flee = IsFleeAction(s.action);
   if (!attack && !flee) {
     g.econ.defer_act = false;
@@ -1946,6 +1951,7 @@ void OnTick(uint64_t frame) {
   g.clock.Feed(dt, s.busy);  // busy-tick count for the log only
   // A quick item used between two frames still takes the action (UseItem = 34).
   const uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
+  if (!g.econ.party) g.econ.engine_driven = EngineDrivesAi(engine::SpriteState(cur));
   EconomyStep st = g.econ.Feed(dt, moved, s.has_path, fed);
   if (g.cast_feedback) {
     const int casts = engine::SpellCasts(cur);
@@ -1987,6 +1993,11 @@ void OnTick(uint64_t frame) {
       UpdateHud(now);
       return;
     }
+  }
+  if (st.nudge && EngineDrivesAi(engine::SpriteState(cur))) {
+    // confused / panicked / berserk: standing still is the engine's choice too; the turn ends on the idle wait
+    CLog("AI", Name(cur) + " is confused, panicked or berserk: its own choice stands (no attack ordered)");
+    st.nudge = false;
   }
   if (st.nudge) {
     // Its own script picked nothing (many creatures only wait or wander): the engine's attack on the
@@ -2036,6 +2047,16 @@ void OnTick(uint64_t frame) {
   if (MopWaiting()) {
     if (g.end_requested) MopFinish("End Turn");
     else st.end_turn = false;
+  }
+  // Force Missiles, Elemental Strike, Ice Knife: the player aims each missile after the first (the engine's target
+  // cursor); the turn waits for those clicks, End Turn drops the rest. Party AI never aims them (as in real time).
+  if (!g.auto_party && engine::MultiFireLeft(cur) > 0 && engine::GameCursorMode() == sym::kCursorModeTarget) {
+    if (g.end_requested) {
+      Log("tbc: %s: %d missiles not aimed: dropped (End Turn)", Who(cur).c_str(), engine::MultiFireLeft(cur));
+      engine::MultiFireDrop(cur);
+    } else {
+      st.end_turn = false;
+    }
   }
   bool wait_spell = false;
   if (st.end_turn || g.end_requested) {
@@ -2522,6 +2543,27 @@ int __cdecl LuaCursor(engine::LuaState* L) {
   engine::LuaPushNumber(L, engine::GameCursorMode());
   return 1;
 }
+// PSTF_MultiLeft(caster) -> missiles of Force Missiles / Elemental Strike / Ice Knife still to aim (test probe).
+int __cdecl LuaMultiLeft(engine::LuaState* L) {
+  const auto c = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  int left = 0, spell = 0;
+  engine::MultiFireRaw(c, &left, &spell);
+  engine::LuaPushNumber(L, engine::MultiFireLeft(c));
+  engine::LuaPushNumber(L, left);
+  engine::LuaPushNumber(L, spell);
+  return 3;
+}
+// PSTF_MultiFire(caster, target[, spell]) -> true: one aimed missile, as the player's click on the target (test
+// probe; spell = 2207/2405/2410 sets the readied spell number a bar cast would have).
+int __cdecl LuaMultiFire(engine::LuaState* L) {
+  const auto c = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1)), t = static_cast<int32_t>(engine::LuaNumberArg(L, 2, -1));
+  const int before = engine::MultiFireLeft(c);
+  const bool ok = engine::MultiFire(c, t, static_cast<int>(engine::LuaNumberArg(L, 3, 0)));
+  Log("lua: PSTF_MultiFire(%X, %X) -> %d (left %d -> %d, cursor %d)", static_cast<unsigned>(c), static_cast<unsigned>(t),
+      ok ? 1 : 0, before, engine::MultiFireLeft(c), engine::GameCursorMode());
+  engine::LuaPushBool(L, ok);
+  return 1;
+}
 // PSTF_MopFire(caster, target) -> true: a target click for the caster's hovering Missile of Patience (test probe).
 int __cdecl LuaMopFire(engine::LuaState* L) {
   const auto c = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1)), t = static_cast<int32_t>(engine::LuaNumberArg(L, 2, -1));
@@ -2979,6 +3021,8 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_BarCount", &LuaBarCount);
   dev::AddLuaFunction("PSTF_Cursor", &LuaCursor);
   dev::AddLuaFunction("PSTF_MopFire", &LuaMopFire);
+  dev::AddLuaFunction("PSTF_MultiLeft", &LuaMultiLeft);
+  dev::AddLuaFunction("PSTF_MultiFire", &LuaMultiFire);
   dev::AddLuaFunction("PSTF_BarScroll", &LuaBarScroll);
   dev::AddLuaFunction("PSTF_BarHex", &LuaBarHex);
   dev::AddLuaFunction("PSTF_TbcCurrent", &LuaTbcCurrent);

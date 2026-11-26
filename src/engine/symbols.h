@@ -868,6 +868,18 @@ inline constexpr uint8_t kMopTargetBytes[] = {0x8B, 0x88, 0x24, 0x51, 0x00, 0x00
 inline constexpr uint8_t kMopShotCallBytes[] = {0xE8, 0x80, 0xF5, 0x01, 0x00};
 constexpr uint32_t kRvaMopCursor = 0x275748, kRvaMopTarget = 0x27579D, kRvaMopShotCall = 0x27581B, kRvaMopTransfer = 0x294DA0;
 constexpr uint32_t kOffGameCursorMode = 0x78B8, kOffSpriteMopTarget = 0x5124;
+// Multi-fire spells (Ice Knife 2207, Force Missiles 2405, Elemental Strike 2410): the first missile flies with the
+// cast; CPsSpellForceMissile/IceKnife::TransferEffects add the rest to the caster's count (lin sprite +0x510C, win
+// +0x5124: the field Missile of Patience uses for its target) and CallBack arms the target cursor (CInfGame +0x78B8 =
+// 20, SetState 2) for a party caster. A click on a creature runs CPlanescape::MultiFireSpell(g_PST, target, caster)
+// (lin 5A38E0 / win 140257B10, from CGameSprite::OnActionButton): one missile, count - 1, SetState(0, 0) after the
+// last. The spell number is sprite +0x5128 (win 140257B75 `mov eax,[rcx+5128h]`).
+inline constexpr uint8_t kMultiFireBytes[] = {0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B, 0x08, 0x45, 0x89, 0x43, 0x18, 0x55, 0x56, 0x57, 0x41, 0x54};
+inline constexpr uint8_t kMultiFireSpellBytes[] = {0x8B, 0x81, 0x28, 0x51, 0x00, 0x00};
+// CInfGame::SetState(state, arg) prologue (lin 36DA40 / win 1402F3240).
+inline constexpr uint8_t kGameSetStateBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20};
+constexpr uint32_t kRvaMultiFire = 0x257B10, kRvaMultiFireSpell = 0x257B75, kRvaGameSetState = 0x2F3240;
+constexpr uint32_t kOffSpriteMultiLeft = 0x5124, kOffSpriteMultiSpell = 0x5128;
 // g_PST (kVaPlanescape) +0x6B4: a hovering Missile of Patience is up (Fire sets 1, RemoveSelf 0; AIUpdate 140275758
 // `mov dword [rax+6B4h], 0`).
 inline constexpr uint8_t kMopFlagBytes[] = {0xC7, 0x80, 0xB4, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -1192,6 +1204,9 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("MissileOfPatience::AIUpdate.target", kRvaMopTarget, kMopTargetBytes, "win 14027579D"),
     PSTF_SYM("MissileOfPatience::AIUpdate.TransferEffects", kRvaMopShotCall, kMopShotCallBytes, "lin 3090B0 / win 14027581B"),
     PSTF_SYM("MissileOfPatience::AIUpdate.flag", kRvaMopFlag, kMopFlagBytes, "win 140275758"),
+    PSTF_SYM("CPlanescape::MultiFireSpell", kRvaMultiFire, kMultiFireBytes, "lin 5A38E0 / win 140257B10"),
+    PSTF_SYM("CPlanescape::MultiFireSpell.spell", kRvaMultiFireSpell, kMultiFireSpellBytes, "win 140257B75"),
+    PSTF_SYM("CInfGame::SetState", kRvaGameSetState, kGameSetStateBytes, "lin 36DA40 / win 1402F3240"),
     PSTF_SYM("CGameObject::GetObjectType", kRvaGetObjectType, kGetObjectTypeBytes, "lin 176FB0 / win 140173050"),
     PSTF_SYM("CGameSprite::Render.vismap", kRvaVisMapLea, kVisMapLeaBytes, "lin 562A10 / win 1403DD9D5"),
     PSTF_SYM("CGameArea::ShowMonstersInArea.visible", kRvaShowMonstersVis, kShowMonstersVisBytes, "lin 1B8460 / win 1401A108C"),

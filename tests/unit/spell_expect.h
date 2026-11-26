@@ -105,9 +105,10 @@ inline constexpr Expect kExpect[] = {
      "20 -> 40) in the cast turn; the suite casts it on the caster himself (no change)"},
     {"SPWI205", "1:+40,2:-2", 0x0U, "r60:buff", 40, 40, 60,
      "Greater Embalming (op 380 p2=1): +2 HP/level (40), AC -2, 300 s (the SPL's, not the text's hour)"},
-    {"SPWI207", "7:+2", 0x0U, "r12:debuff", -12, -3, 12,
-     "Ice Knife (projectile 221): 2d4 on a hit plus 1d4 cold and -2 to attack (THAC0 +2) on a failed save, 60 s; "
-     "icon via the spell being cast"},
+    {"SPWI207", "*", 0x0U, "r12:debuff", -60, 0, 12,
+     "Ice Knife (projectile 221, multi-fire): 1 + (level-7)/2 knives at 20 = 5; the caster aims knives 2-5 (target "
+     "cursor, CPlanescape::MultiFireSpell) and the turn waits for them; each 2d4 on a hit plus 1d4 cold and -2 to attack "
+     "(stacks, vanilla) on a failed save, 60 s (5 knives: -35, THAC0 +10)"},
     {"SPWI209", "-", 0x0U, "r20:buff", 0, 0, 20,
      "Pain Mirror (op 375 type 3): 5 s/level (100 s at 20); the first melee hit on the caster hurts the attacker as "
      "much (-2 / -2 on the same tick, spell_follow -FoeAttacks), then the mirror is gone"},
@@ -150,5 +151,26 @@ inline constexpr Expect kExpect[] = {
     {"SPWI314", "-", 0x0U, "r20:buff", 0, 0, 20,
      "Balance in All Things (op 375 type 16): each melee hit on the caster hurts the attacker as much, for level/4 "
      "(5) hits or 100 s (spell_follow: 4/4, 2/2, 4/4, then gone after the 5th)"},
+    {"SPWI401", "-", 0x20U, "r2:debuff", -24, -21, 2,
+     "Blacksphere (projectile 301): 1d4 + level (20) force, then op 39 sleep 10 s on a failed save (STATE 0x20); the "
+     "turn waits ~100 ticks for the sleep onset; the foe loses its next 2 turns, acts on the 3rd (spell_follow)"},
+    {"SPWI402", "-", 0x80000000U, "r6:debuff", 0, 0, 6,
+     "Confusion (op 128 + tints): several creatures, 10 s + 1 s/level (30 s); icon r6 down by one per owner turn; the "
+     "confused foe's turns are the engine's AI (RandomTurn / stands): our idle nudge used to order Attack(PlayerN) "
+     "every turn (fixed: EngineDrivesAi)"},
+    {"SPWI405", "-", 0x0U, "none", -196, -154, 0,
+     "Force Missiles (multi-fire, projectile 227): 1 + min(6, (level-7)/2) = 7 missiles at 20, each 2d4 plus a "
+     "level-damage blast (3 ft, save negates; adjacent creatures too, the caster included: vanilla); missiles 2-7 "
+     "are aimed by the player with the target cursor and the turn waits for them (fixed: they used to be lost or "
+     "fireable in a later turn); End Turn drops the rest"},
+    {"SPWI406", "*", 0x0U, "r20:buff", 0, 0, 20,
+     "Improved Strength (projectile 228): STR + class dice (priest 1d6+4: +7 on Grace), 5 s/level (100 s)"},
+    {"SPWI408", "2:-3", 0x0U, "r*:buff", 0, 0, 0,
+     "Shroud of Shadows (projectile 229): AC -3, 5-20 s + 10 s (r4 measured)"},
+    {"SPWI409", "-", 0x0U, "none", 0, 0, 0,
+     "Remove Curse (op 26): costs the action, nothing timed; the uncurse itself not exercised (no cursed item)"},
+    {"SPWI410", "-", 0x0U, "none", -196, -154, 0,
+     "Elemental Strike (multi-fire as Force Missiles, FRBLGREN): the engine gives it the same 7 missiles at 20 "
+     "(the text's every-3rd-level is not what TransferEffects does: vanilla), 2d4 + level blast each"},
 };
 }  // namespace pstf::spellexpect

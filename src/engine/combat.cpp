@@ -1211,6 +1211,44 @@ bool SetCursorMode(int mode) {
   W<uint8_t>(g + sym::kOffGameCursorMode, static_cast<uint8_t>(mode));
   return true;
 }
+namespace {
+bool MultiOk() {
+  static const int ok = AllOk({sym::kRvaMultiFire, sym::kRvaMultiFireSpell, sym::kRvaGameSetState, sym::kRvaMopCursor}) ? 1 : 0;
+  return ok != 0;
+}
+bool IsMultiSpell(int n) { return n == 2207 || n == 2405 || n == 2410; }
+}  // namespace
+void MultiFireRaw(int32_t caster, int* left, int* spell) {
+  const uint64_t p = MultiOk() ? LookupSprite(caster) : 0;
+  *left = p ? R<int32_t>(p + sym::kOffSpriteMultiLeft) : -1;
+  *spell = p ? R<int32_t>(p + sym::kOffSpriteMultiSpell) : -1;
+}
+int MultiFireLeft(int32_t caster) {
+  const uint64_t p = MultiOk() ? LookupSprite(caster) : 0;
+  // the spell number is set by ReadySpell (a bar cast); a scripted cast leaves 0 (clicks then do nothing)
+  const int spell = R<int32_t>(p + sym::kOffSpriteMultiSpell);
+  if (!IsMultiSpell(spell) && !(spell == 0 && !MopUp())) return 0;
+  const int n = R<int32_t>(p + sym::kOffSpriteMultiLeft);
+  return n > 0 && n < 100 ? n : 0;
+}
+bool MultiFire(int32_t caster, int32_t target, int spell) {
+  const uint64_t t = MultiFireLeft(caster) > 0 ? LookupSprite(target) : 0;
+  if (!t) return false;
+  if (IsMultiSpell(spell)) W<int32_t>(LookupSprite(caster) + sym::kOffSpriteMultiSpell, spell);  // as ReadySpell
+  using Fn = char(__fastcall*)(uint64_t, uint64_t, uint32_t);
+  return reinterpret_cast<Fn>(Va(sym::kRvaMultiFire))(R<uint64_t>(sym::kVaPlanescape), t, static_cast<uint32_t>(caster)) != 0;
+}
+bool MultiFireDrop(int32_t caster) {
+  const uint64_t p = MultiFireLeft(caster) > 0 ? LookupSprite(caster) : 0;
+  if (!p) return false;
+  W<int32_t>(p + sym::kOffSpriteMultiLeft, 0);
+  const uint64_t g = GameObject();
+  if (g && R<uint8_t>(g + sym::kOffGameCursorMode) == sym::kCursorModeTarget) {
+    reinterpret_cast<void(__fastcall*)(uint64_t, int16_t, int32_t)>(Va(sym::kRvaGameSetState))(g, 0, 0);
+    W<uint8_t>(g + sym::kOffGameCursorMode, 0);
+  }
+  return true;
+}
 bool MopClickTarget(int32_t caster, int32_t target) {
   static const int ok = AllOk({sym::kRvaMopTarget}) ? 1 : 0;
   const uint64_t p = ok ? LookupSprite(caster) : 0;

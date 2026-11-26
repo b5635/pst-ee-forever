@@ -145,13 +145,13 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 | SPWI312 | Infernal Shield | fire heals instead (op 375) | ATTACHED | B | Ignus' fire heals the caster | G | yes 2026-11-25 |
 | SPWI313 | Fiery Rain | fire meteors 2d4 each, area | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
 | SPWI314 | Balance in All Things | reflect after N hits (op 375) | ATTACHED | B | as Pain Mirror | G | yes 2026-11-25 |
-| SPWI401 | Blacksphere | force burst damages + imprisons (sleep op 39) | INSTANT + DISABLE | D | HP + targets lose turns | U2 |  |
-| SPWI402 | Confusion | 1-4 + lvl creatures confused 10 s + 1 s/lvl | DISABLE (AI) | D | targets do not act normally; icon ends | U1 U2 G |  |
-| SPWI405 | Force Missiles | globes 2d4 each, unerring | INSTANT | - | HP bounds | U1 U2 |  |
-| SPWI406 | Improved Strength | STR to 18/xx etc. (projectile 228) | HARDCODED BUFF | B | STR | U2 |  |
-| SPWI408 | Shroud of Shadows | hidden + AC (projectile 229) | HARDCODED BUFF | B | AC; foes lose sight? | U2 G |  |
-| SPWI409 | Remove Curse | as SPPR307 | OOC | - | as SPPR307 | G |  |
-| SPWI410 | Elemental Strike | globes 2d4 fire + blast | INSTANT | - | HP bounds | U1 U2 |  |
+| SPWI401 | Blacksphere | force burst damages + imprisons (sleep op 39) | INSTANT + DISABLE | D | HP + targets lose turns | U2 | yes 2026-11-25 |
+| SPWI402 | Confusion | 1-4 + lvl creatures confused 10 s + 1 s/lvl | DISABLE (AI) | D | targets do not act normally; icon ends | U1 U2 G | yes 2026-11-25 |
+| SPWI405 | Force Missiles | globes 2d4 each, unerring | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
+| SPWI406 | Improved Strength | STR to 18/xx etc. (projectile 228) | HARDCODED BUFF | B | STR | U2 | yes 2026-11-25 |
+| SPWI408 | Shroud of Shadows | hidden + AC (projectile 229) | HARDCODED BUFF | B | AC; foes lose sight? | U2 G | yes 2026-11-25 |
+| SPWI409 | Remove Curse | as SPPR307 | OOC | - | as SPPR307 | G | yes 2026-11-25 |
+| SPWI410 | Elemental Strike | globes 2d4 fire + blast | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
 | SPWI501 | Cloudkill | kills low HD (by save/dice), else 1d10 poison; foes only | INSTANT | - | low-HD thugs die, high-HD take damage; party unhurt | U1 U2 |  |
 | SPWI502 | Cone of Cold | 10d4 + 10 cold after 100 ticks + brief paralyse | ONSET | - | HP in the caster's turn (exists) | U1 U2 |  |
 | SPWI504 | Enoll Eva's Duplication | 2x attacks per round, 60 s (op 1, 357, 375) | BUFF | B 12 | APR doubled; **check tbc swings** (`PSTF_TbcAttacks` 2x) | U1 U2 G |  |

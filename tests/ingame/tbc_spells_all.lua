@@ -278,7 +278,20 @@ function pstfTestTick()
 		if pstfSpellsTrace and not pending.used and (frames - pending.frame) % 20 == 1 then
 			PSTF_Action(pending.caster) PSTF_Attached(pending.caster) PSTF_Note("tbc_spells_all: trace anim " .. PSTF_AnimProbe(pending.caster))
 		end
-		if not pending.ended and ((pending.used and pending.idle > 30) or frames - pending.frame > 240) then
+		-- Force Missiles / Elemental Strike / Ice Knife: the player aims each missile after the first; the suite
+		-- clicks the enemy the first one hurt most (the turn waits for the clicks)
+		if pstfSpellsTrace and (frames - pending.frame) % 20 == 1 then local ml, mr, ms = PSTF_MultiLeft(pending.caster) PSTF_Note(string.format('tbc_spells_all: trace multi %d (raw %d spell %d) cursor %d', ml or -1, mr or -1, ms or -1, PSTF_Cursor())) end
+		if (PSTF_MultiLeft(pending.caster) or 0) > 0 and PSTF_Cursor() == 20 and frames - (pending.multiAt or 0) > 30 then
+			local tgt, drop = nil, 0
+			for id, c in pairs(pending.cands or {}) do
+				local d = c.t0.hp - hp(id)
+				if d > drop then tgt, drop = id, d end
+			end
+			if not tgt and foe and hp(foe) > 0 then tgt = foe end  -- its damage may still be on the way
+			pending.multiAt = frames
+			if tgt then pending.idle = 0 PSTF_MultiFire(pending.caster, tgt, pending.spell[2]) end
+		end
+		if not pending.ended and ((pending.used and pending.idle > 30) or frames - pending.frame > (pending.multiAt and 520 or 240)) then
 			pending.ended = frames
 			PSTF_EndTurn()
 		end

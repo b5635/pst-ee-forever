@@ -165,6 +165,10 @@ struct Economy {
   uint32_t pathless = 0;
   static constexpr uint32_t kWalkOnlyTicks = 4;
   double walked_ft = 0;  // feet walked this turn (a run adds movement, so max - left is not it)
+  // Panicked, confused or berserk (round_rules.h EngineDrivesAi): the engine's AI moves it (Panic's flee walk comes
+  // after the Panic action). Its walk is not held after that action; the turn ends when its feet are spent or it
+  // stands idle, not on the settle rule (a panicked thug stood still every turn of Horror).
+  bool engine_driven = false;
 
   // The engine cast a spell for it this turn (its "casts" feedback). A cast with no casting time (Identify,
   // speed 0) starts and ends inside one engine update, so Feed never sees its action: it still spends the action.
@@ -181,7 +185,7 @@ struct Economy {
     EconomyStep out;
     total += dt;
     since_swing += dt;
-    if (!party && IsWaitAction(action)) {
+    if (!party && IsWaitAction(action) && !engine_driven) {
       // Waits are ignored: no movement, no time. No action yet (it may have walked or fled): it picks
       // one, the nearest foe; acted (also when its script cut a running attack short with a wait),
       // or still waiting after that order: the turn is over (GemRB fork ActStep).
@@ -245,7 +249,7 @@ struct Economy {
     last_action = action;
     const bool busy = acting || has_path || (!idle_action && out.stop == Stop::None);
     idle = busy ? 0 : idle + dt;
-    out.hold_walk = !MoveLeft() || (!party && action_used && !acting && !walk_only);  // AI: no wandering off after it
+    out.hold_walk = !MoveLeft() || (!party && action_used && !acting && !walk_only && !engine_driven);  // AI: no wandering off after it
     const bool spent = action_used && !acting && !MoveLeft();
     if (party) {
       out.end_turn = spent && !has_path;
@@ -258,6 +262,12 @@ struct Economy {
       // Gave up: nudged and still nothing in hand (no action, no path) for kNudgeTicks.
       const bool gave_up = nudged && !did_something && idle >= kNudgeTicks;
       // Sure of itself: once its action is over, the AI's turn is (no script wandering afterwards).
+      if (engine_driven) {
+        out.end_turn = (spent && !has_path) || (!MoveLeft() && !has_path) ||
+                       (idle >= kIdleTicks && did_something && !acting && !has_path) || gave_up ||
+                       total >= 3 * round_ticks + kAiThinkTicks + kNudgeTicks;
+        return out;
+      }
       out.end_turn = (spent && !has_path) || (action_used && !acting && !walk_only && since_act >= kAiSettleTicks) ||
                      (idle >= kIdleTicks && did_something && !acting) || gave_up ||
                      (out.stop == Stop::OutOfMove && action_used) ||

@@ -100,6 +100,15 @@ inline bool LosesTurn(int64_t state) {
   return state >= 0 && (static_cast<uint32_t>(state) & 0x800) == 0 && (static_cast<uint32_t>(state) & kLoseTurnStates) != 0;
 }
 
+// Panic 0x4 (Horror, op 24), berserk 0x2 and confusion 0x80000000 (op 128): the engine's own AI picks what the
+// creature does on its turn (flee, attack anyone, wander or stand). Our turn layer must not order anything for it:
+// no "idle: attack the nearest party member" nudge (a confused thug attacked the party every turn of Confusion),
+// no directed-AI maneuver on top of the engine's choice.
+constexpr uint32_t kEngineDrivenStates = 0x2 | 0x4 | 0x80000000u;
+inline bool EngineDrivesAi(int64_t state) {
+  return state >= 0 && (static_cast<uint32_t>(state) & kEngineDrivenStates) != 0;
+}
+
 // The delayed effects already classified (OnsetKind / SyncSpellOnsets), by effect address. An entry lives only
 // while its effect is still pending on its owner: the engine frees effects and reuses their memory, and a stale
 // entry gave a new effect the old one's kind (Submerge the Will's 29-tick shield was round-clocked to its caster's

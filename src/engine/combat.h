@@ -117,6 +117,13 @@ int GameCursorMode();                            // CInfGame +0x78B8 (20 = a hov
 bool SetCursorMode(int mode);                     // writes it (a player's Missile of Patience ends itself off 20)
 bool MopClickTarget(int32_t caster, int32_t target);  // test probe: a target click for a hovering missile
 bool MopUp();                                     // a hovering Missile of Patience is up (g_PST +0x6B4)
+// Multi-fire spells (Ice Knife, Force Missiles, Elemental Strike): missiles the caster still has to aim (0: none).
+int MultiFireLeft(int32_t caster);
+void MultiFireRaw(int32_t caster, int* left, int* spell);  // the two sprite fields as they are (probe)
+// one missile at target, as the player's click (MultiFireSpell); spell (2207/2405/2410) first sets the caster's
+// readied spell number as a bar cast does (a scripted cast leaves it 0)
+bool MultiFire(int32_t caster, int32_t target, int spell = 0);
+bool MultiFireDrop(int32_t caster);               // the rest are dropped: count 0, cursor back to normal
 // Every Missile of Patience shot (its TransferEffects call): fn(missile) false = the shot does not go.
 using MopShotFn = bool (*)(uint64_t missile);
 bool InstallMopShotHook(MopShotFn fn);    // CGameSprite::SetDirection: turns there (0..15, 0 south)

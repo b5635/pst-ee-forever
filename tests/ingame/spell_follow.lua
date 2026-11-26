@@ -32,8 +32,9 @@ local function show(id, when)
 	local st = (#(F.stats or {}) > 0) and PSTF_Stat(id, (table.unpack or unpack)(F.stats)) or '-'
 	local _, icons = PSTF_Status(id, 0)  -- logged with the raw parent effects
 	PSTF_Effects(id)  -- logs op:type:ticks
-	note(string.format('%s: %X hp %d stats [%s] state %X icons %s', when, id, hp(id), st, PSTF_State(id, 1) or 0,
-		(icons ~= '' and icons) or 'none'))
+	local x, y = PSTF_SpritePos(id, 1)
+	note(string.format('%s: %X hp %d stats [%s] state %X icons %s at %d,%d', when, id, hp(id), st, PSTF_State(id, 1) or 0,
+		(icons ~= '' and icons) or 'none', x or -1, y or -1))
 end
 local function rig(f)
 	local first = 1

@@ -381,6 +381,39 @@ TEST_CASE("tbc economy: AI turns end after acting or idling, never hang") {
   CHECK(ended);
 }
 
+TEST_CASE("tbc economy: a panicked creature's flee walk is its turn (engine-driven AI)") {
+  // Horror on a thug: the engine's actions were Panic 24, 184, then a 354 walk; the settle rule held the walk
+  Economy held(31, 51, false);
+  held.Feed(1, 0, false, 24);
+  EconomyStep st;
+  for (int i = 0; i < 10; ++i) st = held.Feed(1, 0, false, 0);
+  st = held.Feed(1, 0, true, 354);
+  CHECK(st.hold_walk || st.end_turn);  // a normal AI: no wandering after its action
+  Economy p(31, 51, false);
+  p.engine_driven = true;
+  p.Feed(1, 0, false, 24);
+  bool ended = false;
+  double walked = 0;
+  for (int i = 0; i < 200 && !ended; ++i) {
+    st = p.Feed(1, 0.5, true, 354);
+    CHECK(!st.hold_walk || !p.MoveLeft());
+    walked = p.walked_ft;
+    ended = st.end_turn;
+  }
+  CHECK(walked > 30.9);  // it fled its whole movement
+  st = p.Feed(1, 0, false, 354);
+  CHECK(st.end_turn);
+  Economy wander(31, 51, false);  // confused, "wander away": its RandomWalk is a walk, not an ignored wait
+  wander.engine_driven = true;
+  st = wander.Feed(1, 0.5, true, 85);
+  CHECK(!st.end_turn && !st.hold_walk && !st.nudge);
+  Economy c(31, 51, false);  // confused, standing (RandomTurn): ends on the idle wait, no nudge
+  c.engine_driven = true;
+  ended = false;
+  for (int i = 0; i < 200 && !ended; ++i) ended = c.Feed(1, 0, false, 0).end_turn;
+  CHECK(ended);
+}
+
 TEST_CASE("tbc economy: script waits are free; walking up to attack is movement, not the round") {
   CHECK(IsIdleAction(368) && IsIdleAction(84) && IsIdleAction(30) && !IsIdleAction(31) && !IsIdleAction(113));
   Economy w(31, 51, false);
@@ -948,6 +981,17 @@ TEST_CASE("tbc status: Halo's parentless AC takes the spell whose glow arrived w
   std::vector<StatusEffect> first{{1, "SPPR101", 0, 300, true, false, 0x70}, {0, "", 0, 900, true, false, 0x78}};
   AttributeOrphans(0x190019, &first, 1010, &m);
   CHECK(first[1].parent.empty());
+}
+
+TEST_CASE("tbc turns: confused, panicked and berserk creatures are left to the engine's AI") {
+  // Confusion (SPWI402) set 0x80000000 on the thug; the idle nudge then ordered Attack(Player6) every turn
+  CHECK(EngineDrivesAi(0x80000000LL));
+  CHECK(EngineDrivesAi(0x4));   // panic (Horror, Ignus' Terror)
+  CHECK(EngineDrivesAi(0x2));   // berserk
+  CHECK(EngineDrivesAi(0x4 | 0x40000));
+  CHECK(!EngineDrivesAi(0));
+  CHECK(!EngineDrivesAi(0x40000));  // blind: still our nudge
+  CHECK(!EngineDrivesAi(-1));
 }
 
 TEST_CASE("tbc turns: sleeping, stunned, paralysed, held, frozen or stone creatures lose their turn") {
