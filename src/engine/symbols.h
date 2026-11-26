@@ -844,10 +844,42 @@ constexpr uint32_t kRvaCheckSave = 0x1EC460, kOffEffSaveFlags = 0x40, kOffEffSav
 // mark appearing during one CheckSave call = that spell was resisted by that creature, once per spell.
 inline constexpr uint8_t kResistMarkBytes[] = {0x41, 0x80, 0x0C, 0x24, 0x80};
 constexpr uint32_t kRvaResistMark = 0x1EC713;
+// The "Save vs. <type> : N" feedback of a save made: CheckSave reads the feedback options (CInfGame +0xB918, bit 1
+// = message with the number, bit 8 = overhead strref) once, at win 1401ECB3A `mov eax, [rcx+0B918h]` (lin 1FBED0
+// L443 `v48 = *(g_pBaldurChitin[547] + 11846)`), then posts one of the two lines (AddMessage 1401ECC59 / 1401ECD01).
+// `xor eax, eax` there = neither line; the earlier "Spell resisted" read (1401EC5CD) is a separate load.
+inline constexpr uint8_t kSaveFeedbackReadBytes[] = {0x8B, 0x81, 0x18, 0xB9, 0x00, 0x00};
+constexpr uint32_t kRvaSaveFeedbackRead = 0x1ECB3A;
+// Floating text (the rising "Damage: 7", "Heal: 3", spell names...): every CFloatMessage goes through
+// CGameArea::AddToFloaterList(area, msg, replace_owner, to_combat_log) (lin 1BC4F0, win 14018FED0; callers:
+// CGameEffectDamage/Heal/HealTransfer::ApplyEffect, CInfGame::FeedBack, CGameAIBase::FloatMessage/ExecuteAction...).
+// Prologue push rbp / push rsi / push rdi / sub rsp,20h = 8 bytes. CFloatMessage (0x80 bytes, lin GetText/GetOwnerID/
+// GetColor/GetFloatType, win 140161CF0 `mov eax,[rcx+3Ch]`, 140161CE0 `[rcx+54h]`): text CString +0x28, owner id
+// +0x3C, colour +0x40, float type +0x54. A swallowed message is freed as the function's own merge path does:
+// its destructor (call at 14018FFE6 -> 140161CB0) then sized operator delete(p, 0x80) (call at 14018FFF3 -> 1404E8140).
+inline constexpr uint8_t kAddFloaterBytes[] = {0x40, 0x55, 0x56, 0x57, 0x48, 0x83, 0xEC, 0x20};
+inline constexpr uint8_t kFloaterDtorCallBytes[] = {0xE8, 0xC5, 0x1C, 0xFD, 0xFF};
+inline constexpr uint8_t kFloaterDeleteCallBytes[] = {0xE8, 0x48, 0x81, 0x35, 0x00};
+constexpr uint32_t kRvaAddFloater = 0x18FED0, kRvaFloaterDtorCall = 0x18FFE6, kRvaFloaterDeleteCall = 0x18FFF3;
+constexpr uint64_t kVaFloaterDtor = 0x140161CB0ull, kVaSizedDelete = 0x1404E8140ull;
+constexpr uint32_t kOffFloatText = 0x28, kOffFloatOwner = 0x3C, kOffFloatColor = 0x40, kOffFloatType = 0x54;
+// CGameEffectDamage::ApplyEffect (lin 21F1B0, win 1401C7E50; prologue push rbp / push rbx / push r12 = 5 bytes):
+// its "Damage: N" floater (lin L886 strref 0x5614) carries no damage type; the effect's param2 (+0x20) high word
+// does (DisplayDamageAmount lin 1FD5D0 L203 `*(this+8)` with the low word cleared; win 14020397B reads +1Ch amount).
+inline constexpr uint8_t kDamageApplyBytes[] = {0x40, 0x55, 0x53, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57};
+constexpr uint32_t kRvaDamageApply = 0x1C7E50;
 // CGameEffect resource (EFF v2 0x28) at +0x30: CGameEffectPlaySound::ApplyEffect (lin 1EE760 `this + 48`;
 // win 1401D924C `lea rdx, [rcx+30h]` then CGameEffect::PlaySound). Op 369 (sticky BAM) reads its BAM there.
 inline constexpr uint8_t kEffResLeaBytes[] = {0x48, 0x8D, 0x51, 0x30};
 constexpr uint32_t kRvaEffResLea = 0x1D924C, kOffEffRes = 0x30;
+// Colour refresh flag: the colour effects (CGameEffectColorGlowPulse/GlowSolid/TintSolid/LightSolid::ApplyEffect,
+// lin 1D96D0 etc.) set sprite +0x48CC (lin this+4653*4 = 0x48B4: Windows sprite fields sit 0x18 further here, as
+// the force flag 0x48BC vs lin 0x48A4); ProcessEffectList (win 1404231E0) then clears the animation's colours
+// (`cmp dword [rsi+48CCh], 0` at 1404239A1, then vtable +0x140 ClearColorEffectsAll; lin L543 / +328) and the
+// re-applied effects set them again. A creature held by the round clock still runs ProcessEffectList every tick
+// (HeldEffectsTick) but its expiry ticks do not move, so statusfx quiets a cut glow's colour at once.
+inline constexpr uint8_t kColorRefreshBytes[] = {0x83, 0xBE, 0xCC, 0x48, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaColorRefresh = 0x4239A1, kOffSpriteColorRefresh = 0x48CC;
 // Overhead text height: CMessageDisplayText::Run (lin 293970 L97, win 140234960) calls the creature's
 // animation CalculateFxRect(CRect&, CPoint& ref, z) (`mov rcx,[rax+3950h]; mov r9d,[rax+14h]; call
 // [r10+8]`: Windows slot +8, one destructor; lin slot 2) and puts the text ref.y + z (sprite +0x14) above
@@ -1222,7 +1254,13 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("Hit.thac0ac", kRvaThac0Ac, kThac0AcBytes, "lin 4C29F0 / win 140414888"),
     PSTF_SYM("CGameEffect::CheckSave", kRvaCheckSave, kCheckSaveBytes, "lin 1FBED0 / win 1401EC460"),
     PSTF_SYM("CheckSave.resist_mark", kRvaResistMark, kResistMarkBytes, "lin 1FBED0 L179 / win 1401EC713"),
+    PSTF_SYM("CheckSave.save_feedback_read", kRvaSaveFeedbackRead, kSaveFeedbackReadBytes, "lin 1FBED0 L443 / win 1401ECB3A"),
+    PSTF_SYM("CGameArea::AddToFloaterList", kRvaAddFloater, kAddFloaterBytes, "lin 1BC4F0 / win 14018FED0"),
+    PSTF_SYM("AddToFloaterList.dtor_call", kRvaFloaterDtorCall, kFloaterDtorCallBytes, "lin 1BC4F0 L41 / win 14018FFE6"),
+    PSTF_SYM("AddToFloaterList.delete_call", kRvaFloaterDeleteCall, kFloaterDeleteCallBytes, "lin 1BC4F0 L42 / win 14018FFF3"),
+    PSTF_SYM("CGameEffectDamage::ApplyEffect", kRvaDamageApply, kDamageApplyBytes, "lin 21F1B0 / win 1401C7E50"),
     PSTF_SYM("CGameEffectPlaySound.res", kRvaEffResLea, kEffResLeaBytes, "lin 1EE760 / win 1401D924C"),
+    PSTF_SYM("ProcessEffectList.color_refresh", kRvaColorRefresh, kColorRefreshBytes, "lin 4E21F0 L543 / win 1404239A1"),
     PSTF_SYM("CMessageDisplayText::Run.fxrect", kRvaFxRectCall, kFxRectCallBytes, "lin 293970 L97 / win 140234960"),
     PSTF_SYM("CGameEffect::DecodeEffect", kRvaDecodeEffect, kDecodeEffectBytes, "lin 2012B0 / win 1401FE380"),
     PSTF_SYM("CGameSprite::UpdateSpriteEffect.count", kRvaAttachedCount, kAttachedCountBytes, "lin 50F9C0 / win 1403F97D2"),

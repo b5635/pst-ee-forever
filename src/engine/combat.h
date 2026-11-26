@@ -94,8 +94,13 @@ struct EffectEntry {
   bool equipped = false;
   char parent[9] = {};
   char res[9] = {};
+  uint32_t param1 = 0;
 };
 std::vector<EffectEntry> EffectEntries(int32_t id);
+// A colour effect (op 8 glow, 9 pulse, 51 tint, 52 light) of the creature shows nothing from now on: its colour
+// becomes the neutral one (black glow, white tint) and the creature's colours are rebuilt on its next effect pass,
+// which runs every tick even while the round clock holds it. True when it changed something.
+bool QuietColorEffect(int32_t id, uint64_t key);
 // A running timed effect (type 4096) of that creature ends on the next world tick, the engine's way (as its
 // own expiry). False when it is not on the creature or not running. Presentation effects only (colour glows).
 bool ExpireEffectNow(int32_t id, uint64_t key);
@@ -198,8 +203,27 @@ struct RollEvent {
   int save_type = 0;    // bit index of the save (0 spell .. 4 polymorph)
   uint8_t outcome = 0;  // attack: 0 as the engine rolled, 1 blocked, 2 takedown (hit, no damage)
   uint8_t site = 0;     // attack: which of Swing's Hit calls rolled it (1..3, symbols.h Swing.hitN)
+  bool crit = false;    // attack: the engine made it a critical hit (Hit's crit out-parameter)
 };
+// Floating text: every CFloatMessage the engine lists (CGameArea::AddToFloaterList, symbols.h kRvaAddFloater) is
+// shown to `fn` first; `fn` returns true to drop it (freed, never drawn; a combat-log copy is the caller's to make).
+// Messages raised inside CGameEffectDamage::ApplyEffect carry that effect's damage type bits (param2 >> 16).
+struct FloaterInfo {
+  int32_t owner = -1;        // the creature it floats over (-1: a world point)
+  uint32_t color = 0, type = 0;
+  int to_log = 0;            // the engine also puts it in the combat log
+  std::string text;
+  bool in_damage = false;    // raised by a damage effect
+  int32_t damage_target = -1;
+  uint32_t damage_bits = 0;  // 0 crushing, 1 acid, 2 cold, 4 electricity, 8 fire, 0x10 piercing, ...
+  uint32_t caller_rva = 0;
+};
+using FloaterFn = bool (*)(const FloaterInfo&);
+bool InstallFloaterHook(FloaterFn fn);
 bool InstallRollHooks();
+// CheckSave posts no "Save vs. <type> : N" line for a save made (symbols.h kRvaSaveFeedbackRead): the save banner
+// shows every save instead. "Spell resisted" is untouched. False when the bytes differ (the line stays).
+bool SilenceSaveFeedback();
 // Test helpers (all-spells suite): remove a spell's effects from a creature (CGameSprite::UnapplySpell; -> effects
 // removed, -1 unavailable) and end its PST attached spell objects (shields, mantles) on the next tick.
 int UnapplySpell(int32_t id, const char* res);

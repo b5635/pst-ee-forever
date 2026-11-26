@@ -1234,3 +1234,26 @@ TEST_CASE("tbc status: an attached object's re-applied parentless effects do not
   icons = CollectStatus(1, alone, 0, kRoundTicks5s, &spans, 8);
   CHECK(icons.size() == 1 && icons[0].rounds == 8);
 }
+
+TEST_CASE("hover card: level is the highest class level; subtitle is the class or the stance") {
+  CHECK(HoverLevel(3, 9, 0) == 9);
+  CHECK(HoverLevel(12, 0, 0) == 12);
+  CHECK(std::string(HoverSubtitle(7, 2, true)) == "Fighter / Mage");
+  CHECK(std::string(HoverSubtitle(3, 2, true)) == "Priest");
+  CHECK(std::string(HoverSubtitle(99, 2, true)) == "Companion");
+  CHECK(std::string(HoverSubtitle(2, 255, false)) == "Hostile");
+  CHECK(std::string(HoverSubtitle(2, 128, false)) == "Neutral");
+  CHECK(std::string(HoverSubtitle(2, 4, false)) == "Ally");
+}
+
+TEST_CASE("combat text menu: one Lua chunk, a menu per line, balanced braces") {
+  const std::string m = BuildCombatTextMenu();
+  CHECK(std::count(m.begin(), m.end(), '`') == 2);
+  CHECK(std::count(m.begin(), m.end(), '{') == std::count(m.begin(), m.end(), '}'));
+  CHECK(m.find("name 'PSTF_CT1'") != std::string::npos);
+  CHECK(m.find("name 'PSTF_CT24'") != std::string::npos);
+  CHECK(m.find("pstfCtGuard") != std::string::npos);
+  const std::string h = BuildHudMenu();
+  CHECK(h.find("pstfHovIN1") != std::string::npos);  // status names on the hover card
+  CHECK(h.find("pstfHoverLv") != std::string::npos);
+}

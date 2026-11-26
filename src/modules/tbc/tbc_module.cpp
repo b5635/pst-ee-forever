@@ -59,6 +59,8 @@
 #include "modules/tbc/status.h"
 #include "core/gameres.h"
 #include "modules/tbc/round_rules.h"
+#include "modules/tbc/save_banner.h"
+#include "modules/tbc/combat_text.h"
 #include "modules/tbc/path_line.h"
 #include "modules/tbc/path_preview.h"
 #include "modules/tbc/turn_clock.h"
@@ -133,6 +135,24 @@ struct State {
   bool sight = true;                 // [tbc] combat_sight: every combatant is in view during a fight
   bool items = false;                // item use hooks installed: an instant item use takes the action
   bool save_sounds = true;           // [tbc] save_sounds: success/fail sound with the engine's "Save vs." line
+  bool save_banner = false;          // [tbc] save_banner: icon + "Save Success: N (Death)" over every save
+  bool save_silenced = false;        // the engine's own "Save vs." line is patched out
+  struct Banner {
+    int32_t id;
+    bool good;
+    std::string text;
+    uint32_t t0;          // GetTickCount when it appeared
+    bool sounded = false; // the verdict sound played
+    int ax = 0, ay = 0, slot = 0;  // where it sits: its place in the creature's combat text stack
+  };
+  std::vector<Banner> banners;       // oldest first, at most kSaveBanners
+  int banners_good = 0, banners_bad = 0;  // made since the start (test probe)
+  bool ctext = false;                // [tbc] combat_text: BG3 combat text (combat_text.h) instead of rising text
+  CombatTextBook ct;
+  std::map<int32_t, uint64_t> ct_area;  // the area each creature with lines was in (lines end when it leaves)
+  std::map<int32_t, std::map<std::string, int32_t>> ct_status;  // creature -> its statuses (parent -> name strref)
+  std::map<int32_t, uint32_t> ct_no_miss;  // a takedown said "Trip: Missed" for this target: no "Miss!" too
+  int ct_floaters = 0, ct_swallowed = 0, ct_added = 0;  // test probe counts
   Pt dice_ui{-1, -1};
   Pt hover_at{-1, -1};               // test probe PSTF_HoverAt: this world point instead of the cursor
   bool rolls = false;                // the roll hooks are installed
@@ -232,6 +252,9 @@ struct State {
     int aoo = 0, aoo_swung = 0, ai_moves = 0, stood = 0, short_runs = 0;
   } ms;
 } g;
+
+void FloatText(int32_t id, const std::string& text, uint32_t ms = 1800);
+std::vector<StatusIconView> StatusIconsOf(int32_t id, int box, size_t max_icons);
 
 // The creature's spell is still on its way (a projectile object it cast is in the area): its turn
 // waits for flying ones (Adder's Kiss circles 60 ticks before it flies) and for lingering ones that
@@ -465,7 +488,7 @@ void StartFight(const std::vector<Seen>& join, uint32_t now) {
   g.floats.clear();
   for (int32_t id : g.dir->Order())
     if (const Combatant* c = g.dir->Find(id))
-      g.floats.push_back({id, "Initiative: " + std::to_string(c->initiative), GetTickCount() + 3500});
+      FloatText(id, "Initiative: " + std::to_string(c->initiative), 3500);
   {
     std::string lines;
     for (int32_t id : g.dir->Order()) {
@@ -528,7 +551,7 @@ void Scan(uint32_t now) {
     RegisterNames({s.id});
     const Combatant* jc = g.dir->Find(s.id);
     const int ini = jc ? jc->initiative : 0;
-    g.floats.push_back({s.id, "Initiative: " + std::to_string(ini), GetTickCount() + 3500});
+    FloatText(s.id, "Initiative: " + std::to_string(ini), 3500);
     CLog("JOIN", Name(s.id) + " hp " + HpText(s.id) + ", initiative " + std::to_string(ini));
   }
   if (!g.dir->Running()) EndFight("one side is gone");
@@ -809,7 +832,29 @@ void FlushSounds() {
   const std::string err = engine::LuaDoString(code.c_str());
   if (!err.empty()) Log("tbc: maneuver sound failed: %s", err.c_str());
 }
-void FloatText(int32_t id, const std::string& text, uint32_t ms = 1800) {
+// A combat text line over a creature (combat_text.h): at its head as drawn now, then fixed there.
+const CtLine* CtAdd(int32_t id, CtKind kind, CtSeg seg) {
+  engine::SpriteInfo o;
+  if (!engine::GetSprite(id, &o)) return nullptr;
+  int wx = o.x, wy = o.y;
+  engine::InterpDrawPos(id, &wx, &wy);
+  const int hgt = engine::SpriteTextHeight(id);
+  const uint32_t now = GetTickCount();
+  for (const CtLine& l : g.ct.Lines())  // a creature that left the area starts a new stack where it is now
+    if (l.id == id && g.ct_area[id] != o.area) {
+      g.ct.Clear();
+      break;
+    }
+  g.ct_area[id] = o.area;
+  ++g.ct_added;
+  return &g.ct.Add(id, wx, wy - (hgt > 0 ? hgt : 90) - kCtAboveHeadPx, kind, std::move(seg), now);
+}
+void FloatText(int32_t id, const std::string& text, uint32_t ms) {
+  if (g.ctext) {
+    CtAdd(id, CtKind::Text, {text, kCtWhite});
+    if (text.compare(0, 11, "Initiative:") != 0) Log("tbc: text over %s: %s", Who(id).c_str(), text.c_str());
+    return;
+  }
   g.floats.push_back({id, text, GetTickCount() + ms});
 }
 void AddFx(State::FxKind kind, int32_t id, int x = 0, int y = 0) {
@@ -943,7 +988,8 @@ uint8_t __cdecl MeleeOutcome(int32_t attacker, int32_t target, bool hit, int rol
       ++g.ms.takedowns;
       g.trip_pace.Resolved();  // the rest of the swing plays quicker
       if (!hit) {
-        FloatText(target, std::string(TakedownName(k)) + ": Failure");
+        FloatText(target, TakedownText(TakedownName(k), TakedownResult::Missed));
+        g.ct_no_miss[target] = GetTickCount();
         CLog("MOVE", Name(attacker) + " " + TakedownName(k) + " misses " + Name(target));
         return 0;
       }
@@ -1015,7 +1061,7 @@ void ApplyTrips() {
       engine::ClearAI(it->target);
       engine::DropPath(it->target);
     }
-    FloatText(it->target, std::string(TakedownName(it->kind)) + (down ? ": Success" : ": Failure"));
+    FloatText(it->target, TakedownText(TakedownName(it->kind), down ? TakedownResult::Success : TakedownResult::Failed));
     CLog("MOVE", Name(it->target) + (down ? " is knocked down until its next turn (+4 to hit it)" : " keeps its footing (saved)"));
     Log("tbc: %s: %s %s", Who(it->target).c_str(), TakedownName(it->kind), down ? "success, knocked down" : "failure (saved)");
     it = g.trip_checks.erase(it);
@@ -1478,13 +1524,131 @@ void PlayResultSound(bool good) {
   Log("tbc: save sound %s (%s)", good ? "success" : "failed", ok ? "playing" : "not played");
 }
 
+// A save shown over the creature that rolled (save_banner.h); the sound waits for the icon's verdict.
+void AddSaveBanner(const engine::RollEvent& e) {
+  const uint32_t now = GetTickCount();
+  for (auto& b : g.banners)
+    if (b.id == e.actor && SaveBannerSameRoll(now - b.t0)) return;  // another effect of the same spell
+  g.banners.erase(std::remove_if(g.banners.begin(), g.banners.end(), [&](const State::Banner& b) { return b.id == e.actor; }),
+                  g.banners.end());
+  if (static_cast<int>(g.banners.size()) >= kSaveBanners) g.banners.erase(g.banners.begin());
+  g.banners.push_back({e.actor, e.success, SaveBannerText(e.success, e.total, e.save_type), now});
+  if (g.ctext) {  // it takes a slot in the creature's combat text stack and sits there
+    if (const CtLine* l = CtAdd(e.actor, CtKind::Text, {"", kCtWhite})) {
+      g.banners.back().ax = l->ax, g.banners.back().ay = l->ay, g.banners.back().slot = l->slot;
+    } else {
+      g.banners.back().slot = -1;
+    }
+  } else {
+    g.banners.back().slot = -1;
+  }
+  ++(e.success ? g.banners_good : g.banners_bad);
+  engine::SpriteInfo o;
+  const bool at = engine::GetSprite(e.actor, &o);
+  Log("tbc: save banner %s: %s (feet %d,%d, text height %d)", Who(e.actor).c_str(), g.banners.back().text.c_str(),
+      at ? o.x : -1, at ? o.y : -1, engine::SpriteTextHeight(e.actor));
+}
+
+// Every tick: the verdict sound (once per tick, the newest verdict wins) and expired banners.
+void SaveBannerTick() {
+  if (g.banners.empty()) return;
+  const uint32_t now = GetTickCount();
+  int sound = -1;
+  for (auto& b : g.banners)
+    if (!b.sounded && now - b.t0 >= kSaveVerdictMs) {
+      b.sounded = true;
+      sound = b.good ? 1 : 0;
+    }
+  if (sound >= 0 && g.save_sounds) PlayResultSound(sound == 1);
+  g.banners.erase(std::remove_if(g.banners.begin(), g.banners.end(),
+                                 [&](const State::Banner& b) { return now - b.t0 >= kSaveLifeMs; }),
+                  g.banners.end());
+}
+
+// The engine's rising text (engine::InstallFloaterHook): over a creature, it becomes combat text that sits still;
+// "Damage: 7" a bare number in its damage type's colour, "Heal: 3" a green one. The engine's own crit line gives way
+// to ours (from the roll). Messages at a world point (no creature) stay the engine's.
+bool OnFloater(const engine::FloaterInfo& f) {
+  ++g.ct_floaters;
+  static int logged = 0;
+  if (logged < 80) {
+    ++logged;
+    Log("tbc: floater \"%s\" owner %X type %u colour %06X caller %X%s", f.text.c_str(), static_cast<unsigned>(f.owner), f.type,
+        f.color, f.caller_rva, f.in_damage ? " (damage effect)" : "");
+  }
+  if (!g.ctext || f.type == 5) return false;  // 5: a creature's own words (CGameAIBase::FloatMessage) stay the engine's
+  const int32_t id = f.owner != -1 ? f.owner : f.damage_target;
+  engine::SpriteInfo o;
+  if (id == -1 || !engine::GetSprite(id, &o)) return false;
+  const FloaterParse p = ParseFloater(f.text, f.in_damage);
+  if (p.kind == CtKind::Damage) {
+    CtAdd(id, CtKind::Damage, {std::to_string(p.value), DamageColor(f.damage_bits)});
+  } else if (p.kind == CtKind::Heal) {
+    CtAdd(id, CtKind::Heal, {std::to_string(p.value), kCtHeal});
+  } else if (g.rolls && f.text.compare(0, 8, "Critical") == 0) {
+    // AttackCombatText says it
+  } else if (const std::string t = CleanFloaterText(f.text); !t.empty()) {
+    CtAdd(id, CtKind::Text, {t, kCtWhite});
+  }
+  ++g.ct_swallowed;
+  return true;
+}
+
+// A buff or debuff that starts shows its name over the creature; one that ends shows it struck through. Party
+// members and everyone in the fight, 4 times a second; a creature's first look only records what it has.
+void WatchStatuses() {
+  static uint32_t t0 = 0;
+  const uint32_t now = GetTickCount();
+  if (!g.ctext || !g.res || now - t0 < 250) return;
+  t0 = now;
+  std::vector<int32_t> ids = engine::PartyIds();
+  if (g.running)
+    for (int32_t id : g.in)
+      if (!Contains(ids, id)) ids.push_back(id);
+  std::map<int32_t, std::map<std::string, int32_t>> next;
+  for (int32_t id : ids) {
+    engine::SpriteInfo o;
+    if (!engine::GetSprite(id, &o) || !o.alive) continue;
+    std::map<std::string, int32_t> have;
+    for (const StatusIconView& v : StatusIconsOf(id, kStatusHoverPx, 24))
+      if (v.name_ref >= 0) have[v.parent] = v.name_ref;
+    const auto it = g.ct_status.find(id);
+    if (it != g.ct_status.end()) {
+      for (const auto& [parent, ref] : have)
+        if (!it->second.count(parent)) {
+          CtAdd(id, CtKind::StatusOn, {"@" + std::to_string(ref), kCtWhite});
+          Log("tbc: %s: status %s on", Who(id).c_str(), parent.c_str());
+        }
+      for (const auto& [parent, ref] : it->second)
+        if (!have.count(parent)) {
+          CtAdd(id, CtKind::StatusOff, {"@" + std::to_string(ref), kCtWhite});
+          Log("tbc: %s: status %s off", Who(id).c_str(), parent.c_str());
+        }
+    }
+    next[id] = std::move(have);
+  }
+  g.ct_status = std::move(next);
+}
+
+// "Miss!" / "Critical Miss!" / "Critical Hit!" over the target of an attack roll (combat_text.h).
+void AttackCombatText(const engine::RollEvent& e) {
+  const char* t = AttackText(e.success, e.crit, e.roll, e.outcome);
+  if (!*t || e.target == -1) return;
+  const auto nm = g.ct_no_miss.find(e.target);
+  if (!e.success && nm != g.ct_no_miss.end() && GetTickCount() - nm->second < 500) return;  // "Trip: Missed" said it
+  const CtKind k = AttackKind(t);
+  CtAdd(e.target, k, {t, k == CtKind::Crit ? kCtRed : kCtWhite});
+}
+
 // New rolls from the engine hooks: the last one involving a combatant goes on the dice panel.
 void TakeRolls() {
   bool sound = false, sound_good = false;
   for (const auto& e : engine::TakeRollEvents()) {
     // CheckSave posts its "Save vs. ...: N" feedback line in the same call that queued this event:
     // the sound goes with that line, this frame (the last save of the frame wins).
-    if (e.kind == engine::RollEvent::Save && g.save_sounds) sound = true, sound_good = e.success;
+    if (e.kind == engine::RollEvent::Save && g.save_banner) AddSaveBanner(e);
+    else if (e.kind == engine::RollEvent::Save && g.save_sounds) sound = true, sound_good = e.success;
+    if (e.kind == engine::RollEvent::Attack && g.ctext) AttackCombatText(e);
     if (!g.running || !Contains(g.in, e.actor)) continue;
     if (e.kind == engine::RollEvent::Attack && e.actor == g.current) g.econ.Swing();
     if (e.kind == engine::RollEvent::Attack && e.actor == g.aoo.reactor) g.aoo_swing = true;
@@ -1622,6 +1786,11 @@ void FillHover(HoverView* v) {
   v->hp = o.hp;
   v->max_hp = o.max_hp;
   v->icons = StatusIconsOf(id, kStatusHoverPx, kHoverIcons);
+  v->level = HoverLevel(engine::DerivedStat(id, 34), engine::DerivedStat(id, 68), engine::DerivedStat(id, 69));  // LEVEL, LEVEL2, LEVEL3
+  if (v->level < 0 || v->level > 99) v->level = 0;
+  uint8_t cls = 0, spec = 0;
+  engine::SpriteClass(id, &cls, &spec);
+  v->sub = HoverSubtitle(cls, o.ea, PartySlot(id) >= 0);
   if (!g.running) return;
   const Combatant* c = g.dir->Find(id);
   v->foe = c && c->r.side == Side::Hostile;
@@ -1818,6 +1987,10 @@ void OnTick(uint64_t frame) {
   // tick belong to the iterations that advanced the world, not to the extra draw-only ones.
   if (!engine::InterpTickFrame()) return;
   if (!g.running) TestTick();
+  if (!g.running && g.rolls) TakeRolls();  // in a fight the turn code takes them
+  SaveBannerTick();
+  WatchStatuses();
+  g.ct.Expire(GetTickCount());
   const engine::Screen scr = engine::ActiveScreen();
   UpdateStatusHud(scr);
   if (scr == engine::Screen::Other) {
@@ -2552,6 +2725,86 @@ int __cdecl LuaStats(engine::LuaState* L) {
   return 4;
 }
 // PSTF_Bar() -> logs the 12 action bar slots as the engine has them now.
+// PSTF_SaveBanner(i) -> on (0/1), ui x, ui y (above the head), icon frame, opacity, good (0/1), text: banner i
+// (1-based) for the UI menu PSTF_SAVE<i>, at the creature's drawn position (called every drawn frame).
+// PSTF_SaveBanner() -> shown, made success, made failed, engine line (0 = the engine's "Save vs." line is off).
+int __cdecl LuaSaveBanner(engine::LuaState* L) {
+  const int i = static_cast<int>(engine::LuaNumberArg(L, 1, 0));
+  if (i <= 0) {
+    engine::LuaPushNumber(L, static_cast<double>(g.banners.size()));
+    engine::LuaPushNumber(L, g.banners_good);
+    engine::LuaPushNumber(L, g.banners_bad);
+    engine::LuaPushNumber(L, g.save_silenced ? 0 : 1);
+    Log("lua: PSTF_SaveBanner() -> shown %zu, success %d, failed %d, engine line %s", g.banners.size(), g.banners_good,
+        g.banners_bad, g.save_silenced ? "off" : "on");
+    return 4;
+  }
+  const uint32_t now = GetTickCount();
+  const State::Banner* b = i <= static_cast<int>(g.banners.size()) ? &g.banners[i - 1] : nullptr;
+  engine::SpriteInfo o;
+  int ux = 0, uy = 0;
+  bool on = b && now - b->t0 < kSaveLifeMs && engine::GetSprite(b->id, &o);
+  if (on && b->slot >= 0) {  // its place in the combat text stack
+    on = engine::WorldToUi(b->ax, b->ay, &ux, &uy);
+    uy += b->slot * kCtLinePx;
+  } else if (on) {
+    int wx = o.x, wy = o.y;
+    engine::InterpDrawPos(b->id, &wx, &wy);
+    const int hgt = engine::SpriteTextHeight(b->id);
+    on = engine::WorldToUi(wx, wy - (hgt > 0 ? hgt : 90) - kSaveAboveHeadPx, &ux, &uy);
+  }
+  engine::LuaPushNumber(L, on ? 1 : 0);
+  engine::LuaPushNumber(L, ux);
+  engine::LuaPushNumber(L, uy);
+  engine::LuaPushNumber(L, on ? SaveIconFrame(now - b->t0) : 0);
+  engine::LuaPushNumber(L, on ? SaveBannerAlpha(now - b->t0) : 0.0);
+  engine::LuaPushNumber(L, on && b->good ? 1 : 0);
+  engine::LuaPushString(L, on ? b->text.c_str() : "");
+  return 7;
+}
+
+// PSTF_CombatText(i) -> on, ui x, ui y (the line's middle), opacity, strike share, kind, n, text1, colour1 .. text4,
+// colour4, creature id, slot: combat text line i (1-based) for the UI menu PSTF_CT<i>, at its fixed world point (every drawn frame).
+// PSTF_CombatText() -> lines, engine floaters seen, floaters taken over, lines added.
+int __cdecl LuaCombatText(engine::LuaState* L) {
+  const int i = static_cast<int>(engine::LuaNumberArg(L, 1, 0));
+  if (i <= 0) {
+    engine::LuaPushNumber(L, static_cast<double>(g.ct.Lines().size()));
+    engine::LuaPushNumber(L, g.ct_floaters);
+    engine::LuaPushNumber(L, g.ct_swallowed);
+    engine::LuaPushNumber(L, g.ct_added);
+    Log("lua: PSTF_CombatText() -> lines %zu, floaters %d, taken %d, added %d", g.ct.Lines().size(), g.ct_floaters,
+        g.ct_swallowed, g.ct_added);
+    return 4;
+  }
+  const uint32_t now = GetTickCount();
+  const auto& ls = g.ct.Lines();
+  const CtLine* l = i <= static_cast<int>(ls.size()) ? &ls[i - 1] : nullptr;
+  bool on = l && now - l->t0 < kCtLifeMs && !l->segs.empty() && !l->segs[0].text.empty();
+  int ux = 0, uy = 0;
+  if (on) {
+    engine::SpriteInfo o;
+    const auto a = g.ct_area.find(l->id);
+    on = engine::GetSprite(l->id, &o) && a != g.ct_area.end() && a->second == o.area && engine::WorldToUi(l->ax, l->ay, &ux, &uy);
+    uy += l->slot * kCtLinePx;
+  }
+  engine::LuaPushNumber(L, on ? 1 : 0);
+  engine::LuaPushNumber(L, ux);
+  engine::LuaPushNumber(L, uy);
+  engine::LuaPushNumber(L, on ? CtAlpha(now - l->t0) : 0.0);
+  engine::LuaPushNumber(L, on && l->kind == CtKind::StatusOff ? CtStrike(now - l->t0) : 0.0);
+  engine::LuaPushNumber(L, on ? static_cast<int>(l->kind) : 0);
+  const int n = on ? static_cast<int>(l->segs.size()) : 0;
+  engine::LuaPushNumber(L, n);
+  for (int k = 0; k < kCtSegs; ++k) {
+    engine::LuaPushString(L, k < n ? l->segs[k].text.c_str() : "");
+    engine::LuaPushNumber(L, k < n ? l->segs[k].color : 0);
+  }
+  engine::LuaPushNumber(L, on ? l->id : -1);
+  engine::LuaPushNumber(L, on ? l->slot : -1);
+  return 9 + 2 * kCtSegs;
+}
+
 int __cdecl LuaBar(engine::LuaState* L) {
   std::string s;
   for (const auto& b : engine::ActionBarButtons()) s += b.icon + (b.disabled ? "(x) " : " ");
@@ -2925,6 +3178,7 @@ bool InstallTbc(const IniMap& ini) {
   g.cam_smooth = IniBool(ini, "tbc.camera_smooth", true);
   g.dice_panel = IniBool(ini, "tbc.dice_panel", false);
   g.save_sounds = IniBool(ini, "tbc.save_sounds", true);
+  g.save_banner = IniBool(ini, "tbc.save_banner", true);
   g.sight = IniBool(ini, "tbc.combat_sight", true);
   g.sight_radius = IniInt(ini, "tbc.sight_radius", g.sight_radius);
   g.select_voice = IniBool(ini, "tbc.select_voice", true);
@@ -3030,6 +3284,19 @@ bool InstallTbc(const IniMap& ini) {
       g.ground_fx = g.draw && IniBool(ini, "tbc.ground_fx", true) && engine::InstallWorldPreDraw(&FxPreDraw) &&
                     engine::InstallWorldFloor(&DrawGroundFx);
       g.rolls = engine::InstallRollHooks();
+      if (g.save_banner && g.rolls) {
+        engine::AddMenuText(BuildSaveBannerMenu());
+        g.save_silenced = engine::SilenceSaveFeedback();
+      } else {
+        g.save_banner = false;
+      }
+      if (IniBool(ini, "tbc.combat_text", true) && engine::InstallFloaterHook(&OnFloater)) {
+        g.ctext = true;
+        engine::AddMenuText(BuildCombatTextMenu());
+        Log("tbc: combat text on (BG3: still lines, numbers by damage type, statuses)");
+      } else {
+        g.ctext = false;
+      }
       if (!g.draw) Log("tbc: world overlay not installed; no movement line");
     } else {
       Log("tbc: HUD functions differ from the manifest; turn-based HUD off (combat still on)");
@@ -3078,6 +3345,8 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_Stats", &LuaStats);
   dev::AddLuaFunction("PSTF_Stat", &LuaStat);
   dev::AddLuaFunction("PSTF_Bar", &LuaBar);
+  dev::AddLuaFunction("PSTF_SaveBanner", &LuaSaveBanner);
+  dev::AddLuaFunction("PSTF_CombatText", &LuaCombatText);
   dev::AddLuaFunction("PSTF_Near", &LuaNear);
   dev::AddLuaFunction("PSTF_BarSlots", &LuaBarSlots);
   dev::AddLuaFunction("PSTF_BarCount", &LuaBarCount);

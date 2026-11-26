@@ -90,6 +90,8 @@ struct HoverView {
   std::string name;
   int hp = 0, max_hp = 0, chance = -1, ac = 0, needs = 0;
   bool foe = false, fight = false;
+  int level = 0;               // "Lv. 5" after the name (0: not shown)
+  std::string sub;             // the line under the name: class or stance (hover.h HoverSubtitle)
   std::vector<StatusIconView> icons;
 };
 // "pstfStat = {...} pstfHov = {...}"; party[slot] = that slot's icons.
@@ -101,6 +103,10 @@ std::string BuildStatusLua(const std::vector<std::vector<StatusIconView>>& party
 // menu PSTF_STATUS (status icons next to the portraits + hover card), shown with the bottom bar.
 // pstfHudGuard() (called every frame) keeps our menus on the stack exactly when they belong there.
 std::string BuildHudMenu(bool bg3 = false, int party_max = 6);
+// UI menus PSTF_SAVE1..N: the saving-throw banners (save_banner.h), fed by PSTF_SaveBanner(i).
+std::string BuildSaveBannerMenu();
+// UI menus PSTF_CT1..N: the combat text lines (combat_text.h), fed by PSTF_CombatText(i).
+std::string BuildCombatTextMenu();
 std::string BuildHudLua(const HudView& v);  // "pstfTbc = {...}"
 
 }  // namespace pstf::tbc

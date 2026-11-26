@@ -123,6 +123,13 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - License GPL-2.0-or-later (`COPYING`): every new source file starts with `// SPDX-License-Identifier: GPL-2.0-or-later`.
   GemRB code may be ported (keep its copyright lines); EEex/InfinityLoader code may not (no license).
 - New features get an ini toggle; with all toggles off the game must behave exactly like vanilla.
+- Designing graphics (icons, banners, panels, effects): when the user gives a reference (video, screenshot),
+  download it (`yt-dlp` into `build\ref\`), pull frames every 0.1-0.2 s (and 30 fps around the key moments) with
+  `ffmpeg -vf "crop=..,scale=..,tile=.."` and read them: timings, shapes, colours, fades, positions. Recreate it
+  faithfully, but in the Planescape: Torment UI style: bone/ivory lines, dark umber fills, bronze, verdigris and
+  blood-red accents, a thin dark rim so it reads over any floor, the game's serif fonts (VOLLKORN, PTSERIF; EXOCET
+  for titles). Art comes from a `tools/make_*.py` script (drawn 4x, box-filtered, `--preview` strip) into
+  `data/override` BAMs; then check it in game with screenshots against the reference frames.
 - No engine object access off the game thread. No raw engine pointers kept across frames or given to Lua/plugins.
 
 ## Saving tokens (keep this list current)
@@ -411,6 +418,31 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   tests\ingame\statusfx.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'} -Until 'statusfx: ok|TEST FAIL' -Close
   -Timeout 240`; look: `tests\ingame\statusfx_look.lua` (`-Until 'statusfx_look: ok|TEST FAIL'`) then
   `python -I tools/statusfx_sheet.py`. Probes: `PSTF_StatusFx()`, `PSTF_StatusFxOn(id)`, `PSTF_StatusFxPlay(id, fx|stop:fx)`,
-  `PSTF_StatusFxApply(id, op, p1, p2, s)`. `ApplySpellRES` skips the magic resistance roll: test MR with a real cast.
+  `PSTF_StatusFxApply(id, op, p1, p2, s)`, `PSTF_StatusFxEffects(id)` (op:type:parent:res:equipped:param1 list).
+  `ApplySpellRES` skips the magic resistance roll: test MR with a real cast. In a fight a creature waiting for its turn
+  re-evaluates its effects every tick but its expiry ticks are held, so a cut glow is also made colourless at once
+  (`engine::QuietColorEffect`: param1 neutral + colour refresh flag sprite +0x48CC): `tests\ingame\statusfx_tbc.lua`
+  (env `PSTF_TEST_TICK=1; PSTF_TBC_AUTOPARTY=1`, `-Until 'statusfx_tbc: ok|TEST FAIL'`, shots `logs\statusfx_tbc_{pulse,quiet}.bmp`).
+- Saving-throw banner (`[tbc] save_banner`, rules `src/modules/tbc/save_banner.h`, art `python -I tools/make_save_bams.py
+  [--preview OUT.png]` -> `data/override/PFSVOK.BAM`/`PFSVBAD.BAM`, reference clip youtube.com/shorts/WyovFSwwKvg): every save,
+  made or failed, shows "[icon] Save Success: N (Death)" over the creature (UI menus PSTF_SAVE1..6, one each so each fades
+  alone with menu `opacity lua`), sound at the icon's verdict (0.7 s), gone at 3 s. The engine's own "Save vs." line is
+  patched out (`engine::SilenceSaveFeedback`, symbols.h kRvaSaveFeedbackRead). Saves are taken out of fights too. Test:
+  `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\save_banner.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'}
+  -Until 'save_banner: ok|TEST FAIL' -Close` (shots `logs\save_banner_NN.bmp`). Probe `PSTF_SaveBanner([i])`.
+  Save stats in tests: `ChangeStat(Myself,SAVEVSSPELL,1,SET)` always saves, 30 never (-10 does not save).
+- BG3 combat text (`[tbc] combat_text`, rules `src/modules/tbc/combat_text.h`, reference youtube.com/watch?v=mfZz9N57glw):
+  nothing rises; a line sits at the world point where the creature's head was (slots from the top down, neighbours
+  share rows), fades at 2.3-2.8 s. Damage = bare number coloured by damage type (white weapons), numbers within
+  0.4 s share a row, heals green, "Miss!" xor "Critical Miss!", "Critical Hit!" red, a status's name on start and
+  struck through (left to right) on end, casts show the spell name, "Trip: Missed/Failed/Success"; the save banner takes a slot.
+  Engine side: every rising text goes through `CGameArea::AddToFloaterList` (`engine::InstallFloaterHook`; type 5 =
+  a creature's own words, left to the engine), damage type from `CGameEffectDamage::ApplyEffect`'s param2. Test:
+  `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\combat_text.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'}
+  -Until 'combat_text: ok|TEST FAIL' -Close -Timeout 400` (`combat_text=0` fails it at the first line: the toggle check).
+  Probe `PSTF_CombatText(i)` -> on, ui x/y, alpha, strike, kind, n, text/colour x4, id, slot; `()` -> lines, floaters
+  seen, taken, added. Log `tbc: floater "..."` (first 80) and `tbc: text over X: ...`. UI text widths: Lua
+  `pstfTextWidth(t, pt)` (Infinity_GetContentHeight only wraps between words: one word needs the ' |' calibration).
+  Shots of UI need `PSTF_SHOT_DIR` (`PSTF_LightShot` is the world pass only, no menus).
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

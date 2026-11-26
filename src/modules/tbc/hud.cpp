@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "modules/tbc/hud.h"
+#include "modules/tbc/save_banner.h"
+#include "modules/tbc/combat_text.h"
 
 #include <cmath>
 #include <cstdio>
@@ -56,6 +58,8 @@ function pstfHudGuard()
 	pstfMenuSync('PSTF_BAR', bar and (pstfBg3 or (pstfTbc.on and world)))
 	pstfMenuSync('PSTF_STATUS', bar)
 	pstfMenuSync('PSTF_TBC', pstfTbc.on and world)
+	if pstfSvGuard then pstfSvGuard(world) end
+	if pstfCtGuard then pstfCtGuard(world) end
 end
 -- WORLD_ACTIONBAR_LEFT's onOpen: it was just pushed, so ours go on top of it again.
 function pstfHudRaise()
@@ -140,6 +144,8 @@ function pstfTbcLayout()
 		if c.active then w, h = aw, ah end
 		local y = 8
 		area('pstfCardFrame' .. i, x - 3, y - 3, w + 6, h + 6)
+		area('pstfCardRimF' .. i, x - 2, y - 2, w + 4, h + 4)
+		area('pstfCardRimE' .. i, x - 2, y - 2, w + 4, h + 4)
 		area('pstfCardBgF' .. i, x, y, w, h)
 		area('pstfCardBgE' .. i, x, y, w, h)
 		area('pstfCardImg' .. i, x, y, w, h)
@@ -523,39 +529,120 @@ function pstfHovName()
 	if (pstfHov.name or -1) >= 0 then return Infinity_FetchString(pstfHov.name) end
 	return pstfHov.str or ''
 end
+function pstfHovLvOn() return pstfHov.on and (pstfHov.lv or 0) > 0 end
+function pstfHovLv() return 'Lv. ' .. tostring(pstfHov.lv or 0) end
+function pstfHovSubOn() return pstfHov.on and (pstfHov.sub or '') ~= '' end
 function pstfHovHpOn() return pstfHov.on and (pstfHov.max or 0) > 0 end
-function pstfHovHp() return tostring(pstfHov.hp or 0) .. ' / ' .. tostring(pstfHov.max or 0) end
+function pstfHovHp() return tostring(pstfHov.hp or 0) .. '/' .. tostring(pstfHov.max or 0) end
 function pstfHovHitOn() return pstfHov.on and pstfHov.foe and (pstfHov.chance or -1) >= 0 end
 function pstfHovHit()
 	return string.format('Hit chance %d%%     AC %d     needs %d', pstfHov.chance, pstfHov.ac, pstfHov.needs)
 end
--- hover card: top centre (under the initiative bar in a fight): name, HP bar, hit chance, status icons
+function pstfHovIconName(i)
+	local s = pstfSt(-1, i)
+	if not s then return '' end
+	return (s.n and s.n >= 0) and Infinity_FetchString(s.n) or ''
+end
+-- a text's width at a point size (cached). Infinity_GetContentHeight only grows when a line breaks, and a line
+-- breaks between words only: the narrowest one-line width of the text plus ' |' is its width + space + bar; the space and
+-- bar come from '| |' and '|| |' (bar = their difference).
+pstfTextWidths = {}
+local function oneLine(font, t, pt)
+	local one = Infinity_GetContentHeight(font, 4000, t, pt, 0)
+	local lo, hi = 1, 2400
+	while hi - lo > 1 do
+		local mid = math.floor((lo + hi) / 2)
+		if Infinity_GetContentHeight(font, mid, t, pt, 0) > one then lo = mid else hi = mid end
+	end
+	return hi
+end
+function pstfTextWidth(t, pt, font)
+	font = font or 'VOLLKORN'
+	local key = font .. pt .. '|' .. t
+	local w = pstfTextWidths[key]
+	if w then return w end
+	if t == '' then return 0 end
+	local ck = font .. pt .. '|#cal'
+	local cal = pstfTextWidths[ck]
+	if not cal then
+		local two, three = oneLine(font, '| |', pt), oneLine(font, '|| |', pt)
+		local bar = three - two
+		cal = {bar = bar, space = two - 2 * bar}
+		pstfTextWidths[ck] = cal
+	end
+	w = math.max(1, oneLine(font, t .. ' |', pt) - cal.space - cal.bar)
+	pstfTextWidths[key] = w
+	return w
+end
+-- hover card, BG3: top centre (under the initiative row in a fight), no panel: the name with "Lv. N" after it,
+-- the class or stance under it, a long red health bar with bronze ends and "hp/max" in it, then the statuses as
+-- icon + name in one row.
 function pstfHovLayout(sw, sh)
 	if not pstfHov.on then return end
-	local hw = 300
-	local hx, hy = math.floor(sw / 2) - 150, pstfHov.fight and (8 + 109 + 32) or 8
-	local y = hy + 3
-	area('pstfHoverName', hx + 8, y, hw - 16, 18)
-	y = y + 20
-	area('pstfHoverBarBack', hx + 12, y, hw - 24, 12)
-	local hs = 0
-	if (pstfHov.max or 0) > 0 then hs = math.max(0, math.min(1, pstfHov.hp / pstfHov.max)) end
-	area('pstfHoverBar', hx + 12, y, math.max(1, math.floor((hw - 24) * hs)), 12)
-	area('pstfHoverHp', hx + 12, y - 2, hw - 24, 16)
-	y = y + 15
+	local cx = math.floor(sw / 2)
+	local y = pstfHov.fight and (8 + 109 + 30) or 10
+	local name = pstfHovName()
+	local nw = pstfTextWidth(name, 22)
+	local lw = pstfHovLvOn() and pstfTextWidth(pstfHovLv(), 14) or 0
+	local nx = cx - math.floor((nw + (lw > 0 and lw + 6 or 0)) / 2)
+	area('pstfHoverName', nx, y, nw + 8, 30)
+	area('pstfHoverLv', nx + nw + 6, y + 6, lw + 8, 22)
+	y = y + 28
+	if pstfHovSubOn() then
+		area('pstfHoverSub', cx - 200, y, 400, 20)
+		y = y + 21
+	end
+	if pstfHovHpOn() then
+		local bw, bh = 340, 16
+		local bx = cx - bw / 2
+		y = y + 4
+		-- the bronze tips past both ends (BG3's spear-point bar ends)
+		area('pstfHoverTipL', bx - 26, y + bh / 2 - 1, 26, 2)
+		area('pstfHoverTipR', bx + bw, y + bh / 2 - 1, 26, 2)
+		area('pstfHoverKnobL', bx - 30, y + bh / 2 - 3, 6, 6)
+		area('pstfHoverKnobR', bx + bw + 24, y + bh / 2 - 3, 6, 6)
+		area('pstfHoverRim', bx - 2, y - 2, bw + 4, bh + 4)
+		area('pstfHoverBarBack', bx, y, bw, bh)
+		local hs = math.max(0, math.min(1, pstfHov.hp / pstfHov.max))
+		local fw = math.max(hs > 0 and 1 or 0, math.floor(bw * hs))
+		area('pstfHoverBar', bx, y, fw, bh)
+		area('pstfHoverBarHi', bx, y + 2, fw, 4)
+		area('pstfHoverHp', bx, y - 2, bw, bh + 4)
+		y = y + bh + 8
+	else
+		hide('pstfHoverTipL') hide('pstfHoverTipR') hide('pstfHoverKnobL') hide('pstfHoverKnobR')
+	end
 	if pstfHovHitOn() then
-		area('pstfHoverHit', hx + 8, y, hw - 16, 18)
+		area('pstfHoverHit', cx - 200, y, 400, 18)
 		y = y + 20
 	end
 	local n = #(pstfHov.icons or {})
 	if n > PSTF_HOV_ICONS then n = PSTF_HOV_ICONS end
 	if n > 0 then
-		local size, gap = PSTF_HOV_PX, 4
-		local ix = hx + math.floor((hw - (n * (size + gap) - gap)) / 2)
-		for i = 1, PSTF_HOV_ICONS do placeIcon(-1, i, ix + (i - 1) * (size + gap), y + 2, size) end
-		y = y + size + 6
+		local size, gap, tgap = PSTF_HOV_PX, 18, 6
+		-- rows of icon + name, centred; a row breaks past 640 px
+		local rows, row, rw = {}, {}, 0
+		for i = 1, n do
+			local w = size + tgap + pstfTextWidth(pstfHovIconName(i), 14)
+			if #row > 0 and rw + gap + w > 640 then
+				table.insert(rows, {items = row, w = rw})
+				row, rw = {}, 0
+			end
+			table.insert(row, {i = i, w = w})
+			rw = rw + (#row > 1 and gap or 0) + w
+		end
+		table.insert(rows, {items = row, w = rw})
+		for _, r in ipairs(rows) do
+			local x = cx - math.floor(r.w / 2)
+			for _, it in ipairs(r.items) do
+				placeIcon(-1, it.i, x, y, size)
+				area('pstfHovIN' .. it.i, x + size + tgap, y, it.w - size - tgap + 8, size)
+				x = x + it.w + gap
+			end
+			y = y + size + 4
+		end
+		for i = n + 1, PSTF_HOV_ICONS do placeIcon(-1, i, -100, -100, size) hide('pstfHovIN' .. i) end
 	end
-	area('pstfHoverBg', hx, hy, hw, y - hy + 3)
 end
 )LUA";
 
@@ -597,6 +684,158 @@ StatusIconView MakeIconView(const StatusIcon& s, const std::string& bam, int32_t
   v.fit.y += kStatusFramePx + 1;
   v.frame = DrainFrame(0, 0, box, kStatusFramePx, s.share);
   return v;
+}
+
+// The saving-throw banners (save_banner.h): one small menu per banner, so each fades on its own (menu opacity).
+// PSTF_SaveBanner(i) is read once per drawn frame (pstfSvTick, the first item), the rest use that copy.
+std::string BuildSaveBannerMenu() {
+  std::string m = "`\nPSTF_SAVES = " + std::to_string(kSaveBanners) + R"LUA(
+pstfSv = {}
+for i = 1, PSTF_SAVES do pstfSv[i] = {on = false, f = 0, a = 0, good = false, t = ''} end
+-- the text's width: the narrowest area that keeps it on one line (Infinity_GetContentHeight), cached per text
+pstfSvWidths = {}
+function pstfSvWidth(t)
+	local w = pstfSvWidths[t]
+	if w then return w end
+	local one = Infinity_GetContentHeight('VOLLKORN', 4000, t, 18, 0)
+	local lo, hi = 8, 1200
+	while hi - lo > 2 do
+		local mid = math.floor((lo + hi) / 2)
+		if Infinity_GetContentHeight('VOLLKORN', mid, t, 18, 0) > one then lo = mid else hi = mid end
+	end
+	pstfSvWidths[t] = hi
+	return hi
+end
+-- the whole banner (48 px icon, 8 px gap, text) centred over the head
+function pstfSvTick(i)
+	local s = pstfSv[i]
+	local on, x, y, f, a, good, t = PSTF_SaveBanner(i)
+	s.on = on == 1
+	if not s.on then s.a = 0 return false end
+	s.f, s.a, s.good, s.t = f, a, good == 1, t
+	local tw = pstfSvWidth(t)
+	local x0 = x - math.floor((48 + 8 + tw) / 2)
+	Infinity_SetArea('pstfSvIcon' .. i, x0, y - 24, 48, 48)
+	Infinity_SetArea('pstfSvText' .. i, x0 + 56, y - 16, tw + 8, 32)
+	return false
+end
+function pstfSvAlpha(i) return pstfSv[i].a end
+function pstfSvBam(i) return pstfSv[i].good and 'PFSVOK' or 'PFSVBAD' end
+function pstfSvGuard(world)
+	for i = 1, PSTF_SAVES do
+		local want = world and PSTF_SaveBanner ~= nil and PSTF_SaveBanner(i) == 1
+		pstfMenuSync('PSTF_SAVE' .. i, want)
+	end
+end
+)LUA" + "`\n";
+  for (int i = 1; i <= kSaveBanners; ++i) {
+    const std::string n = std::to_string(i), on = "pstfSv[" + n + "].on";
+    m += "menu\n{\n\tname 'PSTF_SAVE" + n + "'\n\talign left top\n\tignoreEsc\n\tignoreFocus 1\n\topacity lua \"pstfSvAlpha(" + n +
+         ")\"\n";
+    m += "\tlabel\n\t{\n\t\tarea 0 0 1 1\n\t\tenabled \"pstfSvTick(" + n + ")\"\n\t}\n";
+    m += "\tbutton\n\t{\n\t\tname \"pstfSvIcon" + n + "\"\n\t\tarea 0 0 1 1\n\t\tenabled \"" + on + "\"\n\t\tbam lua \"pstfSvBam(" + n +
+         ")\"\n\t\tframe lua \"pstfSv[" + n + "].f\"\n\t\tignoreEvents\n\t}\n";
+    // bone white, the engine's text shadow (as the video's dark drop shadow)
+    m += "\tlabel\n\t{\n\t\tname \"pstfSvText" + n + "\"\n\t\tarea 0 0 1 1\n\t\tenabled \"" + on + "\"\n\t\ttext lua \"pstfSv[" + n +
+         "].t\"\n\t\ttext style \"normal\"\n\t\ttext font \"VOLLKORN\"\n\t\ttext point 18\n\t\ttext shadow 1\n"
+         "\t\ttext color lua \"0xC8DEE8\"\n\t\talign left center\n\t\tignoreEvents\n\t}\n";
+    m += "}\n";
+  }
+  return m;
+}
+
+// The combat text lines (combat_text.h): one small menu per line, so each fades on its own (menu opacity).
+// PSTF_CombatText(i) is read once per drawn frame (pstfCtTick, the first item); the labels use that copy.
+std::string BuildCombatTextMenu() {
+  std::string m = "`\nPSTF_CTN = " + std::to_string(kCtLines) + R"LUA(
+pstfCt = {}
+for i = 1, PSTF_CTN do pstfCt[i] = {on = false, a = 0, n = 0, num = false, s = 0, k = 0, t = {'', '', '', ''}, c = {0, 0, 0, 0}} end
+pstfCtStrs = {}
+function pstfCtStr(t)
+	if string.sub(t, 1, 1) ~= '@' then return t end
+	local v = pstfCtStrs[t]
+	if not v then
+		v = Infinity_FetchString(tonumber(string.sub(t, 2)) or -1) or ''
+		pstfCtStrs[t] = v
+	end
+	return v
+end
+function pstfCtWidth(t, pt)
+	if pstfTextWidth then return pstfTextWidth(t, pt) end
+	return string.len(t) * pt / 2
+end
+local function ctHide(n) Infinity_SetArea(n, -100, -100, 1, 1) end
+-- a line centred on x at height y (its middle): text at 18 pt, a row of numbers at 26 pt, the strike line
+-- of an ended status across the text's width, drawn from the left (kind 6)
+function pstfCtTick(i)
+	local s = pstfCt[i]
+	local on, x, y, a, strike, kind, n, t1, c1, t2, c2, t3, c3, t4, c4 = PSTF_CombatText(i)
+	s.on = on == 1
+	if not s.on then s.a = 0 s.n = 0 return false end
+	s.a, s.s, s.k, s.n = a, strike, kind, n
+	s.num = kind == 3 or kind == 4
+	s.t[1], s.t[2], s.t[3], s.t[4] = pstfCtStr(t1), t2, t3, t4
+	s.c[1], s.c[2], s.c[3], s.c[4] = c1, c2, c3, c4
+	if s.num then
+		local gap, ws, total = 3, {}, 0
+		for k = 1, n do
+			ws[k] = pstfCtWidth(s.t[k], 26)
+			total = total + ws[k] + (k > 1 and gap or 0)
+		end
+		local x0 = x - math.floor(total / 2)
+		for k = 1, 4 do
+			if k <= n then
+				Infinity_SetArea('pstfCtN' .. i .. '_' .. k, x0, y - 18, ws[k] + 8, 36)
+				x0 = x0 + ws[k] + gap
+			else
+				ctHide('pstfCtN' .. i .. '_' .. k)
+			end
+		end
+		ctHide('pstfCtT' .. i) ctHide('pstfCtSd' .. i) ctHide('pstfCtSl' .. i)
+	else
+		local w = pstfCtWidth(s.t[1], 18)
+		local x0 = x - math.floor(w / 2)
+		Infinity_SetArea('pstfCtT' .. i, x0, y - 14, w + 8, 28)
+		if strike > 0 then
+			local sw = math.max(1, math.floor((w + 2) * strike))
+			Infinity_SetArea('pstfCtSd' .. i, x0 - 2, y - 1, sw + 2, 4)
+			Infinity_SetArea('pstfCtSl' .. i, x0 - 1, y, sw, 2)
+		else
+			ctHide('pstfCtSd' .. i) ctHide('pstfCtSl' .. i)
+		end
+		for k = 1, 4 do ctHide('pstfCtN' .. i .. '_' .. k) end
+	end
+	return false
+end
+function pstfCtAlpha(i) return pstfCt[i].a end
+function pstfCtGuard(world)
+	for i = 1, PSTF_CTN do
+		local want = world and PSTF_CombatText ~= nil and PSTF_CombatText(i) == 1
+		pstfMenuSync('PSTF_CT' .. i, want)
+	end
+end
+)LUA" + "`\n";
+  for (int i = 1; i <= kCtLines; ++i) {
+    const std::string n = std::to_string(i), c = "pstfCt[" + n + "]";
+    m += "menu\n{\n\tname 'PSTF_CT" + n + "'\n\talign left top\n\tignoreEsc\n\tignoreFocus 1\n\topacity lua \"pstfCtAlpha(" + n + ")\"\n";
+    m += "\tlabel\n\t{\n\t\tarea 0 0 1 1\n\t\tenabled \"pstfCtTick(" + n + ")\"\n\t}\n";
+    // text lines (white, red for criticals); the engine's text shadow as the clip's dark drop shadow
+    m += "\tlabel\n\t{\n\t\tname \"pstfCtT" + n + "\"\n\t\tarea 0 0 1 1\n\t\tenabled \"" + c + ".on and not " + c +
+         ".num\"\n\t\ttext lua \"" + c + ".t[1]\"\n\t\ttext style \"normal\"\n\t\ttext font \"VOLLKORN\"\n\t\ttext point 18\n"
+         "\t\ttext shadow 1\n\t\ttext color lua \"" + c + ".c[1]\"\n\t\talign left center\n\t\tignoreEvents\n\t}\n";
+    for (int k = 1; k <= kCtSegs; ++k) {
+      const std::string ks = std::to_string(k);
+      m += "\tlabel\n\t{\n\t\tname \"pstfCtN" + n + "_" + ks + "\"\n\t\tarea 0 0 1 1\n\t\tenabled \"" + c + ".on and " + c +
+           ".num and " + c + ".n >= " + ks + "\"\n\t\ttext lua \"" + c + ".t[" + ks +
+           "]\"\n\t\ttext style \"normal\"\n\t\ttext font \"VOLLKORN\"\n\t\ttext point 26\n\t\ttext shadow 1\n\t\ttext color lua \"" + c +
+           ".c[" + ks + "]\"\n\t\talign left center\n\t\tignoreEvents\n\t}\n";
+    }
+    // the strike: a dark rim under a bone line
+    m += Label("pstfCtSd" + n, c + ".on and " + c + ".s > 0", "\t\tfill 16 12 10 200\n");
+    m += Label("pstfCtSl" + n, c + ".on and " + c + ".s > 0", "\t\tfill 236 232 224 255\n");
+    m += "}\n";
+  }
+  return m;
 }
 
 std::string BuildHudMenu(bool bg3, int party_max) {
@@ -650,13 +889,29 @@ std::string BuildHudMenu(bool bg3, int party_max) {
   m += "menu\n{\n\tname 'PSTF_STATUS'\n\talign left top\n\tignoreEsc\n\tignoreFocus 1\n";
   for (int p = 0; p < slots; ++p)
     for (int i = 1; i <= kStatusIcons; ++i) m += StatusIconItems(std::to_string(p), i);
-  m += Label("pstfHoverBg", "pstfHovOn()", "\t\tfill 14 11 9 215\n");
-  m += Label("pstfHoverName", "pstfHovOn()", "\t\ttext lua \"pstfHovName()\"\n\t\ttext style \"label\"\n\t\talign center center\n");
-  m += Label("pstfHoverBarBack", "pstfHovHpOn()", "\t\tfill 40 8 6 240\n");
-  m += Label("pstfHoverBar", "pstfHovHpOn()", "\t\tfill 176 24 18 250\n");
-  m += Label("pstfHoverHp", "pstfHovHpOn()", "\t\ttext lua \"pstfHovHp()\"\n\t\ttext style \"normal\"\n\t\talign center center\n");
-  m += Label("pstfHoverHit", "pstfHovHitOn()", "\t\ttext lua \"pstfHovHit()\"\n\t\ttext style \"normal\"\n\t\talign center center\n");
-  for (int i = 1; i <= kHoverIcons; ++i) m += StatusIconItems("-1", i);
+  // BG3 hover card: no panel, shadowed serif text over the scene; the bar's bronze rim and spear-point ends
+  auto text = [](const std::string& lua, int pt, const char* bgr, const char* align) {
+    return "\t\ttext lua \"" + lua + "\"\n\t\ttext style \"normal\"\n\t\ttext font \"VOLLKORN\"\n\t\ttext point " +
+           std::to_string(pt) + "\n\t\ttext shadow 1\n\t\ttext color lua \"" + bgr + "\"\n\t\talign " + align + "\n";
+  };
+  m += Label("pstfHoverName", "pstfHovOn()", text("pstfHovName()", 22, "0xE8ECF0", "left center"));
+  m += Label("pstfHoverLv", "pstfHovLvOn()", text("pstfHovLv()", 14, "0xA8B4BC", "left center"));
+  m += Label("pstfHoverSub", "pstfHovSubOn()", text("pstfHov.sub", 15, "0xB8C8D2", "center center"));
+  m += Label("pstfHoverTipL", "pstfHovHpOn()", "\t\tfill 150 116 64 230\n");
+  m += Label("pstfHoverTipR", "pstfHovHpOn()", "\t\tfill 150 116 64 230\n");
+  m += Label("pstfHoverKnobL", "pstfHovHpOn()", "\t\tfill 190 150 86 255\n");
+  m += Label("pstfHoverKnobR", "pstfHovHpOn()", "\t\tfill 190 150 86 255\n");
+  m += Label("pstfHoverRim", "pstfHovHpOn()", "\t\tfill 120 92 52 240\n");
+  m += Label("pstfHoverBarBack", "pstfHovHpOn()", "\t\tfill 26 6 6 245\n");
+  m += Label("pstfHoverBar", "pstfHovHpOn()", "\t\tfill 168 26 24 255\n");
+  m += Label("pstfHoverBarHi", "pstfHovHpOn()", "\t\tfill 222 84 70 110\n");
+  m += Label("pstfHoverHp", "pstfHovHpOn()", text("pstfHovHp()", 14, "0xF4F4F4", "center center"));
+  m += Label("pstfHoverHit", "pstfHovHitOn()", text("pstfHovHit()", 14, "0xB8C8D2", "center center"));
+  for (int i = 1; i <= kHoverIcons; ++i) {
+    m += StatusIconItems("-1", i);
+    const std::string n = std::to_string(i);
+    m += Label("pstfHovIN" + n, "pstfStOn(-1, " + n + ")", text("pstfHovIconName(" + n + ")", 14, "0xD8E0E6", "left center"));
+  }
   m += "}\n";
   // --- the fight overlay ---
   m += "menu\n{\n\tname 'PSTF_TBC'\n\talign left top\n\tignoreEsc\n";
@@ -671,6 +926,9 @@ std::string BuildHudMenu(bool bg3, int party_max) {
   for (int i = 1; i <= kHudCards; ++i) {
     const std::string n = std::to_string(i), on = "pstfCardOn(" + n + ")";
     m += Label("pstfCardFrame" + n, "pstfCardActive(" + n + ")", "\t\tfill 236 196 80 255\n");
+    // BG3: allies framed blue, enemies red (the active one gold)
+    m += Label("pstfCardRimF" + n, "pstfCardFriend(" + n + ") and not pstfCardActive(" + n + ")", "\t\tfill 62 122 164 255\n");
+    m += Label("pstfCardRimE" + n, "pstfCardFoe(" + n + ") and not pstfCardActive(" + n + ")", "\t\tfill 178 40 44 255\n");
     m += Label("pstfCardBgF" + n, "pstfCardFriend(" + n + ")", "\t\tfill 20 32 64 235\n");
     m += Label("pstfCardBgE" + n, "pstfCardFoe(" + n + ")", "\t\tfill 70 14 12 235\n");
     m += Label("pstfCardImg" + n, "pstfCardHasImage(" + n + ")",
@@ -742,10 +1000,12 @@ std::string BuildStatusLua(const std::vector<std::vector<StatusIconView>>& party
     s += ",";
   }
   char b[256];
-  std::snprintf(b, sizeof b, "} pstfHov = {on=%s,fight=%s,name=%d,hp=%d,max=%d,foe=%s,chance=%d,ac=%d,needs=%d,str=\"",
+  std::snprintf(b, sizeof b, "} pstfHov = {on=%s,fight=%s,name=%d,hp=%d,max=%d,foe=%s,chance=%d,ac=%d,needs=%d,lv=%d,sub=\"",
                 h.on ? "true" : "false", h.fight ? "true" : "false", h.name_ref, h.hp, h.max_hp, h.foe ? "true" : "false",
-                h.chance, h.ac, h.needs);
+                h.chance, h.ac, h.needs, h.level);
   s += b;
+  AppendEscaped(&s, h.sub);
+  s += "\",str=\"";
   AppendEscaped(&s, h.name);
   s += "\",icons=";
   AppendIcons(&s, h.icons);

@@ -55,4 +55,31 @@ inline double DamageShare(int hp, int max_hp) {
   return 1.0 - static_cast<double>(hp) / max_hp;
 }
 
+// Hover card (BG3: "Anders Lv. 5" over "Sword of Tyr"): the level is the highest of a creature's class levels
+// (STATS.IDS LEVEL/LEVEL2/LEVEL3: the Nameless One keeps his apart); the line under the name is a party member's
+// class (CLASS.IDS, PST calls clerics priests), else how the creature stands towards the party.
+inline int HoverLevel(int l1, int l2, int l3) {
+  int l = l1 > l2 ? l1 : l2;
+  return l > l3 ? l : l3;
+}
+inline const char* HoverSubtitle(int cls, uint8_t ea, bool party) {
+  if (party) {
+    switch (cls) {
+      case 1: return "Mage";
+      case 2: return "Fighter";
+      case 3: return "Priest";
+      case 4: return "Thief";
+      case 7: return "Fighter / Mage";
+      case 8: return "Fighter / Priest";
+      case 9: return "Fighter / Thief";
+      case 13: return "Mage / Thief";
+      default: break;
+    }
+    return "Companion";
+  }
+  if (ea >= 200) return "Hostile";
+  if (ea <= 30) return "Ally";
+  return "Neutral";
+}
+
 }  // namespace pstf::tbc

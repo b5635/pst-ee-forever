@@ -438,4 +438,19 @@ become 4 (no expiry during someone else's turn).
 - The dice panel is off (`dice_panel=0`). The save sound plays in the frame `CheckSave` ran: CheckSave
   itself posts the "Save vs. ...: N" line (`CMessageHandler::AddMessage`, lin 1FBED0 lines 130-180), so
   the sound and the line come together.
+- The line is posted only for a save MADE (CheckSave's return-0 paths, lin 1FBED0 L440-491); a failure says nothing.
+  Both lines (bit 1: name + "Save vs. X : N"; bit 8: overhead strref) are chosen from one read of the feedback
+  options, CInfGame +0xB918, at win 1401ECB3A; "Spell resisted" reads them separately (1401EC5CD). With
+  `save_banner=1` that read becomes `xor eax, eax` and our banner shows every save; its sound waits for the verdict.
+
+## Floating text (combat text)
+
+- Every rising text is a `CFloatMessage` (0x80 bytes) added by `CGameArea::AddToFloaterList(area, msg, replace, to_log)`
+  (lin 1BC4F0, win 14018FED0). Fields: text CString +0x28 (heap data, not 8-aligned), owner id +0x3C, colour +0x40
+  (0xBBGGRR), float type +0x54. Seen: type 2/3 "Damage: N" (CGameEffectDamage::ApplyEffect, PC / other), type 0
+  "Heal: N" (CGameEffectHeal), type 0 feedback lines with the name cut off (" Casts Magic Missile : Morte", "Level Up ",
+  " has gained N ... experience points.", caller win 140357083), type 5 a creature's own words (CGameAIBase::FloatMessage,
+  caller 14017F7B5), type 1 with owner -1 (XP gained, at a point). The "Damage:" line carries no type: the damage effect's
+  param2 high word does (DisplayDamageAmount lin 1FD5D0).
+- Dropping one: its destructor (win 140161CB0) and sized delete (1404E8140, 0x80), as the function's own merge path does.
 

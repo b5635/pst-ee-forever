@@ -231,8 +231,13 @@ void Scan(double now) {
       effs.push_back(i);
     }
     const CutPlan plan = g_cut.Plan(sp.id, effs, now);
-    for (uint64_t k : plan.expire)
-      if (engine::ExpireEffectNow(sp.id, k)) ++g_cut_glows;
+    // quiet the colour at once (a creature waiting for its turn keeps its effect clock still), and let the
+    // effect end the engine's way when its clock runs
+    for (uint64_t k : plan.expire) {
+      const bool quiet = engine::QuietColorEffect(sp.id, k);
+      engine::ExpireEffectNow(sp.id, k);
+      if (quiet) ++g_cut_glows;
+    }
     for (uint64_t k : plan.blank)
       if (engine::SetEffectResource(sp.id, k, kBlankBam)) {
         ++g_blanked;
@@ -422,6 +427,21 @@ int __cdecl LuaApply(engine::LuaState* L) {
   return 1;
 }
 
+// Probe: PSTF_StatusFxEffects(id) -> "op:type:parent:res:equipped:param1;..." of every effect on the creature (the
+// glow cutter's view: type 4096 running timed, 6/7/8 delayed, others untimed).
+int __cdecl LuaEffects(engine::LuaState* L) {
+  const int32_t id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  std::string out;
+  for (const engine::EffectEntry& e : engine::EffectEntries(id)) {
+    char buf[96];
+    snprintf(buf, sizeof buf, "%d:%u:%s:%s:%d:%X;", e.opcode, e.type, e.parent, e.res, e.equipped ? 1 : 0, e.param1);
+    out += buf;
+  }
+  Log("lua: PSTF_StatusFxEffects(%X) -> %s", static_cast<unsigned>(id), out.c_str());
+  engine::LuaPushString(L, out.c_str());
+  return 1;
+}
+
 }  // namespace
 
 void InstallStatusFx(const IniMap& ini) {
@@ -460,6 +480,7 @@ void InstallStatusFx(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_StatusFxOn", &LuaOn);
   dev::AddLuaFunction("PSTF_StatusFxPlay", &LuaPlay);
   dev::AddLuaFunction("PSTF_StatusFxApply", &LuaApply);
+  dev::AddLuaFunction("PSTF_StatusFxEffects", &LuaEffects);
   Log("statusfx: installed (fear %d stun %d blind %d poison %d silence %d resist %d, glows %.0f s, repeat %.0f s, "
       "size %.2f)",
       on.fear, on.stun, on.blind, on.poison, on.silence, g_resist_on ? 1 : 0, g_cut.cut_after, g_watch.repeat,

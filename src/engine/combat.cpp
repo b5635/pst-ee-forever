@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <windows.h>
+#include <intrin.h>
 
 #include "core/log.h"
 #include "core/patch.h"
@@ -438,6 +439,7 @@ std::vector<EffectEntry> EffectEntries(int32_t id) {
       e.opcode = R<int32_t>(eff + sym::kOffEffOpcode);
       e.type = R<uint32_t>(eff + sym::kOffEffType);
       e.equipped = off == sym::kOffSpriteEffEquip;
+      e.param1 = R<uint32_t>(eff + sym::kOffEffParam1);
       for (int i = 0; i < 8; ++i) {
         const char c = R<char>(eff + sym::kOffEffParentRes + i), r = R<char>(eff + sym::kOffEffRes + i);
         e.parent[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
@@ -467,6 +469,23 @@ bool ExpireEffectNow(int32_t id, uint64_t key) {
   const uint32_t now = R<uint32_t>(g + 0x7820);
   if (static_cast<int32_t>(R<uint32_t>(key + sym::kOffEffTick) - now) <= 1) return true;
   W<uint32_t>(key + sym::kOffEffTick, now + 1);
+  W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
+  return true;
+}
+
+bool QuietColorEffect(int32_t id, uint64_t key) {
+  static const int ok = AllOk({sym::kRvaColorRefresh}) ? 1 : 0;
+  const uint64_t p = ok && ClockSymbolsOk() ? LookupSprite(id) : 0;
+  if (!p || !FindEffect(p, key)) return false;
+  const int op = R<int32_t>(key + sym::kOffEffOpcode);
+  // Pulse/glow/light add their colour (type 1/2 entries): 0 adds nothing. Tint multiplies (type 0): white.
+  uint32_t neutral;
+  if (op == 8 || op == 9 || op == 52) neutral = 0;
+  else if (op == 51) neutral = 0xFFFFFF00u;
+  else return false;
+  if (R<uint32_t>(key + sym::kOffEffParam1) == neutral) return false;
+  W<uint32_t>(key + sym::kOffEffParam1, neutral);
+  W<int32_t>(p + sym::kOffSpriteColorRefresh, 1);
   W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
   return true;
 }
@@ -854,7 +873,9 @@ uint8_t HookHit(uint8_t site, void* self, void* target, void* item, int ability,
   const uint8_t prev_site = g_hit_site;
   g_hit_target = IdOf(target);
   g_hit_site = site;
+  const size_t n0 = g_rolls.size();
   const uint8_t r = g_hit(self, target, item, ability, crit, a6);
+  if (r && crit && *crit && g_rolls.size() > n0 && g_rolls.back().actor == IdOf(self)) g_rolls.back().crit = true;
   g_hit_target = prev;
   g_hit_site = prev_site;
   return r;
@@ -886,7 +907,7 @@ uint8_t HookHitFiltered(uint8_t site, void* self, void* target, void* item, int 
   if (out && r) {
     r = 0;
     if (crit) *crit = 0;
-    if (e && e->actor == a) e->success = false, e->outcome = out;
+    if (e && e->actor == a) e->success = false, e->crit = false, e->outcome = out;
   }
   return r;
 }
@@ -995,6 +1016,20 @@ bool InstallRollHooks() {
   g_check_save = reinterpret_cast<CheckSaveFn>(cs);
   Log("combat: roll hooks installed (Hit, FeedBack 4, CheckSave)");
   return true;
+}
+
+bool SilenceSaveFeedback() {
+  static bool done = false;
+  if (done) return true;
+  const sym::Symbol* s = Find(sym::kRvaSaveFeedbackRead);
+  if (!s || !AllOk({sym::kRvaSaveFeedbackRead})) {
+    Log("combat: CheckSave feedback read differs; the engine's \"Save vs.\" line stays");
+    return false;
+  }
+  static const uint8_t kXorEax[] = {0x31, 0xC0, 0x90, 0x90, 0x90, 0x90};  // xor eax, eax; 4x nop
+  done = PatchCode(*s, kXorEax, sizeof kXorEax);
+  Log("combat: engine \"Save vs.\" line %s", done ? "off (save banner)" : "patch failed");
+  return done;
 }
 
 void SetMeleeHitFilter(MeleeThac0Fn thac0_add, MeleeOutcomeFn outcome) {
@@ -1490,5 +1525,85 @@ std::string AnimProbe(int32_t id) {
   std::snprintf(b, sizeof b, "%d %d %d %d", R<int32_t>(a + sym::kOffAnimRunFlag), R<int16_t>(a + sym::kOffAnimCycle),
                 PlausiblePtr(cell) ? R<int16_t>(cell + sym::kOffCellFrame) : -1, R<int16_t>(p + sym::kOffSpriteSequence));
   return b;
+}
+}  // namespace pstf::engine
+
+namespace pstf::engine {
+// --- floating text --------------------------------------------------------------------------------------
+namespace {
+using AddFloaterFn = int64_t(__fastcall*)(void* area, void* msg, int replace, int to_log);
+using DamageApplyFn = int64_t(__fastcall*)(void* effect, void* sprite);
+using DtorFn = void(__fastcall*)(void*);
+using SizedDeleteFn = void(__fastcall*)(void*, size_t);
+AddFloaterFn g_add_floater = nullptr;
+DamageApplyFn g_damage_apply = nullptr;
+FloaterFn g_floater_fn = nullptr;
+// The damage effect being applied (nested applies keep the outer one's after they return).
+struct DamageCtx {
+  int32_t target = -1;
+  uint32_t bits = 0;
+  bool on = false;
+};
+DamageCtx g_damage;
+
+int64_t __fastcall HookDamageApply(void* effect, void* sprite) {
+  const DamageCtx prev = g_damage;
+  if (effect && sprite) {
+    g_damage.on = true;
+    g_damage.target = IdOf(sprite);
+    g_damage.bits = R<uint32_t>(reinterpret_cast<uint64_t>(effect) + sym::kOffEffParam2) >> 16;
+  }
+  const int64_t r = g_damage_apply(effect, sprite);
+  g_damage = prev;
+  return r;
+}
+
+int64_t __fastcall HookAddFloater(void* area, void* msg, int replace, int to_log) {
+  const uint64_t m = reinterpret_cast<uint64_t>(msg);
+  if (g_floater_fn && m && PlausiblePtr(m)) {
+    FloaterInfo f;
+    f.owner = R<int32_t>(m + sym::kOffFloatOwner);
+    f.color = R<uint32_t>(m + sym::kOffFloatColor);
+    f.type = R<uint32_t>(m + sym::kOffFloatType);
+    f.to_log = to_log;
+    const uint64_t t = R<uint64_t>(m + sym::kOffFloatText);
+    if (t >= 0x10000 && t < 0x00007FFFFFFF0000ull) {  // CString data: a heap pointer, not 8-aligned
+      const char* s = reinterpret_cast<const char*>(t);
+      size_t n = 0;
+      while (n < 256 && s[n]) ++n;
+      f.text.assign(s, n);
+    }
+    f.in_damage = g_damage.on;
+    f.damage_target = g_damage.target;
+    f.damage_bits = g_damage.bits;
+    f.caller_rva = static_cast<uint32_t>(reinterpret_cast<uint64_t>(_ReturnAddress()) - sym::kImageBase);
+    if (!to_log && g_floater_fn(f)) {
+      reinterpret_cast<DtorFn>(sym::kVaFloaterDtor)(msg);
+      reinterpret_cast<SizedDeleteFn>(sym::kVaSizedDelete)(msg, 0x80);
+      return 0;
+    }
+  }
+  return g_add_floater(area, msg, replace, to_log);
+}
+}  // namespace
+
+bool InstallFloaterHook(FloaterFn fn) {
+  if (g_add_floater) {
+    g_floater_fn = fn;
+    return true;
+  }
+  if (!AllOk({sym::kRvaAddFloater, sym::kRvaFloaterDtorCall, sym::kRvaFloaterDeleteCall, sym::kRvaDamageApply})) {
+    Log("combat: floating text functions differ; the engine's rising text stays");
+    return false;
+  }
+  const uint64_t d = InlineHook(*Find(sym::kRvaDamageApply), 5, reinterpret_cast<void*>(&HookDamageApply));
+  if (!d) return false;
+  g_damage_apply = reinterpret_cast<DamageApplyFn>(d);
+  const uint64_t a = InlineHook(*Find(sym::kRvaAddFloater), 8, reinterpret_cast<void*>(&HookAddFloater));
+  if (!a) return false;
+  g_add_floater = reinterpret_cast<AddFloaterFn>(a);
+  g_floater_fn = fn;
+  Log("combat: floating text hook installed (AddToFloaterList, CGameEffectDamage::ApplyEffect)");
+  return true;
 }
 }  // namespace pstf::engine
