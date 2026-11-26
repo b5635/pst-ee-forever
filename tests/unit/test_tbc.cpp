@@ -732,6 +732,8 @@ TEST_CASE("tbc script queue: an AI keeps its sequence across turns, a lead Wait 
   CHECK(e.Feed(1, 0, false, 109).stop == Stop::None);
   CHECK(IsIdleAction(109) && IsIdleAction(10) && !IsIdleAction(31));
   CHECK(KeepCurrentAtTurnEnd(109) && !KeepCurrentAtTurnEnd(63) && !KeepCurrentAtTurnEnd(3));
+  // Soego (1500SOEG) on AttackedBy: poof, recolour x8, polymorph are no action; his Attack is
+  CHECK(IsIdleAction(418) && IsIdleAction(440) && IsIdleAction(146) && IsIdleAction(229) && !IsIdleAction(3));
 }
 
 TEST_CASE("tbc APR: 1.5 attacks = 2 swings, then 1, the attack ends after its swings") {

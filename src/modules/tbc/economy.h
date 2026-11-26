@@ -59,16 +59,28 @@ inline bool IsMoveAction(uint16_t id) {
 // Script bookkeeping that costs no action (PST:EE ACTION.IDS): NoAction, Help, SetGlobal, Turn,
 // Continue, StartTimer, Wait, Face, SmallWait, SetInterrupt, RandomTurn, the DisplayString family,
 // WaitRandom.
+inline bool IsFreeScriptAction(uint16_t id);
 inline bool IsIdleAction(uint16_t id) {
   switch (id) {
     case 0: case 17: case 30: case 33: case 36: case 61: case 63: case 83: case 84: case 86: case 130:
     case 151: case 262: case 269: case 292: case 311: case 342: case 346: case 368:
-    // script bookkeeping the engine does at once (instant, no time in real time either): CreateCreature, Enemy,
-    // ChangeAIScript, IncrementGlobal, DestroySelf, SetGlobalTimer, Polymorph, ChangeEnemyAlly, StartRandomTimer,
-    // ChangeTeam, BitSet, BitClear, ForceAIScript (a "Spell; Wait; IncrementGlobal" step's counter is not an action)
-    case 7: case 10: case 60: case 109: case 111: case 115: case 146: case 153: case 369: case 392: case 404:
-    case 405: case 433:
-    case 454:  // PlaySequence: a cosmetic animation (Shilandra's patrol), not the turn's action
+      return true;
+    default:
+      return IsFreeScriptAction(id);
+  }
+}
+
+// Script bookkeeping and cosmetics the engine does at once (instant, no time in real time either): CreateCreature,
+// Enemy, ChangeAIScript, IncrementGlobal, DestroySelf, SetGlobalTimer, Polymorph, ChangeEnemyAlly, StartRandomTimer,
+// ChangeTeam, BitSet, BitClear, ForceAIScript; GiveItem, PlaySound, CreateItem, DropInventory, ChangeSpecifics,
+// ChangeAnimation, FaceObject, PlaySong, StickySinisterPoof, FloatMessage, SetDoorLocked, ChangeColor, SetAnimState,
+// PlaySequence. None is the turn's action ("Spell; Wait; IncrementGlobal" steps, Soego's poof-and-recolour before he
+// attacks, Shilandra's patrol), and one still waiting at a turn end runs at the creature's next turn.
+inline bool IsFreeScriptAction(uint16_t id) {
+  switch (id) {
+    case 7: case 10: case 15: case 26: case 60: case 82: case 109: case 111: case 115: case 119: case 146: case 153:
+    case 157: case 194: case 229: case 317: case 369: case 392: case 404: case 405: case 418: case 425: case 433:
+    case 439: case 440: case 453: case 454:
       return true;
     default:
       return false;
@@ -118,13 +130,7 @@ inline bool KeepQueueAtTurnEnd(bool party, bool nudged, const uint16_t* q, int n
 // The running action at an AI's turn end is script bookkeeping that has not run (the engine does it at once on its
 // next AI update): it stays, with the queue (combat_log.h IsStateAction, instant per IsIdleAction).
 inline bool KeepCurrentAtTurnEnd(uint16_t current) {
-  switch (current) {
-    case 7: case 10: case 30: case 60: case 61: case 109: case 111: case 115: case 146: case 153: case 369:
-    case 392: case 404: case 405: case 433:
-      return true;
-    default:
-      return false;
-  }
+  return current == 30 || current == 61 || IsFreeScriptAction(current);  // + SetGlobal, StartTimer
 }
 // A Wait before the creature's first action this turn, with a real action queued behind it: the Wait is skipped
 // (time passes in the others' turns) instead of the nudge replacing the whole sequence with an attack.

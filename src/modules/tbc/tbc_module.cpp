@@ -3150,7 +3150,7 @@ int __cdecl LuaAnimProbe(engine::LuaState* L) {
   return 1;
 }
 // PSTF_FindActor(scriptName[, nth]) -> id of the nth (1-based) creature in the party's area with that script name
-// (case-insensitive; CreateCreature gives a spawn its CRE's), -1 none. Scenario tests find their actors with it.
+// (case-insensitive; CreateCreature gives a spawn its CRE's), living ones only, -1 none. Scenario tests find their actors with it.
 int __cdecl LuaFindActor(engine::LuaState* L) {
   std::string want = engine::LuaStringArg(L, 1);
   const int nth = static_cast<int>(engine::LuaNumberArg(L, 2, 1));
@@ -3161,7 +3161,7 @@ int __cdecl LuaFindActor(engine::LuaState* L) {
   int seen = 0;
   int32_t found = -1;
   for (const auto& s : engine::AllSprites()) {
-    if (have && s.area != me.area) continue;
+    if ((have && s.area != me.area) || !s.alive) continue;  // a corpse keeps its script name
     std::string n = engine::ScriptName(s.id);
     for (auto& c : n) c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
     if (n == want && ++seen == nth) { found = s.id; break; }
@@ -3202,6 +3202,14 @@ int __cdecl LuaActors(engine::LuaState* L) {
     ++n;
   }
   engine::LuaPushNumber(L, n);
+  return 1;
+}
+// PSTF_AnimId(id) -> the creature's animation id (a polymorph changes it: Vhailor, Soego), -1 none.
+int __cdecl LuaAnimId(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const int a = engine::SpriteAnimId(id);
+  if (engine::LuaNumberArg(L, 2, 0) == 0) Log("lua: PSTF_AnimId(%X) -> %d", static_cast<unsigned>(id), a);
+  engine::LuaPushNumber(L, a);
   return 1;
 }
 // PSTF_Queue(id) -> "Spell, Wait, IncrementGlobal" (current action first; "" = none), queued count, state actions in it.
@@ -3613,6 +3621,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_AnimProbe", &LuaAnimProbe);
   dev::AddLuaFunction("PSTF_Action", &LuaAction);
   dev::AddLuaFunction("PSTF_Queue", &LuaQueue);
+  dev::AddLuaFunction("PSTF_AnimId", &LuaAnimId);
   dev::AddLuaFunction("PSTF_FindActor", &LuaFindActor);
   dev::AddLuaFunction("PSTF_Actors", &LuaActors);
   dev::AddLuaFunction("PSTF_ActorRefs", &LuaActorRefs);

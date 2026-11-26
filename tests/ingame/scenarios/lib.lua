@@ -210,6 +210,10 @@ function S.stepCaster(o)
 		if o.setup then o.setup(id) end
 		PSTF_MakeEnemy(id)
 	end
+	S.steps[90] = function()
+		PSTF_Side(id)
+		if not S.inFight(id) then S.note(string.format('%X is not in the fight yet', id)) PSTF_Actors(400) end
+	end
 	local lastCur2 = -2
 	S.tick = function(frame, cur)
 		if not top then return end
@@ -275,6 +279,10 @@ function S.chainCaster(o)
 		if o.hostile ~= false then PSTF_MakeEnemy(id) end
 		started = true
 	end
+	S.steps[90] = function()  -- why it would not join: side, target, action, EA (log line)
+		PSTF_Side(id)
+		if not S.inFight(id) then S.note(string.format('%X is not in the fight yet', id)) PSTF_Actors(400) end
+	end
 	local last = -2
 	S.tick = function(frame, cur)
 		if not started then return end
@@ -297,5 +305,39 @@ function S.chainCaster(o)
 			return S.finish(string.format('%d casts in %d of its turns', total, turns - 1))
 		end
 		if frame == S.maxFrames - 50 then S.issue(string.format('only %d of its turns, %d casts', turns, total)) end
+	end
+end
+
+-- Plot scenarios (section B): the party attacks a creature in a fight and its script's state must change as in real
+-- time. o = {name, cre, spawn, script, hp, near, go, pre, set, hostile (default true: PSTF_MakeEnemy so the party AI
+-- attacks it), expect = {{var, scope, v[, 'self']}, ...}, check = fn(id) -> done, text (extra condition),
+-- turns = own turns before giving up, maxFrames}. Finishes ok when every expect holds (and check, if any).
+function S.plot(o)
+	o.casts, o.turns = 0, 1000
+	local want = o.expect or {}
+	local id
+	o.setup = function(i) id = i end
+	S.chainCaster(o)
+	local inner = S.tick
+	local seen = {}
+	S.tick = function(frame, cur, started)
+		if id then
+			local all = true
+			for k, e in ipairs(want) do
+				local ok = S.global(e[1], e[2], e[3], e[4] == 'self' and id or nil)
+				if ok and not seen[k] then seen[k] = true S.note(string.format('%s %s = %d at tick %d', e[2], e[1], e[3], frame)) end
+				all = all and (seen[k] or false)
+			end
+			local extra, text = true, ''
+			if o.check then extra, text = o.check(id) end
+			if all and extra then return S.finish('plot state reached' .. (text ~= '' and (': ' .. text) or '')) end
+			if frame == S.maxFrames - 50 then
+				local miss = {}
+				for k, e in ipairs(want) do if not seen[k] then miss[#miss + 1] = e[2] .. ' ' .. e[1] .. '=' .. e[3] end end
+				if not extra then miss[#miss + 1] = text end
+				S.issue('not reached: ' .. table.concat(miss, ', '))
+			end
+		end
+		return inner(frame, cur, started)
 	end
 end

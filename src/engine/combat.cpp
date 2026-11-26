@@ -1512,6 +1512,7 @@ void MultiFireRaw(int32_t caster, int* left, int* spell) {
 }
 int MultiFireLeft(int32_t caster) {
   const uint64_t p = MultiOk() ? LookupSprite(caster) : 0;
+  if (!p) return 0;  // gone (died at its turn end: S03 read sprite 0 + 0x5128 and turned the tick off)
   // the spell number is set by ReadySpell (a bar cast); a scripted cast leaves 0 (clicks then do nothing)
   const int spell = R<int32_t>(p + sym::kOffSpriteMultiSpell);
   if (!IsMultiSpell(spell) && !(spell == 0 && !MopUp())) return 0;
@@ -1521,7 +1522,9 @@ int MultiFireLeft(int32_t caster) {
 bool MultiFire(int32_t caster, int32_t target, int spell) {
   const uint64_t t = MultiFireLeft(caster) > 0 ? LookupSprite(target) : 0;
   if (!t) return false;
-  if (IsMultiSpell(spell)) W<int32_t>(LookupSprite(caster) + sym::kOffSpriteMultiSpell, spell);  // as ReadySpell
+  const uint64_t cp = LookupSprite(caster);
+  if (!cp) return false;
+  if (IsMultiSpell(spell)) W<int32_t>(cp + sym::kOffSpriteMultiSpell, spell);  // as ReadySpell
   using Fn = char(__fastcall*)(uint64_t, uint64_t, uint32_t);
   return reinterpret_cast<Fn>(Va(sym::kRvaMultiFire))(R<uint64_t>(sym::kVaPlanescape), t, static_cast<uint32_t>(caster)) != 0;
 }
