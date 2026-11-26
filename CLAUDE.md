@@ -473,5 +473,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   the shown name; one action per `PSTF_EvalAs` (C:Eval runs only the first); saves that load in a banter dialogue are
   stepped closed (`worldScreen:StepDialog()`). `[tbc] keep_queue`: AI queue kept across turns (combat.log `QUEUE ... keeps`),
   held creatures' `ProcessPendingTriggers` waits for their turn.
+  `[tbc] stalemate_rounds` (3): quiet whole rounds end the fight (log `fight N over (stalemate: ...)`, then
+  `tbc: no new fight: the stalemate's creatures stand as they stood` until one moved/was hurt). `S.brawl{rounds = N}`.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.
