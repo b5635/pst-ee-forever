@@ -902,6 +902,11 @@ constexpr int16_t kVisibleCount = 32;
 // Swing win 140434F9B `movzx eax, byte [rbx+50C4h]` ... `(v & 1) == 0` ... 140434FCB `inc [rbx+50C4h]`
 // (lin 4EAC10 L1465-1470, there +0x50AC).
 inline constexpr uint8_t kHalfAttackBytes[] = {0x0F, 0xB6, 0x83, 0xC4, 0x50, 0x00, 0x00};
+// Any derived stat by its STATS.IDS number: CDerivedStats::GetAtOffset(short) lin 180220 / win 14015F1F0
+// (switch over 202 stats, each `movsx eax, word [rcx+N]`; test probe PSTF_Stat). Prologue, 16 bytes.
+inline constexpr uint8_t kStatAtBytes[] = {0x48, 0x83, 0xEC, 0x38, 0x0F, 0xBF, 0xC2, 0xFF,
+                                           0xC8, 0x3D, 0xC9, 0x00, 0x00, 0x00, 0x0F, 0x87};
+constexpr uint32_t kRvaStatAt = 0x15F1F0;
 constexpr uint32_t kRvaHalfAttack = 0x434F9B, kOffSpriteHalfAttack = 0x50C4, kOffStatNumAttacks = 0x12;
 // Bored voice lines: CScreenWorld +0xA8 counts AsynchronousUpdate passes; above Bored Timeout a random
 // party member says SOUND_BORED (lin 4308B0 L1075-1099, win 140353B20 L523 `++*(a1 + 168)` at
@@ -1190,6 +1195,7 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CGameObject::GetObjectType", kRvaGetObjectType, kGetObjectTypeBytes, "lin 176FB0 / win 140173050"),
     PSTF_SYM("CGameSprite::Render.vismap", kRvaVisMapLea, kVisMapLeaBytes, "lin 562A10 / win 1403DD9D5"),
     PSTF_SYM("CGameArea::ShowMonstersInArea.visible", kRvaShowMonstersVis, kShowMonstersVisBytes, "lin 1B8460 / win 1401A108C"),
+    PSTF_SYM("CDerivedStats::GetAtOffset", kRvaStatAt, kStatAtBytes, "lin 180220 / win 14015F1F0"),
     PSTF_SYM("CGameSprite::Swing.halfattack", kRvaHalfAttack, kHalfAttackBytes, "lin 4EAC10 / win 140434F9B"),
     PSTF_SYM("CScreenWorld::AsynchronousUpdate.bored", kRvaBoredInc, kBoredIncBytes, "lin 4308B0 / win 140354B28"),
     PSTF_SYM("CMessageDropPath::Run.seq", kRvaDropPathSeq, kDropPathSeqBytes, "lin 293C30 / win 14023560D"),

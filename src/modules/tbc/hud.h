@@ -72,6 +72,7 @@ struct HudView {
 // A status icon as the menu shows it: the BAM, its fitted rect and the drained frame (offsets inside
 // the icon box), the source's name and the rounds left.
 struct StatusIconView {
+  std::string parent;  // the spell or item resref the icon stands for
   std::string bam;
   int32_t name_ref = -1;
   int rounds = 0;

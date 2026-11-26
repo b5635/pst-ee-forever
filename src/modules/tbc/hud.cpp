@@ -585,6 +585,7 @@ std::string StatusIconItems(const std::string& p, int i) {
 
 StatusIconView MakeIconView(const StatusIcon& s, const std::string& bam, int32_t name_ref, int bam_w, int bam_h, int box) {
   StatusIconView v;
+  v.parent = s.parent;
   v.bam = bam;
   v.name_ref = name_ref;
   v.rounds = s.rounds;

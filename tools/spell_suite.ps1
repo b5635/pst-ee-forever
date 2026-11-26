@@ -3,14 +3,16 @@
 #   tools\spell_suite.ps1                   every spell (~15 min)
 #   tools\spell_suite.ps1 -Only SPWI119     just these (comma list); spell_results.h is not rewritten then
 #   -Env @{NAME='1'}                        extra game environment
+#   -Saves pass                             the foe always saves (default fail: it never does)
 #   -Trace                                  log the caster's action and animation while a cast has not started
-param([string]$Only = '', [int]$Timeout = 2400, [hashtable]$Env = @{}, [switch]$Trace)
+param([string]$Only = '', [int]$Timeout = 2400, [hashtable]$Env = @{}, [switch]$Trace, [string]$Saves = 'fail')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $tmp = Join-Path $root 'build\tmp_tbc_spells_all.lua'
 New-Item -ItemType Directory -Force (Split-Path $tmp) | Out-Null
 $pre = if ($Only) { "pstfSpellsOnly = '$Only'`n" } else { '' }
 if ($Trace) { $pre += "pstfSpellsTrace = true`n" }
+$pre += "pstfSpellsSaves = '$Saves'`n"
 $pre + (Get-Content (Join-Path $root 'tests\ingame\spell_list.lua') -Raw) + "`n" + (Get-Content (Join-Path $root 'tests\ingame\tbc_spells_all.lua') -Raw) |
   Set-Content -Path $tmp -Encoding utf8
 $envs = @{PSTF_TEST_TICK = '1'; PSTF_FEEDBACK_LOG = '1'}  # feedback: PSTF_Casts, the proof of a cast

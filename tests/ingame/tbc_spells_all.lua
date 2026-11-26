@@ -58,6 +58,38 @@ local function nfx(id)
 	return n
 end
 local function hp(id) local _, _, h = PSTF_SpritePos(id, 1) return h or -1 end
+-- Outcome measurement (spell_expect.h compares it): derived stats (STATS.IDS) read through the engine's own
+-- GetAtOffset, the STATE bits, the status icon of the spell, HP; snapshotted every frame of the caster's turn, so the
+-- result is the state at the end of that turn (before the next creature's turn start steps its round clock).
+local kStats = {1, 2, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 24, 32, 36, 37, 38, 39, 40, 41, 42, 50, 51, 52, 73, 117, 145, 146, 151}
+local function snap(id, res)
+	local v = {}
+	for x in (PSTF_Stat(id, (table.unpack or unpack)(kStats)) or ''):gmatch('-?%d+') do v[#v + 1] = tonumber(x) end
+	local icon = 'none'
+	local _, list = PSTF_Status(id, 1)
+	for e in (list or ''):gmatch('[^;]+') do
+		local r, rounds, kind = e:match('^(%S+) %S+ %S+ r(%d+) (%a+)')
+		if r == res then icon = 'r' .. rounds .. ':' .. kind end
+	end
+	return {stats = v, state = PSTF_State(id, 1) or 0, hp = hp(id), icon = icon}
+end
+local function statDelta(a, b)
+	local out = {}
+	for i, st in ipairs(kStats) do
+		if a.stats[i] and b.stats[i] and a.stats[i] ~= b.stats[i] then out[#out + 1] = st .. ':' .. string.format('%+d', b.stats[i] - a.stats[i]) end
+	end
+	return #out > 0 and table.concat(out, ',') or '-'
+end
+local function newBits(a, b)
+	-- STATE bits the spell set (as unsigned 32-bit)
+	local x, y = math.floor(a.state) % 4294967296, math.floor(b.state) % 4294967296
+	local bits, v = 0, 1
+	for _ = 0, 31 do
+		if math.floor(y / v) % 2 == 1 and math.floor(x / v) % 2 == 0 then bits = bits + v end
+		v = v * 2
+	end
+	return string.format('%X', bits)
+end
 local function finish(turnOver)
 	local p = pending
 	local s = p.spell
@@ -77,8 +109,11 @@ local function finish(turnOver)
 		return
 	end
 	if not turnOver then verdict = 'stall' stalls = stalls + 1 end
-	local line = string.format('tbc_spells_all: %s %s used=%d cast=%d ticks=%d fx=%+d hp=%d name=%s', s[1], verdict, p.used and 1 or 0, cast, ticks,
-		nfx(who) - p.fx0, hp(who) - p.hp0, s[3])
+	local t1 = p.last or snap(who, s[1])
+	local c1 = p.lastc or snap(p.caster, s[1])
+	local line = string.format('tbc_spells_all: %s %s used=%d cast=%d ticks=%d fx=%+d hp=%d st=%s state=%s icon=%s chp=%d cst=%s name=%s', s[1], verdict,
+		p.used and 1 or 0, cast, ticks, nfx(who) - p.fx0, t1.hp - p.t0.hp, statDelta(p.t0, t1), newBits(p.t0, t1), t1.icon,
+		who ~= p.caster and c1.hp - p.c0.hp or 0, who ~= p.caster and statDelta(p.c0, c1) or '-', s[3])
 	PSTF_Note(line)
 	if pstfSpellsTrace then PSTF_Action(p.caster) end
 	if verdict == 'fizzle' then
@@ -105,20 +140,37 @@ local function cast(caster, s, retryOf)
 		bcs = 'SpellNoDec(Myself,' .. s[2] .. ')'
 	end
 	local who = hostile and foe or caster
+	-- a friendly spell's caster (its own target) starts hurt, so a heal shows in its HP
+	if not hostile then PSTF_SetHp(caster, 30) end
 	local cx, cy = PSTF_SpritePos(caster, 1)
 	local fx, fy = PSTF_SpritePos(foe, 1)
 	PSTF_Note(string.format('tbc_spells_all: %s cast by %X at %d,%d, foe %X at %d,%d (%.0f ft): %s', s[1], caster, cx, cy, foe, fx, fy,
 		math.sqrt(((fx - cx) / 16) ^ 2 + ((fy - cy) / 12) ^ 2), bcs))
-	pending = {spell = s, caster = caster, frame = frames, fx0 = nfx(who), hp0 = hp(who), used = false, idle = 0, ended = nil,
-		casts0 = PSTF_Casts(caster), retry = retryOf}
+	pending = {spell = s, caster = caster, who = who, frame = frames, fx0 = nfx(who), hp0 = hp(who), used = false, idle = 0, ended = nil,
+		casts0 = PSTF_Casts(caster), retry = retryOf, t0 = snap(who, s[1]), c0 = snap(caster, s[1])}
 	PSTF_EvalAs(caster, bcs, 1)
+end
+-- The measured foe fails every save (saves 30 vs a d20) and has no magic resistance, so each spell's full effect
+-- shows (pstfSpellsSaves = 'pass': saves 1, it always saves; tools\spell_suite.ps1 -Saves pass).
+local function rig(f)
+	local v = (pstfSpellsSaves == 'pass') and 1 or 30
+	-- one take-over (it clears the queue), the rest queued behind it
+	local first = 1
+	for _, st in ipairs({'SAVEVSDEATH', 'SAVEVSWANDS', 'SAVEVSPOLY', 'SAVEVSBREATH', 'SAVEVSSPELL'}) do
+		PSTF_EvalAs(f, 'ChangeStat(Myself,' .. st .. ',' .. v .. ',SET)', first)
+		first = 0
+	end
+	PSTF_EvalAs(f, 'ChangeStat(Myself,RESISTMAGIC,0,SET)', 0)
+	PSTF_SetHp(f, 1000, 1000)
 end
 local function pickFoe()
 	-- the Hive thug of the save, else the nearest living creature made hostile (a spell may have killed it)
 	local f = 0x180018
 	local x = PSTF_SpritePos(f, 1)
-	if x and x >= 0 and party(f) < 0 and hp(f) > 0 then PSTF_MakeEnemy(f) return f end
-	return PSTF_MakeEnemyNearest()
+	if x and x >= 0 and party(f) < 0 and hp(f) > 0 then PSTF_MakeEnemy(f) rig(f) return f end
+	local n = PSTF_MakeEnemyNearest()
+	if n and n ~= -1 then rig(n) end
+	return n
 end
 
 function pstfTestTick()
@@ -144,12 +196,13 @@ function pstfTestTick()
 	if frames == 6 then foe = pickFoe() end
 	if frames < 8 then return end
 	-- keep everyone standing: the suite measures the spells, not who wins
-	if foe and hp(foe) > 0 and hp(foe) < 500 then PSTF_SetHp(foe, 1000) end  -- Elemental Strike takes 200+
+	-- (not while a spell is measured: its HP change is the result)
+	if foe and not pending and hp(foe) > 0 and hp(foe) < 500 then PSTF_SetHp(foe, 1000, 1000) end  -- Elemental Strike takes 200+
 	-- the foe died anyway (a death spell, or between two frames) while others keep the fight going: a living one
 	if foe and hp(foe) <= 0 and not pending and frames % 30 == 0 then foe = pickFoe() end
 	for i = 0, 5 do
 		local p = PSTF_PartyId(i)
-		if p and p ~= -1 and hp(p) > 0 and hp(p) < 40 then PSTF_SetHp(p, 80) end
+		if p and p ~= -1 and hp(p) > 0 and hp(p) < 40 and not (pending and pending.caster == p) then PSTF_SetHp(p, 80) end
 	end
 	local id, _, _, used = PSTF_TbcCurrent()
 	if id == -1 then
@@ -167,6 +220,8 @@ function pstfTestTick()
 		turnFrame = frames
 	end
 	if pending and id == pending.caster then
+		pending.last = snap(pending.who, pending.spell[1])
+		if pending.who ~= pending.caster then pending.lastc = snap(pending.caster, pending.spell[1]) end
 		local _, _, _, u, acting = PSTF_TbcCurrent()
 		if u then pending.used = true end
 		local _, busy, path = PSTF_Action(pending.caster, 1)

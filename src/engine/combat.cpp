@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cstring>
 #include <map>
 #include <unordered_map>
@@ -291,8 +292,20 @@ void StepEffectClock(int32_t id, uint32_t ticks) {
       stamp0, R<uint32_t>(p + sym::kOffSpriteRegenStamp),
       static_cast<int>(now - R<uint32_t>(p + sym::kOffSpriteRegenStamp)), R<uint32_t>(p + 0x560), R<int16_t>(p + 4160),
       R<int16_t>(p + sym::kOffSpriteHp));
+  // One call per tick, as ProcessEffectList makes them in real time (lin 4E21F0 L1635: HandlePersistantEffects(this,
+  // 1) each tick the timer runs): a persistent effect's period counter counts calls, not ticks (Prayer's pulse,
+  // CPersistantEffectPrayer::AIUpdate lin 214660: word +32 counts down by one per call, reset to its period 75),
+  // so one call with 75 ticks ran its pulses 75 times too slowly. Durations (+40) take the ticks either way.
   using HandleFn = int64_t(__fastcall*)(uint64_t, uint32_t);
-  reinterpret_cast<HandleFn>(Va(sym::kRvaHandlePersist))(p, ticks);
+  for (uint32_t i = 0; i < ticks; ++i) reinterpret_cast<HandleFn>(Va(sym::kRvaHandlePersist))(p, 1);
+  W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
+}
+
+void PulsePersistent(int32_t id) {
+  const uint64_t p = g_clock ? LookupSprite(id) : 0;
+  if (!p) return;
+  using HandleFn = int64_t(__fastcall*)(uint64_t, uint32_t);
+  reinterpret_cast<HandleFn>(Va(sym::kRvaHandlePersist))(p, 0);  // 0 ticks: no duration passes, counters step once
   W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
 }
 
@@ -331,6 +344,7 @@ std::vector<ParentEffectView> ParentEffects(int32_t id) {
     v.delayed = type >= 6 && type <= 8;
     if (!v.timed && !v.delayed) return;
     v.key = eff;
+    v.opcode = static_cast<int>(R<uint32_t>(eff + sym::kOffEffOpcode));
     v.left = static_cast<int32_t>(R<uint32_t>(eff + sym::kOffEffTick) - now);
     v.parent_type = R<uint32_t>(eff + sym::kOffEffParentType);
     v.parent_flags = R<uint32_t>(eff + sym::kOffEffParentFlags);
@@ -898,9 +912,15 @@ std::vector<RollEvent> TakeRollEvents() {
   return out;
 }
 
-bool SetHpForTest(int32_t id, int hp) {
+bool SetHpForTest(int32_t id, int hp, int max_hp) {
   const uint64_t p = LookupSprite(id);
-  if (!p || hp < 1 || hp > 30000) return false;
+  if (!p || hp < 1 || hp > 30000 || max_hp > 30000) return false;
+  if (max_hp > 0) {
+    // base max HP (+0x576, next to current HP: CGameAIBase::ExecuteAction win 14016C8E0 L2729 copies it to +0x574
+    // on a full heal); the derived stats follow when the effects are re-evaluated, at once with +0x48BC
+    W<int16_t>(p + sym::kOffSpriteHp + 2, static_cast<int16_t>(max_hp));
+    W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
+  }
   W<int16_t>(p + sym::kOffSpriteHp, static_cast<int16_t>(hp));
   return true;
 }
@@ -954,6 +974,14 @@ int NumAttacksStat(int32_t id) {
   static const int ok = AllOk({sym::kRvaThac0Ac, sym::kRvaHalfAttack}) ? 1 : 0;
   const uint64_t p = ok ? LookupSprite(id) : 0;
   return p ? R<int16_t>(Stats(p) + sym::kOffStatNumAttacks) : -1;
+}
+
+int32_t DerivedStat(int32_t id, int stat) {
+  static const int ok = AllOk({sym::kRvaStatAt}) ? 1 : 0;
+  const uint64_t p = ok && stat >= 1 && stat <= 202 ? LookupSprite(id) : 0;
+  if (!p) return INT32_MIN;
+  return static_cast<int32_t>(
+      reinterpret_cast<int64_t(__fastcall*)(uint64_t, int16_t)>(Va(sym::kRvaStatAt))(Stats(p), static_cast<int16_t>(stat)));
 }
 
 void SetHalfAttackReal(int32_t id, bool real) {

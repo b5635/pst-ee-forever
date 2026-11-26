@@ -44,6 +44,10 @@ void ForgetOnsets();  // fight over
 // closer to their end, natural regeneration accrues `ticks`, persistent effects run `ticks` at once
 // (the engine's own catch-up, as CompressTime does), and the effect list is re-evaluated at once.
 void StepEffectClock(int32_t id, uint32_t ticks);
+// One persistent-effect update with no time passing (HandlePersistantEffects(0)): a persistent effect added during
+// a combatant's turn (Prayer's aura) makes its first pulse now, in the turn it was cast, as it would on the next
+// real-time tick.
+void PulsePersistent(int32_t id);
 
 // A held creature's AI tick: its effect list runs (spells cast on it land at once), as ProcessAI
 // would run it, without its scripts or actions. Call from the ProcessAI hook instead of ProcessAI.
@@ -67,6 +71,7 @@ struct ParentEffectView {
   bool timed = false;
   bool delayed = false;  // delayed types 6/7/8: not running yet (their parent names a spell on its way)
   uint64_t key = 0;      // identity of the effect while it lives (compare only)
+  int opcode = -1;
 };
 std::vector<ParentEffectView> ParentEffects(int32_t id);
 // The creature's colour glow effects (opcodes 8, 9, 52, 61, 353 tint screen; symbols.h "Colour effects").
@@ -206,6 +211,9 @@ bool GetCombatStats(int32_t id, CombatStats* out);
 // Attacks per round as the engine stores it (derived stat, short encoding: 0..5, 6..10 = 0.5..4.5);
 // -1 when there is no such creature.
 int NumAttacksStat(int32_t id);
+// Any derived stat (STATS.IDS number, the active stats: effects included) through the engine's own
+// CDerivedStats::GetAtOffset; INT32_MIN when there is no such creature or the symbol is off.
+int32_t DerivedStat(int32_t id, int stat);
 // Makes the engine's next half-attack slot real (true) or skipped (false) for this creature, so the
 // 1.5-APR alternation follows the creature's own turn-based rounds (symbols.h kRvaHalfAttack).
 void SetHalfAttackReal(int32_t id, bool real);
@@ -229,6 +237,6 @@ bool ActionBarScroll(int index);
 int ActionBarStateId();  // the state the bar is in (+0x1FE4)
 std::string ActiveFlags(int32_t id);
 std::string ScanBarStrings();                    // probe: resref-like strings in the button array
-bool SetHpForTest(int32_t id, int hp);          // test probe only (PSTF_SetHp)            // probe: sprite +0x3904..+0x3910 (Spell's target check)
+bool SetHpForTest(int32_t id, int hp, int max_hp = 0);  // max_hp > 0: base max HP too          // test probe only (PSTF_SetHp)            // probe: sprite +0x3904..+0x3910 (Spell's target check)
 
 }  // namespace pstf::engine

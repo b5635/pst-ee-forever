@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <climits>
 #include <cstdlib>
 #include <cstdio>
 #include <map>
@@ -142,6 +143,7 @@ struct State {
   FILE* clog = nullptr;
   std::map<int32_t, std::string> names;
   std::map<int32_t, int> hp_seen;
+  std::map<int32_t, int> persist_seen;  // persistent effects per combatant (a new one pulses at once)
   uint32_t turn_w0 = 0;
   uint16_t clog_action = 0xFFFF;
   bool follow = false;               // the camera keeps the active creature centred while it moves
@@ -412,6 +414,7 @@ void EndFight(const char* why) {
   g.proj_pace.Clear();
   g.in.clear();
   g.hp_seen.clear();
+  g.persist_seen.clear();
   g.current = -1;
   g.dir.reset();
   g.hold_current = false;
@@ -1518,7 +1521,7 @@ void FillDice(HudView* v) {
 std::vector<StatusEffect> StatusSources(int32_t id) {
   std::vector<StatusEffect> fx;
   for (const auto& e : engine::ParentEffects(id))
-    fx.push_back({e.parent_type, e.parent, e.parent_flags, e.left, e.timed, e.delayed, e.key});
+    fx.push_back({e.parent_type, e.parent, e.parent_flags, e.left, e.timed, e.delayed, e.key, e.opcode});
   for (const auto& a : engine::AttachedObjects(id)) fx.push_back({0, "", 0, a.left, true, false, a.key});
   return fx;
 }
@@ -1820,6 +1823,18 @@ void OnTick(uint64_t frame) {
   // Effect round clock: nobody's timed effects or natural regeneration move with world time.
   if (g.round_effects && engine::EffectClockInstalled() && dt > 0 && dt < 1000)
     for (int32_t id : g.in) engine::ShiftEffectClock(id, static_cast<int32_t>(dt));
+  // A persistent effect added in a fight (Prayer's aura, Detect Evil) is frozen with its owner until the owner's next
+  // turn start; real time would run its first update on the next tick: run it now, in the turn it was cast.
+  if (g.round_effects && engine::EffectClockInstalled())
+    for (int32_t id : g.in) {
+      const int n = engine::PersistentCount(id);
+      const auto it = g.persist_seen.find(id);
+      if (it != g.persist_seen.end() && n > it->second) {
+        engine::PulsePersistent(id);
+        Log("tbc: %s: new persistent effect (%d -> %d): first pulse now", Who(id).c_str(), it->second, n);
+      }
+      g.persist_seen[id] = engine::PersistentCount(id);
+    }
   if (g.music && !g.party.empty()) engine::KeepBattleMusic(g.party[0], 150);
   if (g.sight && !g.party.empty()) {
     std::vector<int32_t> foes;
@@ -2358,12 +2373,14 @@ int __cdecl LuaEvalAs(engine::LuaState* L) {
   engine::LuaPushBool(L, ok);
   return 1;
 }
-// PSTF_SetHp(id, hp): test helper (keeps a target alive across a spell suite) -> 1 when the engine took it.
+// PSTF_SetHp(id, hp[, max]): test helper (keeps a target alive across a spell suite) -> 1 when the engine took it.
+// The engine clamps current HP to max HP when it re-evaluates effects: max (> 0) sets the base max HP too.
 int __cdecl LuaSetHp(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
   const int hp = static_cast<int>(engine::LuaNumberArg(L, 2, -1));
-  const bool ok = engine::SetHpForTest(id, hp);
-  Log("lua: PSTF_SetHp(%X, %d) -> %d", static_cast<unsigned>(id), hp, ok ? 1 : 0);
+  const int max_hp = static_cast<int>(engine::LuaNumberArg(L, 3, 0));
+  const bool ok = engine::SetHpForTest(id, hp, max_hp);
+  Log("lua: PSTF_SetHp(%X, %d, max %d) -> %d", static_cast<unsigned>(id), hp, max_hp, ok ? 1 : 0);
   engine::LuaPushNumber(L, ok ? 1 : 0);
   return 1;
 }
@@ -2588,11 +2605,12 @@ int __cdecl LuaPose(engine::LuaState* L) {
   engine::LuaPushNumber(L, it == g.poses.end() ? -1 : it->second.Back());
   return 2;
 }
-// PSTF_State(id) -> general state of its derived stats (STATE.IDS bits), -1 none.
+// PSTF_State(id[, quiet]) -> general state of its derived stats (STATE.IDS bits), -1 none.
 int __cdecl LuaSpriteState(engine::LuaState* L) {
   const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
   const int64_t s = engine::SpriteState(id);
-  Log("lua: PSTF_State(%X) -> %llX", static_cast<unsigned>(id), static_cast<long long>(s));
+  if (engine::LuaNumberArg(L, 2, 0) == 0)  // 1 = quiet
+    Log("lua: PSTF_State(%X) -> %llX", static_cast<unsigned>(id), static_cast<long long>(s));
   engine::LuaPushNumber(L, static_cast<double>(s));
   return 1;
 }
@@ -2695,10 +2713,30 @@ int __cdecl LuaStatus(engine::LuaState* L) {
   const auto icons = StatusIconsOf(id, kStatusPortraitPx, kStatusIcons);
   std::string out;
   for (const auto& v : icons)
-    out += v.bam + " " + std::to_string(v.name_ref) + " r" + std::to_string(v.rounds) + (v.debuff ? " debuff" : " buff") +
+    out += v.parent + " " + v.bam + " " + std::to_string(v.name_ref) + " r" + std::to_string(v.rounds) + (v.debuff ? " debuff" : " buff") +
            " frame" + std::to_string(v.frame.size()) + ";";
-  Log("lua: PSTF_Status(%X) -> %zu: %s | effects %s", static_cast<unsigned>(id), icons.size(), out.c_str(), raw.c_str());
+  if (engine::LuaNumberArg(L, 2, 0) == 0)  // 1 = quiet
+    Log("lua: PSTF_Status(%X) -> %zu: %s | effects %s", static_cast<unsigned>(id), icons.size(), out.c_str(), raw.c_str());
   engine::LuaPushNumber(L, static_cast<double>(icons.size()));
+  engine::LuaPushString(L, out.c_str());  // "RES BAM strref rN buff|debuff frameK;" per icon
+  return 2;
+}
+
+// PSTF_Stat(id, stat[, stat...]) -> one string "v1,v2,..." of the derived stats (STATS.IDS number: 2 AC, 7 THAC0,
+// 9..13 saves, 32 LUCK, 36 STR, 42 CHR, ...) as the engine reads them (CDerivedStats::GetAtOffset), effects included;
+// -32768 = no such creature. One string, not one value per stat: a C function may push only LUA_MINSTACK (20)
+// values without lua_checkstack (27 corrupted the heap). Quiet (no log line): the spell suite reads it every frame.
+int __cdecl LuaStat(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  std::string out;
+  for (int i = 2; i < 66; ++i) {
+    const int st = static_cast<int>(engine::LuaNumberArg(L, i, 0));
+    if (st <= 0) break;
+    const int32_t v = engine::DerivedStat(id, st);
+    if (!out.empty()) out += ',';
+    out += std::to_string(v == INT32_MIN ? -32768 : v);
+  }
+  engine::LuaPushString(L, out.c_str());
   return 1;
 }
 
@@ -2895,6 +2933,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_HasEffect", &LuaHasEffect);
   dev::AddLuaFunction("PSTF_Objects", &LuaObjects);
   dev::AddLuaFunction("PSTF_Stats", &LuaStats);
+  dev::AddLuaFunction("PSTF_Stat", &LuaStat);
   dev::AddLuaFunction("PSTF_Bar", &LuaBar);
   dev::AddLuaFunction("PSTF_Near", &LuaNear);
   dev::AddLuaFunction("PSTF_BarSlots", &LuaBarSlots);

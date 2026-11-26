@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "modules/tbc/round_rules.h"
+
 namespace pstf::tbc {
 
 struct StatusEffect {
@@ -20,6 +22,7 @@ struct StatusEffect {
   bool timed = false;
   bool delayed = false;      // not running yet (a spell on its way)
   uint64_t key = 0;          // the effect's identity while it lives
+  int opcode = -1;           // -1 unknown (an attached spell object)
 };
 
 // Effects a spell adds through the engine's own code carry no parent: Submerge the Will's AC and saves
@@ -93,6 +96,9 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
     // flashes, sounds: not a status. A quarter round, not half: Globe of Invulnerability's sphere re-applies
     // its 3 s (45 tick) protections while the caster stands in it.
     if (e.left < round_ticks / 4) continue;
+    // a glow, colour pulse or sound only shows the spell: Blessing's glow (op 9, 32 s) outlasts its 30 s bless
+    // and made the icon a round too long; a spell with nothing but such effects left has no status
+    if (IsPresentationOpcode(e.opcode)) continue;
     auto it = std::find_if(src.begin(), src.end(), [&](const Src& s) { return s.res == e.parent; });
     if (it == src.end()) {
       src.push_back({e.parent, e.parent_type, e.parent_flags, e.left});

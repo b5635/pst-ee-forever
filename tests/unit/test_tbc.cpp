@@ -913,3 +913,21 @@ TEST_CASE("tbc projectiles: theirs move in their caster's turn, one born outside
   pace.Clear();
   CHECK(pace.free.empty());
 }
+
+TEST_CASE("tbc status: a glow that outlasts the buff does not stretch its icon, a glow alone is no status") {
+  // Blessing (SPPR101) as seen in game: op130 bless 450 ticks left, op9 glow 480 (tbc_spells_all, 2026-11-25)
+  StatusEffect bless, glow;
+  bless.parent_type = glow.parent_type = 1;
+  bless.parent = glow.parent = "SPPR101";
+  bless.timed = glow.timed = true;
+  bless.left = 450, bless.opcode = 130, bless.key = 1;
+  glow.left = 480, glow.opcode = 9, glow.key = 2;
+  auto icons = CollectStatus(1, {bless, glow}, 0, 75, nullptr, 8);
+  CHECK(icons.size() == 1 && icons[0].rounds == 6);
+  CHECK(CollectStatus(1, {glow}, 0, 75, nullptr, 8).empty());
+  // an attached spell object (opcode unknown) still counts
+  StatusEffect att = bless;
+  att.opcode = -1, att.left = 300;
+  icons = CollectStatus(1, {att}, 0, 75, nullptr, 8);
+  CHECK(icons.size() == 1 && icons[0].rounds == 4);
+}

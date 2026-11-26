@@ -2,7 +2,9 @@
 r"""Turns the all-spells suite's log lines into tests/unit/spell_results.h (one result per spell).
 
   python -I tools/spell_results.py [LOG]     LOG = the game's pst_forever.log after tools\spell_suite.ps1
-Lines: "tbc_spells_all: SPWI119 ok used=1 cast=1 ticks=37 fx=+6 hp=0 name=Submerge the Will" (the last run's).
+Lines: "tbc_spells_all: SPWI119 ok used=1 cast=1 ticks=37 fx=+6 hp=0 st=2:-4,9:+1 state=0 icon=r12:buff chp=0 cst=-
+name=Submerge the Will" (the last run's): st/cst = derived stat changes (STATS.IDS:delta) of the target / the caster,
+state = STATE bits the spell set, icon = the spell's status icon at the end of the caster's turn, chp = caster HP.
 """
 import os, re, sys
 
@@ -13,7 +15,7 @@ LOG = r"C:\GOG Games\Planescape Torment - Enhanced Edition\pst_forever\logs\pst_
 def main(a):
   log = a[0] if a else LOG
   rows = {}
-  pat = re.compile(r"tbc_spells_all: (SP(?:WI|PR)\d{3}) (ok|fizzle|stall) used=(\d) cast=(-?\d+) ticks=(\d+) fx=([+-]\d+) hp=(-?\d+) name=(.*)$")
+  pat = re.compile(r"tbc_spells_all: (SP(?:WI|PR)\d{3}) (ok|fizzle|stall) used=(\d) cast=(-?\d+) ticks=(\d+) fx=([+-]\d+) hp=(-?\d+) st=(\S+) state=([0-9A-F]+) icon=(\S+) chp=(-?\d+) cst=(\S+) name=(.*)$")
   for line in open(log, encoding="latin1"):
     m = pat.search(line.rstrip())
     if m:
@@ -24,11 +26,16 @@ def main(a):
        "#pragma once", "", "namespace pstf::spellresults {",
        "struct Result {", "  const char* res;", "  const char* verdict;  // ok | fizzle | stall",
        "  int ticks;            // frames from the cast to the end of the caster's turn",
-       "  int fx;               // timed effects added on the target", "  int hp;               // HP change of the target", "};",
+       "  int fx;               // timed effects added on the target", "  int hp;               // HP change of the target",
+       "  const char* stats;    // derived stat changes of the target, \"STAT:+N,...\" (STATS.IDS), \"-\" none",
+       "  unsigned state;       // STATE.IDS bits the spell set on the target",
+       "  const char* icon;     // its status icon on the target: \"rN:buff\", \"rN:debuff\" or \"none\"",
+       "  int caster_hp;        // HP change of the caster (target spells)",
+       "  const char* caster_stats;", "};",
        "inline constexpr Result kResults[] = {"]
   for r in sorted(rows):
-    res, verdict, _used, _cast, ticks, fx, hp, _name = rows[r]
-    h.append('    {"%s", "%s", %s, %d, %s},' % (res, verdict, ticks, int(fx), hp))
+    res, verdict, _used, _cast, ticks, fx, hp, st, state, icon, chp, cst, _name = rows[r]
+    h.append('    {"%s", "%s", %s, %d, %s, "%s", 0x%sU, "%s", %s, "%s"},' % (res, verdict, ticks, int(fx), hp, st, state, icon, chp, cst))
   h += ["};", "}  // namespace pstf::spellresults"]
   open(os.path.join(ROOT, "tests", "unit", "spell_results.h"), "w", newline="\n").write("\n".join(h) + "\n")
   print(f"spell_results: {len(rows)} spells")
