@@ -622,7 +622,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
       const std::string t = QueueText(q.data(), static_cast<int>(q.size()), &lost);
       const Combatant* pc0 = g.dir->Find(prev);
       const bool party0 = Contains(g.party, prev) || (pc0 && pc0->r.side == Side::Party);
-      if (!g.keep_current && !(g.keep_queue && !party0 && prev != g.nudged && KeepCurrentAtTurnEnd(q[0])) &&
+      if (!g.keep_current && !(g.keep_queue && !party0 && KeepCurrentAtTurnEnd(q[0])) &&
           !(g.keep_queue && !party0 && IsCastAction(q[0]) && engine::CurrentSpell(prev).empty() &&
             engine::CurrentActionDone(prev) == 0) &&
           !(g.keep_queue && KeepQueueAtTurnEnd(party0, prev == g.nudged, q.data(), static_cast<int>(q.size())))) {
@@ -645,7 +645,8 @@ void OnTurnChange(int32_t prev, int32_t next) {
     const Combatant* pc = g.dir->Find(prev);
     const bool party = Contains(g.party, prev) || (pc && pc->r.side == Side::Party);
     // its script's bookkeeping (IncrementGlobal) became the running action as the turn ended: it has not run yet
-    if (g.keep_queue && !party && prev != g.nudged && !q.empty() && KeepCurrentAtTurnEnd(q[0])) g.keep_current = true;
+    // (after a nudge too: our order is an Attack, a pending IncrementGlobal is its script's)
+    if (g.keep_queue && !party && !q.empty() && KeepCurrentAtTurnEnd(q[0])) g.keep_current = true;
     // its next spell is the running action but not cast yet (the turn ended when the first went off)
     if (g.keep_queue && !party && !q.empty() && IsCastAction(q[0]) && engine::CurrentSpell(prev).empty() &&
         engine::CurrentActionDone(prev) == 0)

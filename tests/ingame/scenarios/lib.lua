@@ -280,8 +280,10 @@ function S.chainCaster(o)
 		end
 	end
 	S.steps[60] = function()
-		PSTF_SetHp(id, o.hp or 3000, o.hp or 3000)
-		for i = 0, 7 do local p = PSTF_PartyId(i) if p and p ~= -1 then PSTF_SetHp(p, 400, 400) end end
+		if o.hp ~= -1 then PSTF_SetHp(id, o.hp or 3000, o.hp or 3000) end
+		if o.partyHp ~= false then
+			for i = 0, 7 do local p = PSTF_PartyId(i) if p and p ~= -1 then PSTF_SetHp(p, 400, 400) end end
+		end
 		if o.setup then o.setup(id) end
 		if o.hostile ~= false then PSTF_MakeEnemy(id) end
 		started = true
@@ -390,7 +392,8 @@ end
 function S.brawl(o)
 	if o.provoke == nil then o.provoke = true end
 	local ran, over, most, rounds = false, 0, 0, 0
-	o.hp = o.hp or 0
+	o.hp = o.hp or -1          -- its own HP: the fight must be able to end
+	if o.partyHp == nil then o.partyHp = false end
 	o.maxFrames = o.maxFrames or 9000
 	o.check = function(id)
 		local cur, round = PSTF_TbcCurrent()
@@ -402,6 +405,5 @@ function S.brawl(o)
 		elseif ran then over = over + 1 end
 		return ran and over > 90, string.format('fight over (%d rounds, up to %d combatants)', rounds, most)
 	end
-	if o.hp == 0 then o.hp = nil end
 	S.plot(o)
 end

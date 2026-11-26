@@ -137,7 +137,9 @@ inline bool KeepCurrentAtTurnEnd(uint16_t current) {
 inline bool SkipLeadWait(const uint16_t* q, int n) {
   if (n < 2 || !IsWaitAction(q[0])) return false;
   for (int i = 1; i < n; ++i)
-    if (q[i] != 0 && !IsWaitAction(q[i])) return !IsMoveAction(q[i]);  // a patrol route (Wait; MoveToPoint ...): nudged
+    if (q[i] != 0 && !IsWaitAction(q[i]) && !IsIdleAction(q[i]))
+      return !IsMoveAction(q[i]);  // a patrol route (Wait; MoveToPoint ...): nudged
+  // only chatter behind it (Giltspur: WaitRandom; FloatMessage; PlaySequence; Continue): an ambient routine, nudged
   return false;
 }
 
@@ -307,7 +309,9 @@ struct Economy {
     } else {
       // A walk or flight in hand is not idling (its path search can take a few ticks: Berrog's RunAwayFromNoLeaveArea
       // had not stepped by tick 15 and was turned into an attack); it gets kAiThinkTicks more to start moving.
-      if (!did_something && !nudged && total >= kAiThinkTicks && !(walk_action && total < 2 * kAiThinkTicks)) {
+      // So is a cosmetic action still playing (0403MAGE's step 4: PlaySequence, then its ForceSpell).
+      if (!did_something && !nudged && total >= kAiThinkTicks && !(walk_action && total < 2 * kAiThinkTicks) &&
+          !(IsFreeScriptAction(action) && total < 3 * kAiThinkTicks)) {
         nudged = true;
         out.nudge = true;
         idle = 0;

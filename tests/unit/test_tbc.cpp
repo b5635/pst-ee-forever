@@ -722,6 +722,8 @@ TEST_CASE("tbc script queue: an AI keeps its sequence across turns, a lead Wait 
   CHECK(!SkipLeadWait(waits, 2));
   const uint16_t patrol[] = {63, 23, 143, 63, 23};  // Jumble's pre-fight route: not his fight script
   CHECK(!SkipLeadWait(patrol, 5));
+  const uint16_t chatter[] = {368, 425, 454, 36};  // Giltspur's WaitRandom; FloatMessage; PlaySequence; Continue
+  CHECK(!SkipLeadWait(chatter, 4));
   const uint16_t act[] = {31, 63};
   CHECK(!SkipLeadWait(act, 2));
   // the step counter after its spell is bookkeeping, not a second action (no "No action left" stop)
@@ -1379,5 +1381,14 @@ TEST_CASE("tbc economy: a flight still searching its path is not nudged at once"
   CHECK(!nudge);
   for (int i = 0; i < 15; ++i) nudge = nudge || e.Feed(1, 0, false, 355).nudge;  // still not moving at 30 ticks
   CHECK(nudge);
+}
+
+TEST_CASE("tbc economy: a cosmetic action still playing is not nudged at once") {
+  Economy e(31.0, 51, false);
+  bool nudge = false;
+  for (int i = 0; i < 30; ++i) nudge = nudge || e.Feed(1, 0, false, 454).nudge;  // PlaySequence before its ForceSpell
+  CHECK(!nudge);
+  for (int i = 0; i < 20; ++i) nudge = nudge || e.Feed(1, 0, false, 454).nudge;
+  CHECK(nudge);  // a sequence that never ends still gets the attack
 }
 
