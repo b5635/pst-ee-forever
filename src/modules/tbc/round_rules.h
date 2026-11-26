@@ -27,12 +27,14 @@ inline bool OnsetResolvesNow(int32_t left) {
   return !OnFiveSecondStep(left);
 }
 
-// PST:EE opcodes that only show or play something (glows, colour pulses, sounds, BAM/VVC plays): a
-// delayed one of these is presentation and plays on world time, never deferred to a later turn
-// (Aid's sparkle SP21SAID from the Whispering Flask is op369 with a 5-second delay).
+// PST:EE opcodes that only show or play something (glows, colour changes and pulses, sounds, BAM/VVC plays, the
+// animation override of 138, the camera move 347, the screen tint 353): a delayed one of these is presentation and
+// plays on world time, never deferred to a later turn (Aid's sparkle SP21SAID from the Whispering Flask is op369
+// with a 5-second delay); none of them is a status (Black-Barbed Shield's 3 s tint is no icon round).
 inline bool IsPresentationOpcode(int op) {
   switch (op) {
-    case 9: case 50: case 51: case 52: case 61: case 140: case 141: case 174: case 215:
+    case 7: case 8: case 9: case 50: case 51: case 52: case 61: case 138: case 140: case 141: case 174: case 215:
+    case 347: case 353:
     case 369: case 370: case 371: case 372: case 373:
       return true;
     default:
@@ -87,6 +89,53 @@ inline void SyncSpellOnsets(OnsetSeen* v, int n) {
     }
   }
 }
+
+// A creature that cannot act loses its turn at once (after its round clock stepped: a sleep that ends at this turn
+// start does not cost it): STATE.IDS sleeping 0x1 (Sleep, Blacksphere op 39), stunned 0x8 (op 45), helpless 0x20
+// (paralysed op 109: Chromatic Orb, Pacify, Cone of Cold; held op 185), frozen 0x40, stone 0x80. Without this the turn
+// ran out the AI's idle wait, and a party member's turn waited for an End Turn the player had to find. Panic,
+// confusion and berserk act on their own (the engine's AI moves them) and keep their turn; dead is not a turn.
+constexpr uint32_t kLoseTurnStates = 0x1 | 0x8 | 0x20 | 0x40 | 0x80;
+inline bool LosesTurn(int64_t state) {
+  return state >= 0 && (static_cast<uint32_t>(state) & 0x800) == 0 && (static_cast<uint32_t>(state) & kLoseTurnStates) != 0;
+}
+
+// The delayed effects already classified (OnsetKind / SyncSpellOnsets), by effect address. An entry lives only
+// while its effect is still pending on its owner: the engine frees effects and reuses their memory, and a stale
+// entry gave a new effect the old one's kind (Submerge the Will's 29-tick shield was round-clocked to its caster's
+// next turn: tbc_decay.lua). Known() also checks opcode and source, for a reuse within one pass.
+struct OnsetBook {
+  struct Entry {
+    int kind = 0;
+    int32_t owner = -1;
+    int opcode = -1;
+    uint64_t source = 0;
+  };
+  std::map<uint64_t, Entry> e;
+  // the effect at `addr` was classified as this one; a different effect there forgets the old entry
+  bool Known(uint64_t addr, int32_t owner, int opcode, uint64_t source) {
+    const auto it = e.find(addr);
+    if (it == e.end()) return false;
+    if (it->second.owner == owner && it->second.opcode == opcode && it->second.source == source) return true;
+    e.erase(it);
+    return false;
+  }
+  void Add(uint64_t addr, int kind, int32_t owner, int opcode, uint64_t source) { e[addr] = {kind, owner, opcode, source}; }
+  // the owner's delayed effects now (sorted or not): its other entries ran or were removed
+  void Prune(int32_t owner, const uint64_t* pending, int n) {
+    for (auto it = e.begin(); it != e.end();) {
+      bool live = false;
+      for (int i = 0; i < n && !live; ++i) live = pending[i] == it->first;
+      if (it->second.owner == owner && !live) it = e.erase(it);
+      else ++it;
+    }
+  }
+  int Kind(uint64_t addr) const {  // -1 unknown
+    const auto it = e.find(addr);
+    return it == e.end() ? -1 : it->second.kind;
+  }
+  void Clear() { e.clear(); }
+};
 
 // The casting aura: after a cast starts, CGameSprite::DoAction counts the caster's AI ticks (lin 4A26A0 l.39-52,
 // win 1404079D0: word +0x46A8) and clears it (-1) at ROUND_LENGTH unless a cast still runs (+0x46B0); SpellPST

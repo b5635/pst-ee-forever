@@ -514,6 +514,26 @@ bool CastState(int32_t id, int32_t* in_progress, int16_t* counter, bool* running
   return true;
 }
 
+// The CSpell being cast: CGameSprite::SpellPST lin 4CDDC0 l.202 `this + 2300` (+0x47E0 on Linux), win 14042E632
+// `mov rdi, [rbx+47F8h]` right after the in-progress test (+0x46AC, Linux +0x4694: Windows is +0x18 here);
+// CRes::GetResRef lin 643910 / win 14047E9E0: the name pointer at CRes +8.
+std::string CurrentSpell(int32_t id) {
+  const uint64_t p = Lookup(id);
+  if (!p) return "";
+  const uint64_t res = R<uint64_t>(p + 0x47F8);
+  if (!PlausiblePtr(res)) return "";
+  const uint64_t name = R<uint64_t>(res + 8);  // a char*: any alignment
+  if (name < 0x10000 || name >= 0x00007FFFFFFF0000ull) return "";
+  std::string out;
+  for (int i = 0; i < 8; ++i) {
+    const char c = R<char>(name + i);
+    if (!c) break;
+    if (c < 0x20 || c > 0x7E) return "";
+    out += c;
+  }
+  return out;
+}
+
 bool SetCastAura(int32_t id, int16_t counter) {
   const uint64_t p = Lookup(id);
   if (!p) return false;

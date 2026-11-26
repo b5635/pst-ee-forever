@@ -931,3 +931,146 @@ TEST_CASE("tbc status: a glow that outlasts the buff does not stretch its icon, 
   icons = CollectStatus(1, {att}, 0, 75, nullptr, 8);
   CHECK(icons.size() == 1 && icons[0].rounds == 4);
 }
+
+TEST_CASE("tbc status: Halo's parentless AC takes the spell whose glow arrived with it, not an old one") {
+  using namespace pstf::tbc;
+  OrphanMap m;
+  // first look: an old Blessing (parented, timed) and nothing else: nothing is "arriving"
+  std::vector<StatusEffect> fx{{1, "SPPR101", 0, 300, true, false, 0x10}};
+  AttributeOrphans(0x180018, &fx, 1000, &m);
+  // Halo of Lesser Revelation lands (projectile 259): its op9 glow (parent SPPR105, 45 ticks) and the AC effect
+  // the projectile builds with no parent, 20 s per level
+  fx = {{1, "SPPR101", 0, 290, true, false, 0x10}, {1, "SPPR105", 0, 45, true, false, 0x50, 9},
+        {0, "", 0, 4200, true, false, 0x58}};
+  AttributeOrphans(0x180018, &fx, 1010, &m);
+  CHECK(fx[2].parent == "SPPR105");
+  // a creature seen for the first time with an orphan and a parented effect: no guess
+  std::vector<StatusEffect> first{{1, "SPPR101", 0, 300, true, false, 0x70}, {0, "", 0, 900, true, false, 0x78}};
+  AttributeOrphans(0x190019, &first, 1010, &m);
+  CHECK(first[1].parent.empty());
+}
+
+TEST_CASE("tbc turns: sleeping, stunned, paralysed, held, frozen or stone creatures lose their turn") {
+  // STATE bits as the all-spells suite saw them: Chromatic Orb 0x20 (paralyse), Horror 0x4, Confusion 0x80000000
+  CHECK(LosesTurn(0x20));
+  CHECK(LosesTurn(0x1));
+  CHECK(LosesTurn(0x8));
+  CHECK(LosesTurn(0x40) && LosesTurn(0x80));
+  CHECK(!LosesTurn(0x4));          // panic: the engine's AI runs away on its turn
+  CHECK(!LosesTurn(0x80000000LL)); // confused: acts on its own
+  CHECK(!LosesTurn(0x2));          // berserk
+  CHECK(!LosesTurn(0x40000));      // blind: acts with penalties
+  CHECK(!LosesTurn(0x800 | 0x20)); // dead
+  CHECK(!LosesTurn(0) && !LosesTurn(-1));
+}
+
+TEST_CASE("tbc status: in a fight the drain frame keeps the length from the cast and never refills between turns") {
+  // A 17-round buff (1275 ticks) cast in a fight: the round clock holds effect time while the world clock runs, so
+  // `left` stays 1275 through the cast turn and other creatures' turns, then drops 75 at each owner turn start.
+  StatusSpans spans;
+  std::vector<StatusEffect> fx{{1, "SPWI216", 0, 1275, true, false, 1, 0}};
+  auto icons = CollectStatus(9, fx, 5000, 75, &spans, 8);
+  CHECK(icons.size() == 1 && icons[0].rounds == 17 && icons[0].share == 1.0);
+  for (int64_t now = 5001; now < 5400; now += 7) {  // other turns: world time runs, left does not
+    icons = CollectStatus(9, fx, now, 75, &spans, 8);
+    CHECK(icons[0].share == 1.0 && icons[0].rounds == 17);
+  }
+  fx[0].left = 1200;  // the owner's turn start
+  icons = CollectStatus(9, fx, 5400, 75, &spans, 8);
+  CHECK(icons[0].rounds == 16 && std::abs(icons[0].share - 1200.0 / 1275.0) < 1e-9);
+  for (int64_t now = 5401; now < 5800; now += 7) {  // and it stays there, no refill
+    icons = CollectStatus(9, fx, now, 75, &spans, 8);
+    CHECK(icons[0].rounds == 16 && std::abs(icons[0].share - 1200.0 / 1275.0) < 1e-9);
+  }
+  // ten rounds on: 7 of 17 left
+  fx[0].left = 525;
+  icons = CollectStatus(9, fx, 9000, 75, &spans, 8);
+  CHECK(icons[0].rounds == 7 && std::abs(icons[0].share - 525.0 / 1275.0) < 1e-9);
+  // a recast: the time left goes up, the span starts again from the new length
+  fx[0].left = 1275;
+  icons = CollectStatus(9, fx, 9100, 75, &spans, 8);
+  CHECK(icons[0].rounds == 17 && icons[0].share == 1.0);
+}
+
+TEST_CASE("tbc onsets: a classified delayed effect is forgotten when it runs, so reused memory is classified anew") {
+  // tbc_decay.lua: Submerge the Will's delayed op375 (29 ticks: resolves now) landed at an address where an earlier
+  // round-clocked effect had lived; the stale entry round-clocked the shield to its caster's next turn.
+  OnsetBook b;
+  const uint64_t addr = 0x7F00AA00, tno = 0x860086, sub = 0x393131495750ull, old = 0x333031525050ull;
+  b.Add(addr, 0, tno, 12, old);       // an earlier damage step, round-clocked
+  CHECK(b.Known(addr, tno, 12, old) && b.Kind(addr) == 0);
+  uint64_t none[1] = {0};
+  b.Prune(tno, none, 0);              // it ran: no longer pending on its owner
+  CHECK(b.Kind(addr) == -1);
+  CHECK(!b.Known(addr, tno, 375, sub));  // the new effect at that address is new
+  b.Add(addr, 1, tno, 375, sub);
+  CHECK(b.Kind(addr) == 1);
+  // a reuse within one pass (no prune between): another opcode or source is not the same effect
+  CHECK(!b.Known(addr, tno, 12, old) && b.Kind(addr) == -1);
+  // another creature's prune leaves this creature's entries
+  b.Add(addr, 1, tno, 375, sub);
+  b.Prune(0x180018, none, 0);
+  CHECK(b.Kind(addr) == 1);
+  uint64_t live[1] = {addr};
+  b.Prune(tno, live, 1);
+  CHECK(b.Kind(addr) == 1);
+}
+
+TEST_CASE("tbc status: an orphan the creature already had does not take a newly arriving spell") {
+  // the all-spells suite: Blindness (60 s) showed 50 rounds: a 3750-tick parentless leftover on the foe took it
+  OrphanMap m;
+  std::vector<StatusEffect> fx{{0, "", 0, 3750, true, false, 0x90}};
+  AttributeOrphans(0x180018, &fx, 1000, &m);  // first look: the leftover
+  fx = {{0, "", 0, 3750, true, false, 0x90}, {1, "SPWI115", 0x400, 900, true, false, 0x98, 74}};
+  AttributeOrphans(0x180018, &fx, 1020, &m);  // Blindness arrives
+  CHECK(fx[0].parent.empty());
+  const auto icons = CollectStatus(0x180018, fx, 1020, 75, nullptr, 8);
+  CHECK(icons.size() == 1 && icons[0].parent == "SPWI115" && icons[0].rounds == 12);
+}
+
+TEST_CASE("tbc status: parentless effects with no parented one beside them take the spell being cast") {
+  // probe icons.lua: Halo of Lesser Revelation puts op9 + op0 on the foe, both parentless; Black-Barbed Shield an
+  // op0 on its caster. The spell being cast (CGameSprite +0x47F8) is their parent.
+  OrphanMap m;
+  std::vector<StatusEffect> fx;
+  AttributeOrphans(0x180018, &fx, 1000, &m);  // a look before
+  m.NoteCast("SPPR105", 0x400, 1005);
+  fx = {{0, "", 0, 6300, true, false, 0xA0, 9}, {0, "", 0, 6300, true, false, 0xA8, 0}};
+  AttributeOrphans(0x180018, &fx, 1020, &m);
+  CHECK(fx[0].parent == "SPPR105" && fx[1].parent == "SPPR105" && (fx[1].parent_flags & 0x400));
+  auto icons = CollectStatus(0x180018, fx, 1020, 75, nullptr, 8);
+  CHECK(icons.size() == 1 && icons[0].debuff && icons[0].rounds == 84);
+  // long after the cast a new orphan is not guessed
+  std::vector<StatusEffect> late{{0, "", 0, 900, true, false, 0xB0, 0}};
+  AttributeOrphans(0x180018, &late, 1500, &m);
+  CHECK(late[0].parent.empty());
+}
+
+TEST_CASE("tbc: a turn does not end before its spell has finished for this round") {
+  using namespace pstf::tbc;
+  SpellWaitIn in;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::None);  // nothing cast: ends at once
+  // still in its casting animation, however long (Rune of Torment, speed 9): no 120-tick cut any more
+  in.casting = true, in.cast_this_turn = true, in.since_action = 0, in.waited = 200;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Casting);
+  // the cast is over: a second for its projectile to appear
+  in.casting = false, in.since_action = 10;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Appearing);
+  in.since_action = kSpellAppearTicks;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::None);
+  // flying, then this round's pulse of a landed cloud, then an onset 100 ticks after landing, past 120 ticks waited
+  in.flying = 1;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Flying);
+  in.flying = 0, in.lingering = 1, in.waited = 150;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Pulsing);
+  in.lingering = 0, in.onsets = 1, in.waited = 230;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Landing);
+  // a hung spell: 4 rounds after the end was asked, the turn ends anyway
+  in.waited = kSpellHoldCapTicks;
+  CHECK(kSpellHoldCapTicks == 300);
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Capped);
+  // a melee swing has no projectile to wait for
+  SpellWaitIn melee;
+  melee.since_action = 3;
+  CHECK(TurnWaitsForSpell(melee) == SpellWait::None);
+}

@@ -3,7 +3,10 @@
 // cast by the engine in a turn-based fight by the all-spells suite (tests/unit/spell_results.h,
 // tools\spell_suite.ps1), and the round-clock rules classify its delayed effects. A new or changed spell (a mod)
 // fails here until tools/spell_list.py and the suite have been run again.
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <cstring>
 #include <vector>
 
@@ -153,4 +156,127 @@ TEST_CASE("spells: a timed buff's icon shows the rounds the round clock really r
     while (left > 0) left -= tbc::kRoundTicks5s, ++steps;
     CHECK(steps == icons[0].rounds);
   }
+}
+
+namespace {
+// Spells the generic outcome checks below cannot judge, each with why (and where it is checked or open instead,
+// docs/SPELL_TEST_PLAN.md section 4).
+struct Skip {
+  const char* res;
+  const char* why;
+};
+constexpr Skip kOutcomeSkips[] = {
+    {"SPWI307", "Hold Undead: the suite's save has no undead to hold"},
+    {"SPWI108", "Pacify: nothing on a hostile Hive thug, in real time too (vanilla; probe pacify, 2026-11-25)"},
+    {"SPWI601", "Antimagic Shell: strips the caster's own magic, its icon carrier too (G test)"},
+    {"SPWI603", "Howl of Pandemonium: the stun comes from its projectile with no parent: no icon (open)"},
+    {"SPWI705", "Stygian Ice Storm: its projectile adds a 30 s confusion: the icon outlasts the SPL's paralyse"},
+    {"SPWI218", "Infernal Orb: needs the caster's attack roll, a miss does nothing"},
+    {"SPWI901", "Celestial Host: no damage on the suite's foe (open: hardcoded projectile 254)"},
+    {"SPWI902", "Conflagration: nothing on the suite's foe (open: attached flames, projectile 270)"},
+};
+bool Skipped(const char* res) {
+  for (const auto& k : kOutcomeSkips)
+    if (std::strcmp(k.res, res) == 0) return true;
+  return false;
+}
+// The measured change of one derived stat in a result's "STAT:+N,..." list (0 when not listed).
+int StatDelta(const char* list, int st) {
+  if (!list) return 0;
+  const std::string s(list);
+  const std::string key = std::to_string(st) + ":";
+  size_t p = 0;
+  while ((p = s.find(key, p)) != std::string::npos) {
+    if (p == 0 || s[p - 1] == ',') return std::atoi(s.c_str() + p + key.size());
+    p += key.size();
+  }
+  return 0;
+}
+int IconRounds(const char* icon) { return icon && icon[0] == 'r' ? std::atoi(icon + 1) : 0; }
+}  // namespace
+
+TEST_CASE("spells: each spell's own timed effects are on at the end of its cast turn, with their icon") {
+  // From the SPL (spell_table.h, the suite caster's header) and the suite's measurement at the end of the caster's
+  // turn (spell_results.h; the foe always fails its saves): a timed effect (timing 0) on the spell's target shows as
+  // the engine's stat or STATE bit, and the spell's status icon shows ceil(duration / 5 s) rounds (the round clock
+  // steps 75 ticks per turn start). Hardcoded projectiles' own effects are not in the table: only what the SPL says.
+  struct Want {
+    const char* res;
+    std::string what;
+  };
+  // Durations the engine computes itself (the SPL field is not the duration), checked by their own tests:
+  //   SPPR104 Detect Evil (op 376: 50 s + 25 s/level, 5 min cap), SPWI104 Fist of Iron (op 382: 5 s + 5 s/level).
+  auto engine_duration = [](const char* res) {
+    return std::strcmp(res, "SPPR104") == 0 || std::strcmp(res, "SPWI104") == 0;
+  };
+  std::vector<Want> bad;
+  int checked = 0;
+  for (const auto& s : spelltable::kSpells) {
+    const auto* r = ResultOf(s.res);
+    if (!r || std::strcmp(r->verdict, "ok") != 0 || !r->stats) continue;
+    if (engine_duration(s.res) || Skipped(s.res)) continue;
+    uint32_t longest = 0;
+    int luck_rows = 0;
+    std::vector<int> rounds_ok;  // a spell with several rows of one opcode applies one of them (probability ranges)
+    for (int i = s.first; i < s.first + s.count; ++i) {
+      const auto& f = spelltable::kFx[i];
+      if (f.timing != 0 || f.duration == 0 || tbc::IsPresentationOpcode(f.op)) continue;
+      if (f.target != 1 && f.target != 2) continue;  // self / preset target: the measured creature
+      longest = std::max(longest, f.duration);
+      rounds_ok.push_back(static_cast<int>((f.duration * 15 + tbc::kRoundTicks5s - 1) / tbc::kRoundTicks5s));
+      uint32_t bit = 0;
+      switch (f.op) {
+        case 74: bit = 0x40000; break;       // blind
+        case 24: bit = 0x4; break;           // horror: panic
+        case 128: bit = 0x80000000u; break;  // confusion
+        case 109: bit = 0x20; break;         // paralyse: helpless
+        case 39: bit = 0x1; break;           // sleep
+        case 130: bit = 0x800000; break;     // bless
+        case 129: bit = 0x8000000; break;    // aid
+        case 22: ++luck_rows; break;         // luck: one of its rows applies
+        default: break;
+      }
+      if (bit && (r->state & bit) == 0) bad.push_back({s.res, "op " + std::to_string(f.op) + " STATE bit missing"});
+    }
+    if (luck_rows) {
+      const int d = StatDelta(r->stats, 32);
+      if (d < 2 || d > 8) bad.push_back({s.res, "luck +" + std::to_string(d)});
+    }
+    if (longest) {
+      ++checked;
+      const int want = static_cast<int>((longest * 15 + tbc::kRoundTicks5s - 1) / tbc::kRoundTicks5s);
+      const bool any = std::find(rounds_ok.begin(), rounds_ok.end(), IconRounds(r->icon)) != rounds_ok.end();
+      if (IconRounds(r->icon) != want && !any)
+        bad.push_back({s.res, std::string("icon ") + r->icon + ", want r" + std::to_string(want)});
+    }
+  }
+  for (const auto& b : bad) std::printf("  %s (%s)\n", b.res, b.what.c_str());
+  if (checked < 20) std::printf("  outcome checks: only %d spells with a timed effect on their target\n", checked);
+  CHECK(bad.empty());
+  CHECK(checked >= 19);  // 19 on 2026-11-25 (93 spells, 8 skips, 2 engine durations): fewer = rows lost
+}
+
+TEST_CASE("spells: damage lands in the caster's turn, heals heal") {
+  // op 12 (damage) on the target, not delayed past a round: the foe's HP is lower at the end of the cast turn; op 17
+  // (heal) on a friendly spell's caster (who starts at 30 HP): higher.
+  std::vector<std::string> bad;
+  for (const auto& s : spelltable::kSpells) {
+    const auto* r = ResultOf(s.res);
+    if (!r || std::strcmp(r->verdict, "ok") != 0 || !r->stats) continue;
+    // Raise Dead targets a dead creature (header target 3), not its caster; Missile of Patience waits for a click
+    if (s.target == 3 || std::strcmp(s.res, "SPWI113") == 0 || Skipped(s.res)) continue;
+    bool dmg = false, heal = false;
+    for (int i = s.first; i < s.first + s.count; ++i) {
+      const auto& f = spelltable::kFx[i];
+      if (f.target != 2 && f.target != 1) continue;
+      const bool now = f.timing == 1 || f.timing == 0 ||
+                       (f.timing == 4 && tbc::OnsetKind(static_cast<int32_t>(f.duration) - 1, f.op) != 0);
+      if (f.op == 12 && now && s.hostile) dmg = true;
+      if (f.op == 17 && now && !s.hostile) heal = true;
+    }
+    if (dmg && r->hp >= 0) bad.push_back(std::string(s.res) + " " + s.name + ": no damage in the cast turn");
+    if (heal && r->hp <= 0) bad.push_back(std::string(s.res) + " " + s.name + ": no healing");
+  }
+  for (const auto& b : bad) std::printf("  %s\n", b.c_str());
+  CHECK(bad.empty());
 }

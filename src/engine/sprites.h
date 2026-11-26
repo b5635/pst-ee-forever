@@ -37,6 +37,8 @@ void ClearAI(int32_t id);    // CGameSprite::ClearAI(0): actions, triggers, curr
 // SpellPST's cast-in-progress flag, casting-aura counter (-1 = may cast a spell) and cast-running flag.
 bool CastState(int32_t id, int32_t* in_progress, int16_t* counter, bool* running = nullptr);
 bool SetCastAura(int32_t id, int16_t counter);
+// The spell it is casting now (its CSpell resource's resref), "" when none.
+std::string CurrentSpell(int32_t id);
 void DropPath(int32_t id);   // CGameSprite::DropPath
 bool MakeEnemy(int32_t id);  // CGameSprite::Enemy (the Enemy() action), for staging fights
 

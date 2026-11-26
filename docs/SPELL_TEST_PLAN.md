@@ -205,14 +205,32 @@ suite's caster list (Morte, Grace, TNO need the ability: `AddSpell` / the SPIN00
 - **F2 Icon rounds vs the round clock (fixed: icons count `effect_round_ticks`; test_spells.cpp).** `tbc_module.cpp:1544` passes `RoundLengthTicks()` (51) to
   `CollectStatus`, but effect time steps 75 ticks per turn. A 30 s Blessing (450 ticks) shows 9 rounds and really
   lasts 6. Decide: icons should count 75-tick rounds. U1 catches it once the expected rounds are in the table.
-- **F3 Disabled creatures' turns.** No code in `tbc/` checks sleep/paralyse/hold on turn start; the turn ends by
+- **F3 Disabled creatures' turns (fixed: `LosesTurn`, round_rules.h: sleeping/stunned/helpless/frozen/stone end the turn at its start).** No code in `tbc/` checks sleep/paralyse/hold on turn start; the turn ends by
   the idle timeout (15-20 idle ticks). Works, but slow and not asserted: add a direct "helpless: skip" (STATE
   bits, as `maneuvers.h` does for reactors) and the U2 column "acted on its next turn".
 - **F4 Aid's "not engaged in combat" condition** in a tbc fight: measure whether it ever applies in one.
-- **F5 Header 0 only.** `spell_table.h` stores header 0; most damage/duration values scale with level. The
+- **F5 Header 0 only (fixed: spell_list.py takes the suite caster's header).** `spell_table.h` stores header 0; most damage/duration values scale with level. The
   expectations must use the header the suite caster gets (2.1 step 1).
 - **F6 Long turns at the 241-tick cap** (Elysium's Tears, Ax, Cloudkill, Desert Hell, Antimagic, ...): today
   they pass as "ok". U2 should tell "waited for its projectile" from "hit the cap" (log the wait reason).
+
+- **F7 Persistent effects stepped once per turn (fixed).** Their period counters count calls; the turn-start step made
+  one call with 75 ticks: Prayer pulsed 75x too slowly (once, a round late). Now one call per tick, and a new
+  persistent effect pulses in its cast turn.
+- **F8 Onset kinds stuck to reused memory (fixed: `OnsetBook`).** Delayed effects were classified by address and never
+  forgotten in a fight: a new effect at a freed effect's address got the old kind (Submerge the Will's shield
+  round-clocked to the next turn, so the suite saw it "sometimes").
+- **F9 Icon frame refilled between turns (fixed).** The span used "now + left" as the end; the round clock freezes
+  `left` while the world clock runs, so every frame looked like a recast. Spans now follow `left` only.
+- **F10 Icons for engine-built effects (fixed: Halo).** An orphan effect takes the spell whose parented effect arrived
+  with it, not only a delayed one.
+- **F11 Glow outlasting a buff (fixed).** Presentation opcodes (glow, tint, camera, animation) never count toward an
+  icon's rounds.
+- **F12 Test harness facts.** `ChangeStat` is a queued action: set levels before the fight (a party turn start clears
+  the queue; the suite had Grace at 21, not 14). `NearestEnemyOf` picks any thug: the suite measures the enemy the
+  spell changed. Saves cap at the rigged 30 (use HITBONUS for Curse).
+- **Open: Tasha's Laughter** (the laugh itself shows no state; penalties land ~160 ticks later, after the turn), **Seeking
+  Flames** icon 48 rounds for a 30 s spell, **Stygian Ice Storm** adds confusion (projectile).
 
 ## 5. Order of work
 

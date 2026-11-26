@@ -17,7 +17,7 @@
 --   tools\launch.ps1 -Save 000000990 -Lua build\tmp_tbc_spells_all.lua -Env @{PSTF_TEST_TICK='1'; PSTF_FEEDBACK_LOG='1'} -Until 'tbc_spells_all: ok|TEST FAIL' -Close -Timeout 1500
 --   (tools\spell_suite.ps1 builds build\tmp_tbc_spells_all.lua = spell_list.lua + this file and runs it)
 if not pstfSpellList then error('pstfSpellList missing: run through tools/spell_suite.ps1') end
-local kStall = 750  -- frames after End Turn: the turn may wait kFlightCapTicks (300 turn ticks = 600 frames) for its projectiles
+local kStall = 750  -- frames after End Turn: the turn may wait kSpellHoldCapTicks (300 turn ticks = 600 frames) for its spell
 local kPriestLevel = 14  -- cleric level for the priest spells (6th level needs 11)
 local kMageLevel = 20    -- mage level for the mage spells (9th level abilities start at 18)
 local frames, cur, turnFrame = 0, -1, 0
@@ -33,7 +33,7 @@ end
 local only = pstfSpellsOnly  -- e.g. "SPWI119,SPPR101": just these (tools\spell_suite.ps1 -Only)
 if only and only ~= '' then
 	local keep = {}
-	for r in only:gmatch('[^,]+') do keep[r:upper()] = true end
+	for r in only:gmatch('[^,%s]+') do keep[r:upper()] = true end
 	local m, p = {}, {}
 	for _, s in ipairs(mages) do if keep[s[1]] then m[#m + 1] = s end end
 	for _, s in ipairs(priests) do if keep[s[1]] then p[#p + 1] = s end end
@@ -58,6 +58,9 @@ local function nfx(id)
 	return n
 end
 local function hp(id) local _, _, h = PSTF_SpritePos(id, 1) return h or -1 end
+-- Spells aimed at foes whose SPL is not flagged hostile (Pacify: 2-8 creatures near the point)
+local kAimAtFoe = {SPWI108 = true}
+local function aimed(s) return s[5] == 1 or kAimAtFoe[s[1]] == true end
 -- Outcome measurement (spell_expect.h compares it): derived stats (STATS.IDS) read through the engine's own
 -- GetAtOffset, the STATE bits, the status icon of the spell, HP; snapshotted every frame of the caster's turn, so the
 -- result is the state at the end of that turn (before the next creature's turn start steps its round clock).
@@ -90,10 +93,43 @@ local function newBits(a, b)
 	end
 	return string.format('%X', bits)
 end
+-- Enemies in the fight (others join: the Hive's thugs). A hostile spell is measured on the one it changed most:
+-- NearestEnemyOf may pick another thug than the suite's foe.
+local rigged = {}
+local function enemies()
+	local out, i = {}, 1
+	while true do
+		local id = PSTF_FightId(i)
+		if not id or id == -1 then break end
+		if party(id) < 0 and hp(id) > 0 then out[#out + 1] = id end
+		i = i + 1
+	end
+	if foe and hp(foe) > 0 then
+		local seen = false
+		for _, id in ipairs(out) do if id == foe then seen = true end end
+		if not seen then out[#out + 1] = foe end
+	end
+	return out
+end
+local function changeScore(c, t1, fx1)
+	local n = math.abs(t1.hp - c.t0.hp) + 10 * math.abs(fx1 - c.fx0)
+	if statDelta(c.t0, t1) ~= '-' then n = n + 20 end
+	if newBits(c.t0, t1) ~= '0' then n = n + 20 end
+	if t1.icon ~= 'none' then n = n + 20 end
+	return n
+end
 local function finish(turnOver)
 	local p = pending
 	local s = p.spell
-	local who = s[5] == 1 and foe or p.caster
+	local who = aimed(s) and foe or p.caster
+	if aimed(s) and p.cands then
+		local best = -1
+		for id, c in pairs(p.cands) do
+			local sc = changeScore(c, p.lastBy[id] or snap(id, s[1]), nfx(id))
+			if sc > best or (sc == best and id == foe) then best, who = sc, id end
+		end
+		p.t0, p.fx0, p.last = p.cands[who].t0, p.cands[who].fx0, p.lastBy[who]
+	end
 	local ticks = (p.ended or frames) - p.frame
 	-- ok = the engine cast it (its "casts <spell>" feedback): a spent action alone is not proof, a refused cast
 	-- (no ability for the caster level) still ends the action
@@ -111,9 +147,9 @@ local function finish(turnOver)
 	if not turnOver then verdict = 'stall' stalls = stalls + 1 end
 	local t1 = p.last or snap(who, s[1])
 	local c1 = p.lastc or snap(p.caster, s[1])
-	local line = string.format('tbc_spells_all: %s %s used=%d cast=%d ticks=%d fx=%+d hp=%d st=%s state=%s icon=%s chp=%d cst=%s name=%s', s[1], verdict,
-		p.used and 1 or 0, cast, ticks, nfx(who) - p.fx0, t1.hp - p.t0.hp, statDelta(p.t0, t1), newBits(p.t0, t1), t1.icon,
-		who ~= p.caster and c1.hp - p.c0.hp or 0, who ~= p.caster and statDelta(p.c0, c1) or '-', s[3])
+	local line = string.format('tbc_spells_all: %s %s used=%d cast=%d ticks=%d fx=%+d hp=%d st=%s state=%s icon=%s chp=%d cst=%s who=%X name=%s', s[1],
+		verdict, p.used and 1 or 0, cast, ticks, nfx(who) - p.fx0, t1.hp - p.t0.hp, statDelta(p.t0, t1), newBits(p.t0, t1), t1.icon,
+		who ~= p.caster and c1.hp - p.c0.hp or 0, who ~= p.caster and statDelta(p.c0, c1) or '-', who, s[3])
 	PSTF_Note(line)
 	if pstfSpellsTrace then PSTF_Action(p.caster) end
 	if verdict == 'fizzle' then
@@ -132,7 +168,7 @@ local function cast(caster, s, retryOf)
 	-- Area spells (target 4) go at the creature, as a player clicking it: the scripted point cast
 	-- (SpellPointNoDec at [x.y]) is dropped by the engine for most of them, in real time too (probe: Blacksphere at
 	-- the thug's point never casts, at the thug it does).
-	local hostile = s[5] == 1
+	local hostile = aimed(s)
 	local bcs
 	if hostile then
 		bcs = 'SpellNoDec(NearestEnemyOf(Myself),' .. s[2] .. ')'
@@ -147,7 +183,11 @@ local function cast(caster, s, retryOf)
 	PSTF_Note(string.format('tbc_spells_all: %s cast by %X at %d,%d, foe %X at %d,%d (%.0f ft): %s', s[1], caster, cx, cy, foe, fx, fy,
 		math.sqrt(((fx - cx) / 16) ^ 2 + ((fy - cy) / 12) ^ 2), bcs))
 	pending = {spell = s, caster = caster, who = who, frame = frames, fx0 = nfx(who), hp0 = hp(who), used = false, idle = 0, ended = nil,
-		casts0 = PSTF_Casts(caster), retry = retryOf, t0 = snap(who, s[1]), c0 = snap(caster, s[1])}
+		casts0 = PSTF_Casts(caster), retry = retryOf, t0 = snap(who, s[1]), c0 = snap(caster, s[1]), lastBy = {}}
+	if hostile then
+		pending.cands = {}
+		for _, id in ipairs(enemies()) do pending.cands[id] = {t0 = snap(id, s[1]), fx0 = nfx(id)} end
+	end
 	PSTF_EvalAs(caster, bcs, 1)
 end
 -- The measured foe fails every save (saves 30 vs a d20) and has no magic resistance, so each spell's full effect
@@ -187,17 +227,25 @@ function pstfTestTick()
 		-- levels are kept apart (fighter, mage, thief: LEVEL, LEVEL2, LEVEL3), so all three are raised
 		for _, st in ipairs({'LEVEL', 'LEVEL2', 'LEVEL3'}) do C:Eval('ChangeStat(Myself,' .. st .. ',' .. kMageLevel .. ',SET)', 0) end
 	end
-	if frames == 5 then
-		PSTF_Note(string.format('tbc_spells_all: levels Grace > %d = %d, Nameless > %d = %d, casts probe %d', kPriestLevel - 1,
-			PSTF_Trigger(grace, 0x4095, kPriestLevel - 1, 'Grace', '', 1), kMageLevel - 1,
-			PSTF_Trigger(tno, 0x4095, kMageLevel - 1, 'Nameless', '', 1), PSTF_Casts(tno)))
+	-- ChangeStat is a queued action: it must have run before the fight starts (a turn start clears a party member's
+	-- queue), so the foe turns hostile only once both levels read as set (STATS 34 LEVEL, 68 LEVEL2 = mage)
+	if frames == 30 then
+		local gl = tonumber((PSTF_Stat(grace, 34) or ''):match('-?%d+'))
+		local tl = tonumber((PSTF_Stat(tno, 68) or ''):match('-?%d+'))
+		PSTF_Note(string.format('tbc_spells_all: levels Grace %d (want %d), Nameless mage %d (want %d), casts probe %d', gl or -1,
+			kPriestLevel, tl or -1, kMageLevel, PSTF_Casts(tno)))
+		if gl ~= kPriestLevel or tl ~= kMageLevel then return fail('caster levels not set') end
 		if PSTF_Casts(tno) < 0 then return fail('PSTF_Casts needs env PSTF_FEEDBACK_LOG=1 (tools/spell_suite.ps1 sets it)') end
 	end
-	if frames == 6 then foe = pickFoe() end
-	if frames < 8 then return end
+	if frames == 31 then foe = pickFoe() end
+	if frames < 33 then return end
 	-- keep everyone standing: the suite measures the spells, not who wins
 	-- (not while a spell is measured: its HP change is the result)
 	if foe and not pending and hp(foe) > 0 and hp(foe) < 500 then PSTF_SetHp(foe, 1000, 1000) end  -- Elemental Strike takes 200+
+	-- every enemy fails its saves and has 1000 HP, the ones that join too (rigged between two spells)
+	if not pending and frames % 15 == 0 then
+		for _, id in ipairs(enemies()) do if not rigged[id] then rigged[id] = true rig(id) end end
+	end
 	-- the foe died anyway (a death spell, or between two frames) while others keep the fight going: a living one
 	if foe and hp(foe) <= 0 and not pending and frames % 30 == 0 then foe = pickFoe() end
 	for i = 0, 5 do
@@ -221,6 +269,7 @@ function pstfTestTick()
 	end
 	if pending and id == pending.caster then
 		pending.last = snap(pending.who, pending.spell[1])
+		if pending.cands then for id in pairs(pending.cands) do pending.lastBy[id] = snap(id, pending.spell[1]) end end
 		if pending.who ~= pending.caster then pending.lastc = snap(pending.caster, pending.spell[1]) end
 		local _, _, _, u, acting = PSTF_TbcCurrent()
 		if u then pending.used = true end
@@ -239,7 +288,7 @@ function pstfTestTick()
 		-- NearestEnemyOf): the caster jumps to a point beside it first
 		local nxt = (retryNext and id == retryNext.caster and retryNext.spell) or (id == tno and mages[nextMage]) or
 			(id == grace and priests[nextPriest]) or nil
-		if nxt and nxt[5] == 1 and foe and hp(foe) > 0 then
+		if nxt and aimed(nxt) and foe and hp(foe) > 0 then
 			local cx, cy = PSTF_SpritePos(id, 1)
 			local fx, fy = PSTF_SpritePos(foe, 1)
 			if math.sqrt(((fx - cx) / 16) ^ 2 + ((fy - cy) / 12) ^ 2) > 20 then
@@ -274,6 +323,7 @@ function pstfTestTick()
 		for _, r in ipairs(results) do n[r] = n[r] + 1 end
 		PSTF_Note(string.format('tbc_spells_all: %d spells: %d ok, %d fizzle, %d stall', #results, n.ok, n.fizzle, n.stall))
 		if stalls > 0 then return fail(stalls .. ' spells stalled their caster\'s turn') end
+		if #results == 0 then return fail('no spell ran (-Only names none of the suite\'s spells?)') end
 		PSTF_Note('tbc_spells_all: ok')
 		pstfTestTick = nil
 	end

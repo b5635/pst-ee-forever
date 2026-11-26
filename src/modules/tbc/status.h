@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,8 +28,11 @@ struct StatusEffect {
 
 // Effects a spell adds through the engine's own code carry no parent: Submerge the Will's AC and saves
 // (opcode 375, CGameEffectAddAttachedObject builds them with DecodeEffect and no source), Power of One's
-// strength (projectile 287). They belong to the spell last seen on its way to that creature: a delayed
-// effect with a parent, seen within kOrphanWindowTicks. Once given, an effect keeps its parent.
+// strength (projectile 287), Halo of Lesser Revelation's AC (projectile 259). They belong to the spell last seen
+// arriving on that creature: a delayed effect with a parent, or a timed one with a parent that was not there at the
+// previous look (Halo brings only its glow, op 9, 3 s), seen within kOrphanWindowTicks. Once given, an effect keeps
+// its parent. Only an orphan that is new at this look takes a parent (one the creature already had is no one's:
+// Blindness took a 50-round leftover); a creature's first look marks nothing as arriving.
 struct OrphanMap {
   struct Parent {
     std::string res;
@@ -37,12 +41,30 @@ struct OrphanMap {
   };
   std::map<int32_t, Parent> recent;                      // creature -> last spell on its way
   std::map<int32_t, std::map<uint64_t, Parent>> given;   // creature -> effect key -> its parent
+  std::map<int32_t, std::set<uint64_t>> parented;        // creature -> keys of its parented effects at the last look
+  std::map<int32_t, std::set<uint64_t>> orphans;         // creature -> keys of its parentless effects at the last look
+  Parent cast;  // the spell being cast in the fight (any caster), last frame it was seen: a fallback parent
+  // Halo of Lesser Revelation and Black-Barbed Shield bring only parentless effects (their projectiles build them):
+  // with no parented effect arriving, a new orphan takes the spell being cast (CGameSprite +0x47F8, engine::CurrentSpell).
+  void NoteCast(const std::string& res, uint32_t flags, int64_t now) { cast = {res, 1, flags, now}; }
 };
 constexpr int64_t kOrphanWindowTicks = 150;
 inline void AttributeOrphans(int32_t id, std::vector<StatusEffect>* fx, int64_t now, OrphanMap* m) {
+  const auto seen = m->parented.find(id);
+  const bool looked = seen != m->parented.end();
+  std::set<uint64_t> keys;
+  for (const StatusEffect& e : *fx) {
+    if (e.parent.empty() || (e.parent_type != 1 && e.parent_type != 2)) continue;
+    if (e.key) keys.insert(e.key);
+    const bool arrived = e.timed && e.key && looked && !seen->second.count(e.key);
+    if (e.delayed || arrived) m->recent[id] = {e.parent, e.parent_type, e.parent_flags, now};
+  }
+  m->parented[id].swap(keys);
+  const auto old = m->orphans.find(id);
+  const bool had_look = old != m->orphans.end();
+  std::set<uint64_t> orphan_keys;
   for (const StatusEffect& e : *fx)
-    if (e.delayed && !e.parent.empty() && (e.parent_type == 1 || e.parent_type == 2))
-      m->recent[id] = {e.parent, e.parent_type, e.parent_flags, now};
+    if (e.timed && e.parent.empty() && e.key) orphan_keys.insert(e.key);
   std::map<uint64_t, OrphanMap::Parent>& mine = m->given[id];
   std::map<uint64_t, OrphanMap::Parent> keep;
   const auto rec = m->recent.find(id);
@@ -52,8 +74,11 @@ inline void AttributeOrphans(int32_t id, std::vector<StatusEffect>* fx, int64_t 
     OrphanMap::Parent p;
     if (it != mine.end()) {
       p = it->second;
-    } else if (rec != m->recent.end() && now - rec->second.seen <= kOrphanWindowTicks) {
+    } else if (had_look && !old->second.count(e.key) && rec != m->recent.end() &&
+               now - rec->second.seen <= kOrphanWindowTicks) {
       p = rec->second;
+    } else if (had_look && !old->second.count(e.key) && !m->cast.res.empty() && now - m->cast.seen <= kOrphanWindowTicks) {
+      p = m->cast;
     } else {
       continue;
     }
@@ -61,6 +86,7 @@ inline void AttributeOrphans(int32_t id, std::vector<StatusEffect>* fx, int64_t 
     e.parent = p.res, e.parent_type = p.type, e.parent_flags = p.flags;
   }
   mine.swap(keep);  // effects that are gone forget their parent (their keys may be reused)
+  m->orphans[id].swap(orphan_keys);
 }
 
 struct StatusIcon {
@@ -71,10 +97,13 @@ struct StatusIcon {
   bool debuff = false;
 };
 
-// Remembers how long each (creature, source) span was when first seen; a recast (later end) restarts it.
+// Remembers how long each (creature, source) span was when first seen (its length at the cast); a recast restarts
+// it. A recast is the time left going UP: in a turn-based fight the round clock holds effect time still while the
+// world clock runs (left stays, now grows), so "now + left" grows every frame and must not count as a recast (it
+// did: the drain frame refilled between turns and the length restarted from what was left).
 struct StatusSpans {
   struct Span {
-    int64_t end = 0;
+    int32_t last_left = -1;  // -1: not seen yet
     int32_t length = 1;
   };
   std::map<std::pair<int32_t, std::string>, Span> spans;
@@ -89,6 +118,7 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
     uint32_t type = 0, flags = 0;
     int32_t left = 0;
   };
+  (void)now;  // spans follow the time left, not the world clock (frozen in a fight)
   std::vector<Src> src;
   if (round_ticks <= 0) round_ticks = 100;
   for (const StatusEffect& e : fx) {
@@ -116,11 +146,8 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
     icon.debuff = (s.flags & kHostileFlag) != 0;
     if (spans) {
       auto& span = spans->spans[{id, s.res}];
-      const int64_t end = now + s.left;
-      if (span.end == 0 || end > span.end + 1) {  // first seen or recast
-        span.end = end;
-        span.length = std::max<int32_t>(1, s.left);
-      }
+      if (span.last_left < 0 || s.left > span.last_left + 1) span.length = std::max<int32_t>(1, s.left);  // first / recast
+      span.last_left = s.left;
       icon.share = std::clamp(double(s.left) / double(span.length), 0.0, 1.0);
     }
     out.push_back(icon);

@@ -2,6 +2,7 @@
 r"""Turns the all-spells suite's log lines into tests/unit/spell_results.h (one result per spell).
 
   python -I tools/spell_results.py [LOG]     LOG = the game's pst_forever.log after tools\spell_suite.ps1
+  python -I tools/spell_results.py --merge [LOG]   keep the header's other rows (a spell_suite.ps1 -Only run)
 Lines: "tbc_spells_all: SPWI119 ok used=1 cast=1 ticks=37 fx=+6 hp=0 st=2:-4,9:+1 state=0 icon=r12:buff chp=0 cst=-
 name=Submerge the Will" (the last run's): st/cst = derived stat changes (STATS.IDS:delta) of the target / the caster,
 state = STATE bits the spell set, icon = the spell's status icon at the end of the caster's turn, chp = caster HP.
@@ -12,10 +13,30 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG = r"C:\GOG Games\Planescape Torment - Enhanced Edition\pst_forever\logs\pst_forever.log"
 
 
-def main(a):
-  log = a[0] if a else LOG
+HEADER = os.path.join(ROOT, "tests", "unit", "spell_results.h")
+ROW = re.compile(r'^    \{"(SP\w+)", "(\w+)", (\d+), (-?\d+), (-?\d+), "([^"]*)", 0x([0-9A-F]+)U, "([^"]*)", (-?\d+), "([^"]*)"\},$')
+
+
+def old_rows():
+  """The rows of the current header, as log groups (the order main() reads)."""
   rows = {}
-  pat = re.compile(r"tbc_spells_all: (SP(?:WI|PR)\d{3}) (ok|fizzle|stall) used=(\d) cast=(-?\d+) ticks=(\d+) fx=([+-]\d+) hp=(-?\d+) st=(\S+) state=([0-9A-F]+) icon=(\S+) chp=(-?\d+) cst=(\S+) name=(.*)$")
+  if os.path.exists(HEADER):
+    for line in open(HEADER, encoding="utf-8"):
+      m = ROW.match(line.rstrip())
+      if m:
+        res, verdict, ticks, fx, hp, st, state, icon, chp, cst = m.groups()
+        fx = ("+" if int(fx) >= 0 else "") + fx
+        rows[res] = (res, verdict, "1", "1", ticks, fx, hp, st, state, icon, chp, cst, "")
+  return rows
+
+
+def main(a):
+  merge = "--merge" in a
+  a = [x for x in a if x != "--merge"]
+  log = a[0] if a else LOG
+  rows = old_rows() if merge else {}
+  kept = len(rows)
+  pat = re.compile(r"tbc_spells_all: (SP(?:WI|PR)\d{3}) (ok|fizzle|stall) used=(\d) cast=(-?\d+) ticks=(\d+) fx=([+-]\d+) hp=(-?\d+) st=(\S+) state=([0-9A-F]+) icon=(\S+) chp=(-?\d+) cst=(\S+)(?: who=[0-9A-F]+)? name=(.*)$")
   for line in open(log, encoding="latin1"):
     m = pat.search(line.rstrip())
     if m:
@@ -38,7 +59,7 @@ def main(a):
     h.append('    {"%s", "%s", %s, %d, %s, "%s", 0x%sU, "%s", %s, "%s"},' % (res, verdict, ticks, int(fx), hp, st, state, icon, chp, cst))
   h += ["};", "}  // namespace pstf::spellresults"]
   open(os.path.join(ROOT, "tests", "unit", "spell_results.h"), "w", newline="\n").write("\n".join(h) + "\n")
-  print(f"spell_results: {len(rows)} spells")
+  print(f"spell_results: {len(rows)} spells" + (f" ({kept} were in the header, merged)" if merge else ""))
 
 
 if __name__ == "__main__":

@@ -296,6 +296,9 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   Test: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\tbc_ice.lua -Env @{PSTF_TEST_TICK='1'} -Until 'tbc_ice: ok|TEST FAIL' -Close`.
   A projectile born outside its caster's turn flies on (`ProjectilePace`): `tests\ingame\tbc_ignus_fire.lua` (save 990,
   same env, `-Until 'tbc_ignus_fire: ok|TEST FAIL'`; Ignus' fire starts the fight and must land before his turn).
+- Buff/debuff timing: `tools\launch.ps1 -Save 000000990 -Lua tests\ingame\tbc_decay.lua -Env @{PSTF_TEST_TICK='1'} -Until
+  'tbc_decay: ok|TEST FAIL' -Close -Timeout 600` (Blessing, Vilquar's Eye, Curse, Prayer, Submerge: on in the cast turn,
+  icon -1 per owner turn start, gone on the right turn). `ChangeStat` is queued: set levels before the fight starts.
 - Buffs: PST attached spell objects (op 375: Submerge the Will, shields) end on their own world-time stamp (+0x3FC),
   outside the effect lists: `ShiftEffectClock` moves them too. Their effects (and Power of One's) have no parent
   resref: `AttributeOrphans` (status.h) gives them the spell seen on its way (a delayed effect with a parent).
@@ -308,7 +311,12 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   (mod) = re-run both. The suite raises levels (TNO 20, Grace 14), casts area spells at the creature (a scripted
   `SpellPointNoDec` at [x.y] is dropped by the engine for most), removes each spell's effects after it (Fist of Iron's
   op 60 spell failure fails every later cast), jumps the caster beside a foe > 20 ft off, retries a miss once.
-  Probes: `PSTF_Casts(id)` (the engine's "casts" feedback count; the FeedBack hook is on with tbc, env
+  Outcome columns per spell (log line + spell_results.h): `st` derived stat deltas, `state` new STATE bits, `icon` the
+  spell's status icon (rN:buff|debuff) at the end of the caster's turn, `chp`/`cst` caster HP/stats; the foe always fails
+  saves (`-Saves pass`: always saves) and has 1000 max HP. Plan per spell: `docs/SPELL_TEST_PLAN.md`.
+  Probes: `PSTF_Stat(id, stat...)` (any derived stat by STATS.IDS number via CDerivedStats::GetAtOffset, one "v,v,.."
+  string), `PSTF_SetHp(id, hp, max)` (max = base max HP too: the engine clamps HP to max), `PSTF_Status(id[, quiet])`
+  (count, "RES BAM strref rN buff|debuff;" list), `PSTF_State(id[, quiet])`. Probes: `PSTF_Casts(id)` (the engine's "casts" feedback count; the FeedBack hook is on with tbc, env
   PSTF_FEEDBACK_LOG also logs every FeedBack), `PSTF_Action(id[, quiet])` (action, busy, path; the log line adds
   SpellPST's cast flag and aura counter), `PSTF_Unapply(id, RES)` (CGameSprite::UnapplySpell + attached objects end).
   Engine facts: the casting aura (sprite word +0x46A8, -1 = may cast) counts the caster's own AI ticks up to

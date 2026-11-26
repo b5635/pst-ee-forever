@@ -267,4 +267,36 @@ struct Economy {
   }
 };
 
+// A turn that wants to end (End Turn, or the economy is done) waits until its spell has finished for this round:
+// the cast animation is over, its projectile has appeared and landed, a landed cloud/swarm has had this round's
+// pulse, and every onset that resolves in this turn (Cone of Cold's 100 ticks after landing) has gone off. One
+// safety cap for all of it, so a hung spell never freezes the fight: kSpellHoldCapTicks after the end was asked.
+enum class SpellWait { None, Casting, Appearing, Flying, Pulsing, Landing, Capped };
+struct SpellWaitIn {
+  bool casting = false;       // the creature's action is a cast still running (Economy::acting, IsCastAction)
+  bool cast_this_turn = false;  // it spent its action on something a projectile can follow (not a melee attack)
+  uint32_t since_action = 1000;  // ticks since its action stopped running
+  int flying = 0;             // its projectiles in the air
+  int lingering = 0;          // its landed clouds/swarms with pulse ticks left this round
+  int onsets = 0;             // delayed effects that resolve in this turn
+  uint32_t waited = 0;        // ticks the end has waited so far
+};
+inline constexpr uint32_t kSpellAppearTicks = 25;  // a projectile appears up to a second after the cast animation
+inline constexpr uint32_t kSpellHoldCapTicks = Economy::kCastCapRounds * 75;  // 4 rounds of 75 ticks
+inline SpellWait TurnWaitsForSpell(const SpellWaitIn& in) {
+  const bool any = in.casting || in.flying > 0 || in.lingering > 0 || in.onsets > 0 ||
+                   (in.cast_this_turn && in.since_action < kSpellAppearTicks);
+  if (!any) return SpellWait::None;
+  if (in.waited >= kSpellHoldCapTicks) return SpellWait::Capped;
+  if (in.casting) return SpellWait::Casting;
+  if (in.flying > 0) return SpellWait::Flying;
+  if (in.lingering > 0) return SpellWait::Pulsing;
+  if (in.onsets > 0) return SpellWait::Landing;
+  return SpellWait::Appearing;
+}
+inline const char* SpellWaitName(SpellWait w) {
+  static const char* kNames[] = {"none", "casting", "appearing", "flying", "pulsing", "landing", "capped"};
+  return kNames[static_cast<int>(w)];
+}
+
 }  // namespace pstf::tbc

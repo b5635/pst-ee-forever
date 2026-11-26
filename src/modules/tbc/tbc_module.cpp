@@ -144,13 +144,18 @@ struct State {
   std::map<int32_t, std::string> names;
   std::map<int32_t, int> hp_seen;
   std::map<int32_t, int> persist_seen;  // persistent effects per combatant (a new one pulses at once)
+  // Turn (its start tick turn_w0 + 1) in which each combatant last got a first pulse: at most one per creature per
+  // turn. A pulse forces the effect list, which can drop and re-add a persistent effect (an op 25 poison onset):
+  // the count went 0 -> 1 -> 0 -> 1 every frame and pulsed thousands of times (hang after SPWI217).
+  std::map<int32_t, uint32_t> persist_pulsed;
   uint32_t turn_w0 = 0;
   uint16_t clog_action = 0xFFFF;
   bool follow = false;               // the camera keeps the active creature centred while it moves
   std::wstring sound_dir;            // <game>/pst_forever/sounds/
   uint32_t resolve_ticks = 0;        // world ticks the turn has waited for its spell to land
   uint32_t since_action = 1000;      // world ticks since its action stopped running
-  bool resolving_logged = false;
+  SpellWait resolving_why = SpellWait::None;  // what the turn's end last waited for (logged on a change)
+  bool resolving_capped = false;     // the spell hold cap fired this turn (logged once)
   PulseBudget pulses;                // lingering spells: one round of pulse ticks per caster round
   ProjectilePace proj_pace;          // which projectiles move (theirs in their caster's turn; born free fly on)
   int sight_radius = 448;            // [tbc] sight_radius: px of fog lifted around each foe in the fight
@@ -227,8 +232,6 @@ struct State {
 // The creature's spell is still on its way (a projectile object it cast is in the area): its turn
 // waits for flying ones (Adder's Kiss circles 60 ticks before it flies) and for lingering ones that
 // still have pulse ticks this round (the round's pulse lands in the caster's turn).
-constexpr uint32_t kResolveCapTicks = 120;  // Cone of Cold / Ice Knife go off 100 ticks after landing
-constexpr uint32_t kFlightCapTicks = 300;   // a projectile still flying after 20 s is held to next turn
 constexpr double kCamTauMs = 60.0;          // camera easing time constant (CameraEase::Step): the camera
                                             // closes 63 % of the gap in 60 ms at any frame rate
 constexpr double kCamLockPx = 6.0;          // this close, the camera locks onto the shown position
@@ -415,6 +418,7 @@ void EndFight(const char* why) {
   g.in.clear();
   g.hp_seen.clear();
   g.persist_seen.clear();
+  g.persist_pulsed.clear();
   g.current = -1;
   g.dir.reset();
   g.hold_current = false;
@@ -540,7 +544,8 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.current = next;
   g.end_requested = false;
   g.resolve_ticks = 0;
-  g.resolving_logged = false;
+  g.resolving_why = SpellWait::None;
+  g.resolving_capped = false;
   g.since_action = 1000;
   g.turn_w0 = g.last_time;
   g.clog_action = 0xFFFF;
@@ -634,6 +639,12 @@ void OnTurnChange(int32_t prev, int32_t next) {
   }
   (void)party;
   Say(b);
+  const int64_t state = engine::SpriteState(next);
+  if (LosesTurn(state)) {
+    g.end_requested = true;
+    Say(Who(next) + " cannot act: turn lost");
+    CLog("TURN", Name(next) + " cannot act (state " + std::to_string(static_cast<long long>(state)) + "): turn lost");
+  }
 }
 
 bool OurWindowFocused() {
@@ -1823,13 +1834,23 @@ void OnTick(uint64_t frame) {
   // Effect round clock: nobody's timed effects or natural regeneration move with world time.
   if (g.round_effects && engine::EffectClockInstalled() && dt > 0 && dt < 1000)
     for (int32_t id : g.in) engine::ShiftEffectClock(id, static_cast<int32_t>(dt));
+  // The spell being cast now: parentless effects its projectile builds take it for their icon (status.h NoteCast).
+  if (g.current != -1 && g.res) {
+    const std::string res = engine::CurrentSpell(g.current);
+    if (!res.empty()) {
+      const SpellFacts* f = g.res->Spell(res);
+      g.orphans.NoteCast(res, f ? f->flags : 0, now);
+    }
+  }
   // A persistent effect added in a fight (Prayer's aura, Detect Evil) is frozen with its owner until the owner's next
   // turn start; real time would run its first update on the next tick: run it now, in the turn it was cast.
   if (g.round_effects && engine::EffectClockInstalled())
     for (int32_t id : g.in) {
       const int n = engine::PersistentCount(id);
       const auto it = g.persist_seen.find(id);
-      if (it != g.persist_seen.end() && n > it->second) {
+      uint32_t& pulsed = g.persist_pulsed[id];
+      if (it != g.persist_seen.end() && n > it->second && pulsed != g.turn_w0 + 1) {
+        pulsed = g.turn_w0 + 1;
         engine::PulsePersistent(id);
         Log("tbc: %s: new persistent effect (%d -> %d): first pulse now", Who(id).c_str(), it->second, n);
       }
@@ -2011,24 +2032,34 @@ void OnTick(uint64_t frame) {
     else st.end_turn = false;
   }
   bool wait_spell = false;
-  if ((st.end_turn || g.end_requested) && g.resolve_ticks < kFlightCapTicks) {
+  if (st.end_turn || g.end_requested) {
+    // The turn does not end before its spell has finished for this round (economy.h TurnWaitsForSpell).
     const Pending pend = CasterProjectiles(cur, s.area);
-    int n = pend.flying;
-    if (g.resolve_ticks < kResolveCapTicks) {
-      n += pend.lingering;
-      for (int32_t id : g.in) n += engine::ResolvingOnsets(id);  // e.g. Cone of Cold's 100-tick onset
+    SpellWaitIn in;
+    in.casting = g.econ.acting && IsCastAction(g.econ.act_action);
+    in.cast_this_turn = g.econ.action_used && g.econ.act_action != 3;  // a melee swing has no projectile
+    in.since_action = g.since_action;
+    in.flying = pend.flying;
+    in.lingering = pend.lingering;
+    for (int32_t id : g.in) in.onsets += engine::ResolvingOnsets(id);
+    in.waited = g.resolve_ticks;
+    const SpellWait w = TurnWaitsForSpell(in);
+    if (w == SpellWait::Capped && !g.resolving_capped) {
+      g.resolving_capped = true;
+      Log("tbc: %s: WARNING spell hold cap: turn ends after %u ticks (casting %d, %d flying, %d pulsing, %d onsets)",
+          Who(cur).c_str(), g.resolve_ticks, in.casting ? 1 : 0, in.flying, in.lingering, in.onsets);
+      CLog("SPELL", Name(cur) + ": spell still not finished after 4 rounds: turn ends anyway");
     }
-    // A projectile appears up to a second after the cast animation ends: give it 25 ticks.
-    // A melee or ranged attack has no projectile to wait for (an arrow is part of its swing).
-    const bool may_cast = g.econ.act_action != 3;
-    if (n > 0 || (g.econ.action_used && may_cast && g.since_action < 25 && g.resolve_ticks < kResolveCapTicks)) {
+    if (w != SpellWait::None && w != SpellWait::Capped) {
       wait_spell = true;
       g.resolve_ticks += dt;
-      if (!g.resolving_logged) {
-        g.resolving_logged = true;
-        if (n > 0) Log("tbc: %s: turn waits for its spell (%d projectile%s or onsets)", Who(cur).c_str(), n, n == 1 ? "" : "s");
-        if (n > 0) CLog("SPELL", Name(cur) + ": turn waits for its spell to land (" + std::to_string(n) + " projectiles/onsets)");
-        else g.resolving_logged = false;
+      if (w != g.resolving_why) {
+        g.resolving_why = w;
+        if (w != SpellWait::Appearing) {
+          Log("tbc: %s: turn waits for its spell (%s: casting %d, %d flying, %d pulsing, %d onsets)", Who(cur).c_str(),
+              SpellWaitName(w), in.casting ? 1 : 0, in.flying, in.lingering, in.onsets);
+          CLog("SPELL", Name(cur) + ": turn waits for its spell (" + SpellWaitName(w) + ")");
+        }
       }
     }
   }

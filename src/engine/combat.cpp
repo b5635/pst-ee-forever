@@ -16,6 +16,7 @@
 #include "core/patch.h"
 #include "engine/sprite_ptr.h"
 #include "engine/symbols.h"
+#include "modules/tbc/round_rules.h"
 
 namespace pstf::engine {
 namespace {
@@ -53,7 +54,10 @@ uint64_t Stats(uint64_t p) {
 FrozenFn g_frozen = nullptr;
 OnsetFn g_onset = nullptr;
 OnsetSyncFn g_onset_sync = nullptr;
-std::unordered_map<uint64_t, int> g_onsets;  // delayed effect -> OnsetFn kind (seen once)
+// Delayed effect -> its OnsetFn kind (classified once). Keyed by the effect's address, so an entry lives only while
+// that effect is still pending on its owner: the engine frees effects and reuses their memory, and a stale entry gave
+// a new effect the old one's kind (Submerge the Will's 29-tick shield round-clocked to its caster's next turn).
+tbc::OnsetBook g_onsets;  // round_rules.h
 bool g_clock = false;
 
 extern "C" bool __cdecl PstfPersistFrozen(void* sprite) {
@@ -142,7 +146,7 @@ void HeldEffectsTick(void* sprite) {
 
 void SetOnsetRule(OnsetFn resolves_now) { g_onset = resolves_now; }
 void SetOnsetSync(OnsetSyncFn sync) { g_onset_sync = sync; }
-void ForgetOnsets() { g_onsets.clear(); }
+void ForgetOnsets() { g_onsets.Clear(); }
 
 int ResolvingOnsets(int32_t id) {
   const uint64_t p = g_clock ? LookupSprite(id) : 0;
@@ -151,8 +155,7 @@ int ResolvingOnsets(int32_t id) {
   ForEachEffect(p, [&](uint64_t eff) {
     const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
     if (type < 6 || type > 8) return;
-    const auto it = g_onsets.find(eff);
-    if (it != g_onsets.end() && it->second == 1) ++n;
+    if (g_onsets.Kind(eff) == 1) ++n;
   });
   return n;
 }
@@ -167,19 +170,25 @@ void ShiftEffectClock(int32_t id, int32_t ticks) {
     std::vector<int32_t> lefts;
     std::vector<int> ops, kinds;
     std::vector<uint64_t> srcs;
+    std::vector<uint64_t> pending;  // this creature's delayed effects now
     ForEachEffect(p, [&](uint64_t eff) {
       const uint32_t type = R<uint32_t>(eff + sym::kOffEffType);
-      if (!ClockedType(type) || type < 6 || type > 8 || g_onsets.count(eff)) return;
-      const int32_t left = static_cast<int32_t>(R<uint32_t>(eff + sym::kOffEffTick) - now);
+      if (!ClockedType(type) || type < 6 || type > 8) return;
+      pending.push_back(eff);
       const int op = R<int32_t>(eff + sym::kOffEffOpcode);
+      const uint64_t src = R<uint64_t>(eff + sym::kOffEffParentRes);
+      if (g_onsets.Known(eff, id, op, src)) return;
+      const int32_t left = static_cast<int32_t>(R<uint32_t>(eff + sym::kOffEffTick) - now);
       effs.push_back(eff), lefts.push_back(left), ops.push_back(op), kinds.push_back(g_onset(left, op));
-      srcs.push_back(R<uint64_t>(eff + sym::kOffEffParentRes));
+      srcs.push_back(src);
     });
+    // entries of this creature whose effect is no longer pending (it ran, or was removed) go
+    g_onsets.Prune(id, pending.data(), static_cast<int>(pending.size()));
     const int n = static_cast<int>(effs.size());
     std::vector<int> before = kinds;
     if (n && g_onset_sync) g_onset_sync(lefts.data(), ops.data(), srcs.data(), kinds.data(), n);
     for (int i = 0; i < n; ++i) {
-      g_onsets.emplace(effs[i], kinds[i]);
+      g_onsets.Add(effs[i], kinds[i], id, ops[i], srcs[i]);
       if (kinds[i])
         Log("combat: %X: onset in %d ticks %s (opcode %d)%s", static_cast<unsigned>(id), lefts[i],
             kinds[i] == 1 ? "resolves now" : "plays now (presentation)", ops[i],
@@ -191,8 +200,7 @@ void ShiftEffectClock(int32_t id, int32_t ticks) {
     if (!ClockedType(type)) return;
     const uint32_t t = R<uint32_t>(eff + sym::kOffEffTick);
     if (type >= 6 && type <= 8 && g_onset && ticks > 0) {
-      const auto it = g_onsets.find(eff);
-      if (it != g_onsets.end() && it->second) {  // the spell resolving: world time, and its list is checked every tick
+      if (g_onsets.Kind(eff) > 0) {  // the spell resolving: world time, and its list is checked every tick
         W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
         return;
       }
