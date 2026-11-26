@@ -103,7 +103,7 @@ function pstfTestTick()
 	S.frame = S.frame + 1
 	-- Walkthrough saves can open inside a party banter dialogue (the world waits for it): step it closed first.
 	-- (any time: a banter can start mid-fight; scenarios that test a dialogue set S.keepDialog)
-	if S.frame % 3 == 1 and not S.keepDialog and worldScreen and worldScreen.StepDialog and
+	if S.frame % 3 == 1 and not S.keepDialog and not (S.keepDialogAfter and S.frame >= S.keepDialogAfter) and worldScreen and worldScreen.StepDialog and
 			(S.frame <= 24 or (PSTF_InDialog and PSTF_InDialog() == 1)) then
 		pcall(worldScreen.StepDialog, worldScreen)
 		if S.frame > 24 and not S.stepped then S.stepped = true S.note('stepping a dialogue closed at tick ' .. S.frame) end
@@ -344,3 +344,23 @@ function S.plot(o)
 		return inner(frame, cur, started)
 	end
 end
+
+-- Dialogue inside a fight (section D): the party attacks it, its AttackedBy response sets a variable and starts a
+-- dialogue (Dialogue(Player1) walks up first). ok = the variable and a running dialogue (PSTF_InDialog), then the
+-- dialogue is stepped closed and the fight must go on (or end) without a stuck turn.
+function S.talker(o)
+	S.keepDialogAfter = 61
+	local talked, after = false, 0
+	o.check = function(id)
+		if not talked and PSTF_InDialog() == 1 then
+			talked = true
+			S.note('dialogue started at tick ' .. S.frame .. ' (turn of ' .. S.hx(PSTF_TbcCurrent()) .. ')')
+			S.keepDialogAfter = nil  -- step it closed from now on
+		end
+		if talked and PSTF_InDialog() == 0 then after = after + 1 end
+		return talked and after > 60, talked and ('closed for ' .. after .. ' ticks') or 'no dialogue yet'
+	end
+	o.maxFrames = o.maxFrames or 4000
+	S.plot(o)
+end
+

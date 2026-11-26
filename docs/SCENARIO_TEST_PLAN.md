@@ -67,6 +67,10 @@ an ISSUE, and add new ones here:
   (`worldScreen:StepDialog()`) in the first ticks.
 - **Script gated on another area's variable** (`Global("X","AR0209",..)` while the save is in AR0208): an unloaded
   area's variables do not read or write; pick a save in that area (`install_walk_saves.ps1 -List`).
+- **Corpses:** a creature killed earlier keeps its script name; `PSTF_FindActor` skips the dead now (Ravel after
+  "Spoke to Ravel" counts as dead too: spawn her).
+- **Banter with several lines:** `lib.lua` steps any dialogue closed while `PSTF_InDialog()` is 1 (set `S.keepDialog`
+  for scenarios that test a dialogue).
 - **Variable names:** BCS `LOCALScd_int_0` = scope `LOCALS` + name `cd_int_0`.
 - **The party kills it too fast:** HP 3000 on the scenario creature (`hp =`), party HP 400.
 - **Turns lost to knockdowns** (party AI trips): count them before reading a step counter as stuck (combat.log
@@ -94,8 +98,8 @@ before the first action is replaced by an ordered attack (the nudge). Real-time 
 | ID | Save (area) | Setup / forcing | Expected (correct behaviour) | Watch | Outcome |
 |---|---|---|---|---|---|
 | S01 | 000700162 Spoke To Ravel (AR0610) | Make Ravel hostile (`PSTF_MakeEnemy`); HP 400; party HP 400; watch Ravel | Spell steps advance (LOCALS `Scd_int_1` 1..N); `StartTimer(1,20)` self-spell recurs; at HP < 50 % casts 1601; at death the `0610cut2` cutscene plays and the fight ends cleanly | QUEUE lines (Spell, Wait, IncrementGlobal), TIMER `1:`, cutscene, fight end | - |
-| S02 | 000700204 Ready For Final Fight (AR1204) | Turn the Transcendent One hostile (1204TRNA then 1204TRNF); HP 2000 | Signature spells 2902, 2506, 2805, 2802 cast once each, about 30 s of its own time apart; melee between them (`TimerActive(2)`); self-heal 1601 under 51 %; at death `Quit_Game` | TIMER `2:` counts down across its turns; how many turns between big spells | - |
-| S03 | 000700117 Exotic Shopping (AR0609) | Vrischika: set LOCALS `Scd_int_1` 14, make her hostile | Casts 2209 (close), 2405, 2207 (far), each gated by `StartTimer(1,1..4)` | TIMER `1:`; casts per turn | - |
+| S02 | 000700204 Ready For Final Fight (AR1204) | Turn the Transcendent One hostile (1204TRNA then 1204TRNF); HP 2000 | Signature spells 2902, 2506, 2805, 2802 cast once each, about 30 s of its own time apart; melee between them (`TimerActive(2)`); self-heal 1601 under 51 %; at death `Quit_Game` | TIMER `2:` counts down across its turns; how many turns between big spells | FIXED: timer 2 (30 s) drained ~3 s per own turn (11 turns between big spells); now `[tbc] script_timers` pays each round's missing time at turn start (`CheckTimers(seconds)`); re-run pending |
+| S03 | 000700117 Exotic Shopping (AR0609) | Vrischika: set LOCALS `Scd_int_1` 14, make her hostile | Casts 2209 (close), 2405, 2207 (far), each gated by `StartTimer(1,1..4)` | TIMER `1:`; casts per turn | ok (after the MultiFireLeft null fix: the first run faulted the tick handler) |
 | S04 | 000700136 Spoke to Splinter (AR0601) | Jumble (in the area), LOCALS `cd_int_0` 1, hostile, HP 3000 | Step 1 (2102 self), step 2 (`Wait(1)` then 2115), step 3 ... counter climbs once per turn | Wait-first steps | ok: 1 -> 7 in 9 turns, one spell each; the 2 turns without a step were knockdowns (stand up = the action) |
 | S05 | 000700145 Extravagant Ones Complete (AR0603) | Lady Thorncombe (0603LADY), same as S04 | Same as S04 | Same | ok: one spell per turn (5 steps in 10 turns: 3 knockdowns, 1 step lost inside the engine's cinematic freeze, vanilla) |
 | S06 | 000700148 Personal Experiences Done (AR0604) | Quell (0604QUEL), same as S04 | Same as S04 | Same | ok: 1 -> 9 in 8 turns |
@@ -103,13 +107,13 @@ before the first action is replaced by an ordered attack (the nudge). Real-time 
 | S08 | 000700186 Carceri Return (AR0900) | Hezobol (0900HEZO): LOCALS `Scd_int_0` 1, hostile | Through all 12 steps, one spell per turn (2304, 2502, 2402 ...) | Counter progress per turn | ok: 1 -> 13 in 17 turns; the gaps are knockdowns and turns its `See()` gate failed (nudged attack) |
 | S09 | 000700042 Stuck with the Box (AR0306A) | Shilandra (0306SHIL; spawn SHILAND if absent), hostile | `Spell` x5 then Attack with no waits: one spell per turn, none skipped; a spent spell fails without taking the action | Casts per turn (`PSTF_Casts`), ACTION lines | FIXED: was 4 casts in one turn, then ~200-tick turns on spent spells; now one cast per turn, spent spells fall through to Attack at once |
 | S10 | 000700130 Inventory Management (AR0600) | Salabesh (0600SALA) and Elobrande (0600ELOB), hostile together | `Spell; Wait(2); Spell; ...` chains: one spell per turn through the list | After the first spell: melee forever = ISSUE | - |
-| S11 | 000700027 Cleared Entrance (AR0208) | Spawn STRAHAN, `ChangeAIScript("0209NECR",0)`, `SetGlobal("0209_Attack","AR0209",1)`, hostile | Spell sequence 2408, 2213, 2207, 2201, 2309, one per turn | `SpellPoint` at a point; chain progress | - |
+| S11 | 000700027 Cleared Entrance (AR0208) | Spawn STRAHAN, `ChangeAIScript("0209NECR",0)`, `SetGlobal("0209_Attack","AR0209",1)`, hostile | Spell sequence 2408, 2213, 2207, 2201, 2309, one per turn | `SpellPoint` at a point; chain progress | OPEN (setup): neither the save's Strahan (a corpse) nor a spawned STRAHAN with 0209NECR fires any block (chose nothing every turn); script slot or area variable to check |
 | S12 | 000700052 Got the Gem (AR3010A) | Spawn APPRENT..APPRENT5 with 3012APR1..5, LOCALS `Scd_int_0` 1, all hostile | Four casters each walk through their steps (ForceSpell 2107/2207/2202) | Four step counters at once; turn order | - |
 | S13 | 000700046 Killed Rotten Williams (AR3006D) | Spawn AOLA (3006AOLA), LOCALS `cd_int_0` 1, hostile | 1106 self, 1103, 1204 ... one per turn | Counter | ok (first run, before the one-cast rule): 1 -> 4 |
 | S14 | 000700083 Got The Key (AR0403) | `S14_starved_dog_mage.lua`: spawn SDMAGE + 0403MAGE, MortalKombat=1, hostile | MortalKombat climbs 1 to 5 | First run: counter stuck at 2 (`turn end drops queue [Wait, IncrementGlobal]`) | FIXED 49e4c6c: 1 -> 5, one step per turn |
-| S15 | 000700061 Cleared Trash Warrens (AR0108) | Spawn SPELRAT, 0108SRAT, hostile | ReallyForceSpell chain 2207 x2, 2115, 2107 ..., then `AR0108Rat_Leader_Done`=1 | The same first spell every turn, the variable never set = ISSUE | - |
+| S15 | 000700061 Cleared Trash Warrens (AR0108) | Spawn SPELRAT, 0108SRAT, hostile | ReallyForceSpell chain 2207 x2, 2115, 2107 ..., then `AR0108Rat_Leader_Done`=1 | The same first spell every turn, the variable never set = ISSUE | FIXED: an instant ReallyForceSpell plus the lead-Wait skip gave 2 casts in a turn; otherwise one per turn and `Rat_Leader_Done` = 1 after the chain (reset to 0 first: the save has it set) |
 | S16 | 000700077 Killed Many-As-One (AR1600) | Spawn SPELRAT, `ChangeAIScript("1600T2LD",0)`, hostile (`AR1600_PC_Enemy`=1) | Leader casts its Spell/Wait chain; `Leaving_2` global timer path works | Chain; global timer | - |
-| S17 | 000700070 Spoke with Hargrimm (AR1500) | A Dead Nations skeleton (1500INIT, then 1500HARG) made hostile | HP-gated self-spells (1102, 1202) and timer-gated 1103, 1204, 1301 at the right ranges | TIMER `1:` | - |
+| S17 | 000700070 Spoke with Hargrimm (AR1500) | A Dead Nations skeleton (1500INIT, then 1500HARG) made hostile | HP-gated self-spells (1102, 1202) and timer-gated 1103, 1204, 1301 at the right ranges | TIMER `1:` | ok |
 
 ## B. Plot and state variables at risk (audit: script state behind a Wait)
 
@@ -189,6 +193,16 @@ toggling `[tbc] enabled=0` (vanilla behaviour must come back, the toggle check).
   ProcessAI (dead creatures still run theirs).
 - The BCS variable `LOCALScd_int_0` is scope `LOCALS` + name `cd_int_0` (not `Scd_int_0`).
 - Walkthrough saves can load inside a party banter dialogue (the world waits): `lib.lua` steps it closed first.
+- **A chained Spell list cast 4 spells in one turn** (S09): consecutive `Spell` actions look like one action to the
+  economy. Now an AI's turn ends when its spell goes off (`spell being cast` -> none) and the next Spell waits for its
+  next turn; a spent Spell fails at once (the casting aura is cleared while it has not cast this turn) so the list
+  falls through to the next spell or Attack, like a priority list. Attacks of opportunity keep the reactor's queue.
+- **Fault:** `MultiFireLeft` read sprite+0x5128 of a creature gone at its turn end (S03): the tick handler turned
+  itself off. Fixed (null check).
+- **Script timers ran at about half speed** (S02): they count only in the creature's own turn; now each round pays
+  the missing time at its next turn start (`TimerClock`, `[tbc] script_timers`).
+- Cosmetic and bookkeeping actions (ChangeColor, StickySinisterPoof, FaceObject, PlaySequence, CreateItem, ...) are
+  no longer the turn's action (Soego's poof-and-recolour, Jumble's FaceObject).
 - Engine (vanilla): a cinematic spell freeze (`CPlanescape::SetGameFreeze`) pops and replaces queued actions of the
   sprites in the area; a step queued behind it can be lost the same way in real time (seen in S05).
 

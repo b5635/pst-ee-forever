@@ -213,6 +213,7 @@ struct State {
   bool script_timers = true;         // [tbc] script_timers: script timers run one round per round
   std::map<int32_t, TimerClock> timer_clock;
   std::map<int32_t, int> timer_owed;  // whole seconds owed to its script timers at its next turn start
+  int refunds = 0;                   // spent Spells handed back this turn
   int lead_skips = 0;                // Waits skipped before the current creature's action this turn
   bool freeze_ai = false;            // the current AI's turn is over (spell still landing): no ProcessAI
   bool keep_current = false;         // its turn ended at a second action: that action and the queue wait for its next turn
@@ -621,6 +622,8 @@ void OnTurnChange(int32_t prev, int32_t next) {
       const Combatant* pc0 = g.dir->Find(prev);
       const bool party0 = Contains(g.party, prev) || (pc0 && pc0->r.side == Side::Party);
       if (!g.keep_current && !(g.keep_queue && !party0 && prev != g.nudged && KeepCurrentAtTurnEnd(q[0])) &&
+          !(g.keep_queue && !party0 && IsCastAction(q[0]) && engine::CurrentSpell(prev).empty() &&
+            engine::CurrentActionDone(prev) == 0) &&
           !(g.keep_queue && KeepQueueAtTurnEnd(party0, prev == g.nudged, q.data(), static_cast<int>(q.size())))) {
         Log("tbc: %s: turn end drops queue [%s]%s", Who(prev).c_str(), t.c_str(), lost ? " (script state lost)" : "");
         CLog("QUEUE", Name(prev) + " turn end drops [" + t + "]" + (lost ? " (script state lost)" : ""));
@@ -643,7 +646,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
     // its script's bookkeeping (IncrementGlobal) became the running action as the turn ended: it has not run yet
     if (g.keep_queue && !party && prev != g.nudged && !q.empty() && KeepCurrentAtTurnEnd(q[0])) g.keep_current = true;
     // its next spell is the running action but not cast yet (the turn ended when the first went off)
-    if (g.keep_queue && g.cast_done && !party && !q.empty() && IsCastAction(q[0]) && engine::CurrentSpell(prev).empty() &&
+    if (g.keep_queue && !party && !q.empty() && IsCastAction(q[0]) && engine::CurrentSpell(prev).empty() &&
         engine::CurrentActionDone(prev) == 0)
       g.keep_current = true;
     if (g.keep_current) {
@@ -669,6 +672,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.mop_end = false;
   g.nudged = -1;
   g.lead_skips = 0;
+  g.refunds = 0;
   g.freeze_ai = false;
   g.keep_current = false;
   g.cast_live = false;
@@ -2326,6 +2330,14 @@ void OnTick(uint64_t frame) {
   // A quick item used between two frames still takes the action (UseItem = 34).
   uint16_t fed = g.items && engine::TookItemAction(cur) && IsIdleAction(s.action) ? 34 : s.action;
   if (!g.econ.party) g.econ.engine_driven = EngineDrivesAi(engine::SpriteState(cur));
+  // A Spell that ended without a cast (spent): its action comes back (economy.h Refund).
+  if (g.keep_queue && !g.econ.party && cur != g.nudged && g.econ.action_used && !g.cast_done && !g.cast_live &&
+      IsCastAction(g.econ.act_action) && IsCastAction(g.clog_action) && s.action != g.clog_action &&
+      !(g.cast_feedback && engine::SpellCasts(cur) > g.turn_casts) && g.refunds < 8) {
+    ++g.refunds;
+    g.econ.Refund();
+    CLog("QUEUE", Name(cur) + ": its " + ActionName(g.clog_action) + " ended without a cast (spent): the action is not used");
+  }
   if (g.keep_queue && !g.econ.party && !g.econ.action_used && !g.econ.engine_driven && cur != g.nudged &&
       IsWaitAction(s.action) && g.lead_skips < 8 && !g.cast_done &&
       !(g.cast_feedback && engine::SpellCasts(cur) > g.turn_casts)) {  // an instant cast this tick is its action

@@ -215,6 +215,15 @@ struct Economy {
   // The engine cast a spell for it this turn (its "casts" feedback). A cast with no casting time (Identify,
   // speed 0) starts and ends inside one engine update, so Feed never sees its action: it still spends the action.
   // -> true when this took the action.
+  // Its Spell ended without casting (the spell was spent: SpellPST refuses it): the action was never spent, the script's
+  // list goes on (Salabesh: Spell; Wait(2); Spell; ... with the first ones used up).
+  void Refund() {
+    action_used = false;
+    acting = false;
+    act_action = 0;
+    did_something = false;
+    nudged = false;
+  }
   bool SawCast() {
     if (action_used) return false;
     action_used = true;

@@ -1361,3 +1361,14 @@ TEST_CASE("tbc script timers: one round of timer time per round") {
   CHECK(c.Owe(75, 67) == 1 && c.debt == 0);   // 7 + 8 = 15 -> 1 s
   CHECK(c.Owe(75, 200) == 0 && c.debt == 0);  // a long turn (its spell landing) owes nothing
 }
+
+TEST_CASE("tbc economy: a spent Spell gives its action back") {
+  Economy e(31.0, 51, false);
+  e.Feed(1, 0, false, 31);  // Spell starts: the action is taken
+  CHECK(e.action_used);
+  e.Refund();               // it ended without a cast
+  CHECK(!e.action_used && !e.acting);
+  const auto st = e.Feed(1, 0, false, 63);  // the Wait behind it is a lead Wait again, not the turn's end
+  CHECK(!st.end_turn);
+}
+
