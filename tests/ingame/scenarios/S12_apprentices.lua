@@ -20,7 +20,7 @@ S.steps[44] = function()
 end
 S.steps[46] = function() for _, id in ipairs(extra) do PSTF_EvalAs(id, 'SetGlobal("cd_int_0","LOCALS",1)') end end
 S.steps[48] = function() for _, id in ipairs(extra) do S.watch[id] = true PSTF_MakeEnemy(id) end end
-S.stepCaster{name = 'APPRENT', cre = 'APPRENT', spawn = true, script = '3012APR1', last = 3, maxFrames = 8000}
+S.stepCaster{name = 'APPRENT', cre = 'APPRENT', spawn = true, script = '3012APR1', last = 3, maxFrames = 10000}
 local inner = S.tick
 S.tick = function(frame, cur, started)
 	for _, id in ipairs(extra) do
@@ -32,6 +32,7 @@ local finish = S.finish
 S.finish = function(why)
 	local n = 0
 	for _, id in ipairs(extra) do if done[id] then n = n + 1 end end
+	if n < #extra and why ~= 'timeout' and S.frame < S.maxFrames - 60 then return end  -- the others are slower: wait
 	if n < #extra then S.issue(string.format('%d of %d other apprentices reached step 3', n, #extra)) end
 	return finish(why)
 end

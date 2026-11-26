@@ -143,6 +143,19 @@ inline bool SkipLeadWait(const uint16_t* q, int n) {
   return false;
 }
 
+// Script state a plot reads: SetGlobal, StartTimer, IncrementGlobal, SetGlobalTimer, RealSetGlobalTimer, AddGlobals.
+inline bool IsStateScriptAction(uint16_t id) {
+  return id == 30 || id == 61 || id == 109 || id == 115 || id == 268 || id == 255;
+}
+// The nudge (an attack ordered for an AI that only waits) clears its queue: not while a step's bookkeeping still
+// waits behind its Wait (apprentice: Spell spent; Wait(1); IncrementGlobal). The turn ends on the Wait instead and
+// the kept queue sets the variable at its next turn (keep_queue), one step per turn as in real time.
+inline bool QueueHoldsScriptState(const uint16_t* q, int n) {
+  for (int i = 0; i < n; ++i)
+    if (IsStateScriptAction(q[i])) return true;
+  return false;
+}
+
 // One search-map cell is 16 x 12 pixels and one foot (Feet2Pixels in GemRB; the engine's own
 // "nearby" ellipse dx^2 + 16 dy^2 / 9 uses the same 4:3 aspect).
 constexpr double kPxPerFootX = 16.0, kPxPerFootY = 12.0;

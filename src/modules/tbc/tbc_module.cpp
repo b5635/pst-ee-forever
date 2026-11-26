@@ -2428,6 +2428,17 @@ void OnTick(uint64_t frame) {
     CLog("AI", Name(cur) + " is confused, panicked or berserk: its own choice stands (no attack ordered)");
     st.nudge = false;
   }
+  if (st.nudge && g.keep_queue && !g.econ.party) {
+    const std::vector<uint16_t> q = engine::ActionQueue(cur);
+    if (QueueHoldsScriptState(q.data(), static_cast<int>(q.size()))) {
+      const std::string t = QueueText(q.data(), static_cast<int>(q.size()));
+      Log("tbc: %s: not nudged: its script still sets a variable behind its %s [%s]; the turn ends on the wait",
+          Who(cur).c_str(), ActionName(s.action).c_str(), t.c_str());
+      CLog("QUEUE", Name(cur) + " not nudged: script state waits behind " + ActionName(s.action) + " [" + t + "]");
+      st.nudge = false;
+      st.end_turn = true;  // no Stop: a stop clears the AI; the turn end keeps the queue (keep_queue)
+    }
+  }
   if (st.nudge) {
     // Its own script picked nothing (many creatures only wait or wander): the engine's attack on the
     // nearest enemy it can see, as a real-time fight would have it retaliate.

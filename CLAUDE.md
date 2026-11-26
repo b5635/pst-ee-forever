@@ -474,6 +474,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   stepped closed (`worldScreen:StepDialog()`). `[tbc] keep_queue`: AI queue kept across turns (combat.log `QUEUE ... keeps`),
   held creatures' `ProcessPendingTriggers` waits for their turn.
   `[tbc] stalemate_rounds` (3): quiet whole rounds end the fight (log `fight N over (stalemate: ...)`, then
-  `tbc: no new fight: the stalemate's creatures stand as they stood` until one moved/was hurt). `S.brawl{rounds = N}`.
+  `tbc: no new fight: the stalemate's creatures stand as they stood` until one moved/was hurt). `S.brawl{rounds = N}`. An AI waiting with a SetGlobal/IncrementGlobal/timer still queued is not
+  nudged (log `not nudged: its script still sets a variable behind its Wait`): its turn ends, the queue carries over.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

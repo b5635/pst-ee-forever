@@ -1364,6 +1364,18 @@ TEST_CASE("tbc script timers: one round of timer time per round") {
   CHECK(c.Owe(75, 200) == 0 && c.debt == 0);  // a long turn (its spell landing) owes nothing
 }
 
+TEST_CASE("tbc economy: no nudge while a step's variable waits behind its Wait") {
+  // S12 apprentice (3012APR2): Spell spent, then [Wait, IncrementGlobal]: the nudge's ClearAI would drop the step
+  const uint16_t step[] = {63, 109};
+  CHECK(QueueHoldsScriptState(step, 2));
+  const uint16_t set[] = {63, 30};      // SetGlobal
+  const uint16_t timer[] = {63, 115};   // SetGlobalTimer
+  CHECK(QueueHoldsScriptState(set, 2) && QueueHoldsScriptState(timer, 2));
+  const uint16_t chatter[] = {63, 369, 229};  // Wait; PlaySequence; FaceObject: nudged as before
+  CHECK(!QueueHoldsScriptState(chatter, 3));
+  CHECK(!QueueHoldsScriptState(nullptr, 0));
+}
+
 TEST_CASE("tbc stalemate: whole quiet rounds end the fight") {
   // S31: three party members and a Hive thug that cannot reach each other, 4 turns a round, HP 82 in all
   Stalemate s;
