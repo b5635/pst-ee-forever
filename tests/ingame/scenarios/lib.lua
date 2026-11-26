@@ -219,3 +219,71 @@ function S.stepCaster(o)
 		if frame == S.maxFrames - 50 then S.issue(string.format('%s stuck at %d after %d of its turns (expected %d)', o.var, top, turns, o.last)) end
 	end
 end
+
+-- Chain casters (section A: Spell; Wait; Spell; ... in one response, no counter). o = {name, cre, script, hp, near,
+-- go, pre = {BCS actions on it first}, set = {{name, scope, v}, ...} (globals set through the protagonist),
+-- casts = K (expected spells), turns = T (own turns to watch), done = {name, scope, v} (finish when it holds)}.
+-- Checks: at most one cast per own turn; at least K casts in T own turns (or `done` holds).
+function S.chainCaster(o)
+	if o.near == nil and not o.go then o.near = {200, 40} end
+	S.maxFrames = o.maxFrames or 9000
+	local id, turns, casts0, total, started = -1, 0, 0, 0, false
+	S.steps[26] = function()
+		id = S.find(o.name)
+		if id == -1 and o.cre then S.spawn(o.cre, o.near and o.near[1] or 200, o.near and o.near[2] or 40) end
+	end
+	S.steps[29] = function()
+		if id == -1 then id = S.find(o.name) end
+		if id == -1 and o.cre then id = S.find(o.cre) end
+		if id == -1 then return S.fail(o.name .. ' not found') end
+		S.caster = id
+		S.note(string.format('%s is %X', o.name, id))
+		S.watch[id] = true
+		local acts = {}
+		if o.script then acts[#acts + 1] = 'ChangeAIScript("' .. o.script .. '",0)' end
+		for _, a in ipairs(o.pre or {}) do acts[#acts + 1] = a end
+		if o.near and not o.cre then
+			local x, y = PSTF_SpritePos(S.tno(), 1)
+			acts[#acts + 1] = 'JumpToPoint([' .. math.floor(x + o.near[1]) .. '.' .. math.floor(y + o.near[2]) .. '])'
+		end
+		for i, a in ipairs(acts) do PSTF_EvalAs(id, a, i == 1 and 1 or 0) end
+		for _, g in ipairs(o.set or {}) do PSTF_EvalAs(S.tno(), 'SetGlobal("' .. g[1] .. '","' .. g[2] .. '",' .. g[3] .. ')') end
+		if o.go then
+			local x, y = S.pos(id)
+			for i = 0, 7 do
+				local p = PSTF_PartyId(i)
+				if p and p ~= -1 then PSTF_EvalAs(p, 'JumpToPoint([' .. math.floor(x + o.go[1] + 30 * i) .. '.' .. math.floor(y + o.go[2]) .. '])', 1) end
+			end
+		end
+	end
+	S.steps[60] = function()
+		PSTF_SetHp(id, o.hp or 3000, o.hp or 3000)
+		for i = 0, 7 do local p = PSTF_PartyId(i) if p and p ~= -1 then PSTF_SetHp(p, 400, 400) end end
+		if o.setup then o.setup(id) end
+		if o.hostile ~= false then PSTF_MakeEnemy(id) end
+		started = true
+	end
+	local last = -2
+	S.tick = function(frame, cur)
+		if not started then return end
+		if o.done and S.global(o.done[1], o.done[2], o.done[3]) then
+			return S.finish(string.format('%s = %d after %d of its turns, %d casts', o.done[1], o.done[3], turns, total))
+		end
+		if cur ~= last then
+			if last == id then
+				local c = PSTF_Casts(id) - casts0
+				total = total + c
+				S.note(string.format('its turn %d: %d cast(s), %d so far', turns, c, total))
+				if c > 1 then S.issue(string.format('%d casts in one turn (turn %d)', c, turns)) end
+			end
+			if cur == id then turns = turns + 1 casts0 = PSTF_Casts(id) end
+			last = cur
+		end
+		if o.trace and cur == id and frame % 25 == 0 then PSTF_Action(id) PSTF_Queue(id) end
+		if turns > (o.turns or 8) and cur ~= id then
+			if total < (o.casts or 1) then S.issue(string.format('%d casts in %d of its turns (expected %d)', total, turns - 1, o.casts)) end
+			return S.finish(string.format('%d casts in %d of its turns', total, turns - 1))
+		end
+		if frame == S.maxFrames - 50 then S.issue(string.format('only %d of its turns, %d casts', turns, total)) end
+	end
+end

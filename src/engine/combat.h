@@ -312,6 +312,19 @@ std::vector<std::pair<int, int>> ScriptTimers(int32_t id);
 bool ClearAIKeepQueue(int32_t id);
 // Ends the running action only (SetCurrAction(NULL_ACTION)); the queue stays: a script's Wait before its action.
 bool EndCurrentAction(int32_t id);
+// The queued actions taken out of a creature (its list emptied) and put back later: an attack of opportunity swings
+// with an empty queue and the script sequence it had waits on (same CPtrList fields as ClearAIKeepQueue).
+struct QueueStash {
+  uint64_t list[5] = {};
+  uint32_t mark = 0;
+  uint16_t mark2 = 0;
+  int32_t id = -1;
+  bool held = false;
+};
+bool StashQueue(int32_t id, QueueStash* out);
+bool RestoreQueue(QueueStash* st);  // clears what was queued meanwhile first
+// 1 = the running action is done and the engine takes the next one on its next update (sprite +0x3E8), 0 not, -1 n/a.
+int CurrentActionDone(int32_t id);
 bool SetHpForTest(int32_t id, int hp, int max_hp = 0);  // max_hp > 0: base max HP too          // test probe only (PSTF_SetHp)            // probe: sprite +0x3904..+0x3910 (Spell's target check)
 
 }  // namespace pstf::engine

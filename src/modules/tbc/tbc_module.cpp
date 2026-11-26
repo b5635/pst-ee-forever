@@ -212,6 +212,9 @@ struct State {
   int lead_skips = 0;                // Waits skipped before the current creature's action this turn
   bool freeze_ai = false;            // the current AI's turn is over (spell still landing): no ProcessAI
   bool keep_current = false;         // its turn ended at a second action: that action and the queue wait for its next turn
+  engine::QueueStash aoo_stash;      // the reactor's script queue while it swings its attack of opportunity
+  bool cast_live = false;            // the current creature's spell is being cast (CurrentSpell set)
+  bool cast_done = false;            // an AI's spell went off this turn: one cast per turn
   int aoo_trace = 0;                 // env PSTF_AOO_TRACE=N: log the first N reach checks of each turn
   int aoo_trace_react = 0;           // ... and the ticks of a reaction
   std::map<int32_t, Stance> stance;  // every combatant, from its turn start to the next
@@ -629,6 +632,10 @@ void OnTurnChange(int32_t prev, int32_t next) {
     const bool party = Contains(g.party, prev) || (pc && pc->r.side == Side::Party);
     // its script's bookkeeping (IncrementGlobal) became the running action as the turn ended: it has not run yet
     if (g.keep_queue && !party && prev != g.nudged && !q.empty() && KeepCurrentAtTurnEnd(q[0])) g.keep_current = true;
+    // its next spell is the running action but not cast yet (the turn ended when the first went off)
+    if (g.keep_queue && g.cast_done && !party && !q.empty() && IsCastAction(q[0]) && engine::CurrentSpell(prev).empty() &&
+        engine::CurrentActionDone(prev) == 0)
+      g.keep_current = true;
     if (g.keep_current) {
       const std::string t = QueueText(q.data(), static_cast<int>(q.size()));
       Log("tbc: %s: turn end keeps its action and queue [%s] for its next turn", Who(prev).c_str(), t.c_str());
@@ -654,6 +661,8 @@ void OnTurnChange(int32_t prev, int32_t next) {
   g.lead_skips = 0;
   g.freeze_ai = false;
   g.keep_current = false;
+  g.cast_live = false;
+  g.cast_done = false;
   g.steady_ai = false;
   g.apr_halves = 0;
   g.current = next;
@@ -1245,6 +1254,7 @@ void ManeuverTurnStart(int32_t id) {
   g.trip_pace.Stop();
   g.ai_moved = false;
   g.ai_path_wait = 0;
+  if (g.aoo_stash.held) engine::RestoreQueue(&g.aoo_stash);  // a reaction cut short
   g.aoo = Reaction{};
   if (!g.maneuvers) return;
   Stance& st = g.stance[id];
@@ -1266,6 +1276,7 @@ void ManeuverFightEnd() {
   g.trips.clear();
   g.trip_checks.clear();
   g.trip_pace.Stop();
+  if (g.aoo_stash.held) engine::RestoreQueue(&g.aoo_stash);  // a reaction cut short
   g.aoo = Reaction{};
   g.aoo_queue.clear();
   g.fx.clear();
@@ -1283,6 +1294,14 @@ void StartReaction(int32_t reactor, int32_t mover, bool fudge) {
   if (slot >= 0) order = "Attack(Player" + std::to_string(slot + 1) + ")";
   // ClearAI (SetCurrAction) clears the engine's attack-round flag: the reach it had when the mover left stays.
   const bool engaged = engine::InAttackRound(reactor);
+  if (g.keep_queue && !Contains(g.party, reactor)) {
+    // its script sequence (kept for its next turn) waits out the swing; a kept running action does not
+    const std::vector<uint16_t> q = engine::ActionQueue(reactor);
+    if (!q.empty() && q[0] != 0)
+      CLog("QUEUE", Name(reactor) + " attack of opportunity drops its running " + ActionName(q[0]));
+    if (q.size() > 1 && engine::StashQueue(reactor, &g.aoo_stash))
+      CLog("QUEUE", Name(reactor) + " attack of opportunity: [" + QueueText(q.data() + 1, static_cast<int>(q.size()) - 1) + "] waits");
+  }
   engine::ClearAI(reactor);
   const bool ok = engine::EvalAs(reactor, order);
   if (engaged || fudge) engine::KeepAttackRound(reactor);
@@ -1407,6 +1426,8 @@ bool ReactionTick(uint32_t dt) {
   if (alive && !g.aoo.Feed(dt, swung)) return true;
   engine::ClearAI(g.aoo.reactor);
   engine::DropPath(g.aoo.reactor);
+  if (g.aoo_stash.held && engine::RestoreQueue(&g.aoo_stash))
+    CLog("QUEUE", Name(g.aoo.reactor) + " gets its queue back after the attack of opportunity");
   if (g.aoo.swung) ++g.ms.aoo_swung;
   if (!g.aoo.swung)
     Log("tbc: %s: no attack of opportunity swing (action %u, path %d, state %llX)", Who(g.aoo.reactor).c_str(), alive ? r.action : 0,
@@ -2134,14 +2155,43 @@ void OnTick(uint64_t frame) {
     const bool up = engine::GetSprite(g.current, &cs) && CasterProjectiles(g.current, cs.area).flying > 0;
     g.since_flying = up ? 0 : std::min<uint32_t>(g.since_flying + dt, 1000);
   }
+  if (g.current != -1 && g.keep_queue && !g.econ.party && !g.cast_done && g.current != g.nudged &&
+      IsCastAction(g.clog_action)) {
+    // A Spell its script queued after a spent one waits a whole casting aura (a round of its own ticks) before the
+    // engine finds it spent too: Shilandra's list of five took four turns of nothing. The turn already limits it to
+    // one cast, so the aura does not wait inside its turn: a spent spell fails at once, the next in the list goes.
+    int32_t in_progress = 0;
+    int16_t counter = -1;
+    if (engine::CastState(g.current, &in_progress, &counter, nullptr) && !in_progress && counter >= 0 &&
+        engine::CurrentSpell(g.current).empty()) {
+      engine::SetCastAura(g.current, -1);
+      CLog("QUEUE", Name(g.current) + ": casting aura " + std::to_string(counter) + " -> -1 (no cast yet this turn)");
+    }
+  }
+  if (g.current != -1 && !g.cast_live && g.econ.action_used && IsCastAction(g.clog_action) &&
+      !engine::CurrentSpell(g.current).empty())
+    g.cast_live = true;  // a cast after another action took the turn's action (its patrol's first step)
   // The spell being cast now: parentless effects its projectile builds take it for their icon (status.h NoteCast).
-  if (g.current != -1 && g.res && g.econ.acting && IsCastAction(g.econ.act_action)) {  // +0x47F8 outlives the cast
+  if (g.current != -1 && g.res &&
+      ((g.econ.acting && IsCastAction(g.econ.act_action)) || g.cast_live)) {  // +0x47F8 outlives the cast
     const std::string res = engine::CurrentSpell(g.current);
     static std::string last_cast;
     if (res != last_cast) {
       Log("tbc: %s: spell being cast %s (parentless effects' fallback parent)", Who(g.current).c_str(),
           res.empty() ? "none" : res.c_str());
       last_cast = res;
+    }
+    if (!res.empty()) {
+      g.cast_live = true;
+    } else if (g.cast_live) {
+      // Its spell went off. An AI's script may queue the next one at once (Spell; Spell; Spell with no Wait): one
+      // cast per turn, the rest is its next turns' (the casting aura would start the next in about 2 s).
+      g.cast_live = false;
+      if (g.keep_queue && !g.econ.party && g.current != g.nudged && !g.cast_done) {
+        g.cast_done = true;
+        g.freeze_ai = true;
+        CLog("QUEUE", Name(g.current) + ": its spell went off: its script waits for its next turn");
+      }
     }
     if (!res.empty()) {
       const SpellFacts* f = g.res->Spell(res);
@@ -2339,6 +2389,11 @@ void OnTick(uint64_t frame) {
     Log("tbc: %s idle on its turn: ordered %s (%s)", Who(cur).c_str(), order.c_str(), ok ? "ok" : "failed");
     CLog("AI", Name(cur) + (s.action ? " only waits (" + ActionName(s.action) + ", ignored)" : " chose nothing") +
                    ": ordered " + order);
+  }
+  if (g.cast_done && !st.end_turn) {
+    g.econ.acting = false;
+    st.stop = Stop::None;
+    st.end_turn = true;  // its one cast this turn went off
   }
   if (st.stop == Stop::NoAction && g.keep_queue && !g.econ.party && cur != g.nudged && !g.econ.engine_driven) {
     // Its script's next action after the one this turn had (Spell; Spell; Attack): the turn ends here and that

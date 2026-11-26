@@ -302,6 +302,40 @@ bool EndCurrentAction(int32_t id) {
   return true;
 }
 
+bool StashQueue(int32_t id, QueueStash* out) {
+  static const int ok = AllOk({sym::kRvaQueueList, sym::kRvaQueueCount}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p || !out) return false;
+  const uint64_t list = p + sym::kOffSpriteQueueHead - 8;
+  for (int i = 0; i < 5; ++i) out->list[i] = R<uint64_t>(list + 8 + 8 * i), W<uint64_t>(list + 8 + 8 * i, 0);
+  out->mark = R<uint32_t>(p + 0x3E0);
+  out->mark2 = R<uint16_t>(p + 0x3E4);
+  out->id = id;
+  out->held = true;
+  return true;
+}
+
+bool RestoreQueue(QueueStash* st) {
+  if (!st || !st->held) return false;
+  st->held = false;
+  const uint64_t p = LookupSprite(st->id);
+  if (!p) return false;  // gone: its nodes are lost with it (a few bytes)
+  const uint64_t list = p + sym::kOffSpriteQueueHead - 8;
+  if (R<uint64_t>(list + 8) != 0 || R<int32_t>(list + 24) != 0) ClearAI(st->id);  // the reaction's own leftovers
+  if (R<uint64_t>(list + 8) != 0 || R<int32_t>(list + 24) != 0) return false;
+  for (int i = 0; i < 5; ++i) W<uint64_t>(list + 8 + 8 * i, st->list[i]);
+  W<uint32_t>(p + 0x3E0, st->mark);
+  W<uint16_t>(p + 0x3E4, st->mark2);
+  return true;
+}
+
+int CurrentActionDone(int32_t id) {
+  static const int ok = AllOk({sym::kRvaActionDone}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p) return -1;
+  return R<int32_t>(p + sym::kOffSpriteActionDone) != 0 ? 1 : 0;
+}
+
 std::vector<std::pair<int, int>> ScriptTimers(int32_t id) {
   std::vector<std::pair<int, int>> out;
   static const int ok = AllOk({sym::kRvaTimerList}) ? 1 : 0;

@@ -319,6 +319,10 @@ constexpr uint32_t kRvaProcessAI = 0x421830;
 // (ResolveInstants) and the script for pending triggers, outside ProcessAI. tbc holds it like ProcessAI.
 inline constexpr uint8_t kSlotPendingTriggersBytes[] = {0x30, 0x5D, 0x42, 0x40, 0x01, 0x00, 0x00, 0x00};
 constexpr uint32_t kRvaSlotPendingTriggers = 0x6494D0, kRvaPendingTriggers = 0x425D30;
+// Sprite +0x3E8 = "the current action is done, take the next" (ProcessPendingTriggers win 140425E55
+// `cmp dword ptr [rdi+3E8h], 0` -> SetCurrAction(GetNextAction), then cleared; lin 4A24B0 this+250*4).
+inline constexpr uint8_t kActionDoneBytes[] = {0x83, 0xBF, 0xE8, 0x03, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaActionDone = 0x425E55, kOffSpriteActionDone = 0x3E8;
 // CGameSprite::AIUpdate calls CGameSprite::AIUpdateWalk (lin 51FFA0, win 1403B6D20) at two sites; void.
 inline constexpr uint8_t kWalkCall1Bytes[] = {0xE8, 0x0A, 0x0B, 0x00, 0x00};
 inline constexpr uint8_t kWalkCall2Bytes[] = {0xE8, 0x9C, 0x05, 0x00, 0x00};
@@ -1214,6 +1218,7 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("GetNextAction.queueCount", kRvaQueueCount, kQueueCountBytes, "lin 183B00 / win 140172D31"),
     PSTF_SYM("GetNextAction.queueList", kRvaQueueList, kQueueListBytes, "lin 183B00 / win 140172D3E"),
     PSTF_SYM("CheckTimers.listHead", kRvaTimerList, kTimerListBytes, "lin 1912E0 / win 140164C0A"),
+    PSTF_SYM("ProcessPendingTriggers.actionDone", kRvaActionDone, kActionDoneBytes, "lin 4A24B0 / win 140425E55"),
     PSTF_SYM("ClearAI.setNullAction", kRvaSetNullAction, kSetNullActionBytes, "lin 4A5320 / win 140404BB6"),
     PSTF_SYM("ClearAI.curAction", kRvaClearAICurAction, kClearAICurActionBytes, "win 140404BC6"),
     PSTF_SYM("CGameSprite::ProcessAI", kRvaProcessAI, kProcessAIBytes, "lin 4FA830 / win 140421830"),

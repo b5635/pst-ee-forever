@@ -39,6 +39,17 @@ Forcing is allowed: `PSTF_MakeEnemy`, `PSTF_SetHp`, `PSTF_EvalAs(id, 'BCS action
 travel does not work, so every scenario starts in an area a save is in. Spawned creatures get the script their
 area actor entry gives them: `tools/bcs.py who CRE` shows it, and `ChangeAIScript("SCRIPT",0)` puts it on them.
 
+## Run order (fixes cascade)
+
+Scenarios are run grouped by the mechanism they share, so one fix is checked by the whole group at once:
+
+1. **Queue across turns** (finding 1): S14 first, then the counter casters S04-S08, S13 (`S.stepCaster`), then the
+   Spell/Wait chains S10, S11, S15, S16, S12 and the no-wait chain S09 (`S.chainCaster`).
+2. **Timer casters** (script timers count only in their own turns): S01-S03, S17, S31.
+3. **Plot state behind a Wait / held triggers** (section B): S18-S26 lean on group 1 and on held creatures' pending
+   triggers (ProcessPendingTriggers waits for the turn).
+4. **Dialogue inside a fight** (section D) S36-S40, then crowds and fleeing (section C), bosses (E), edge cases (F).
+
 ## What "working well" means (every scenario)
 
 1. **Same outcome as real time.** Script variables, deaths, hostility, dialogue and cutscenes end as they would
@@ -62,8 +73,8 @@ before the first action is replaced by an ordered attack (the nudge). Real-time 
 | S01 | 000700162 Spoke To Ravel (AR0610) | Make Ravel hostile (`PSTF_MakeEnemy`); HP 400; party HP 400; watch Ravel | Spell steps advance (LOCALS `Scd_int_1` 1..N); `StartTimer(1,20)` self-spell recurs; at HP < 50 % casts 1601; at death the `0610cut2` cutscene plays and the fight ends cleanly | QUEUE lines (Spell, Wait, IncrementGlobal), TIMER `1:`, cutscene, fight end | - |
 | S02 | 000700204 Ready For Final Fight (AR1204) | Turn the Transcendent One hostile (1204TRNA then 1204TRNF); HP 2000 | Signature spells 2902, 2506, 2805, 2802 cast once each, about 30 s of its own time apart; melee between them (`TimerActive(2)`); self-heal 1601 under 51 %; at death `Quit_Game` | TIMER `2:` counts down across its turns; how many turns between big spells | - |
 | S03 | 000700117 Exotic Shopping (AR0609) | Vrischika: set LOCALS `Scd_int_1` 14, make her hostile | Casts 2209 (close), 2405, 2207 (far), each gated by `StartTimer(1,1..4)` | TIMER `1:`; casts per turn | - |
-| S04 | 000700136 Spoke to Splinter (AR0601) | Spawn JUMBLE (or find him), give him 0601JUMB, LOCALS `Scd_int_0` 1, make him hostile | Step 1 (2102 self), step 2 (`Wait(1)` then 2115), step 3 ... counter climbs once per turn | Wait-first steps: nudge replaces them with melee (`AI ... only waits ... ordered Attack`) = ISSUE | - |
-| S05 | 000700145 Extravagant Ones Complete (AR0603) | Lady Thorncombe (0603LADY), same as S04 | Same as S04 | Same | - |
+| S04 | 000700136 Spoke to Splinter (AR0601) | Jumble (in the area), LOCALS `cd_int_0` 1, hostile, HP 3000 | Step 1 (2102 self), step 2 (`Wait(1)` then 2115), step 3 ... counter climbs once per turn | Wait-first steps | ok: 1 -> 7 in 9 turns, one spell each; the 2 turns without a step were knockdowns (stand up = the action) |
+| S05 | 000700145 Extravagant Ones Complete (AR0603) | Lady Thorncombe (0603LADY), same as S04 | Same as S04 | Same | ok: one spell per turn (5 steps in 10 turns: 3 knockdowns, 1 step lost inside the engine's cinematic freeze, vanilla) |
 | S06 | 000700148 Personal Experiences Done (AR0604) | Quell (0604QUEL), same as S04 | Same as S04 | Same | - |
 | S07 | 000700128 Wizard is Dead (AR13WZ) | Spawn CBOSS, `ChangeAIScript("1300CWIZ",0)`, LOCALS `Scd_int_0` 1, hostile | Steps 2807 at Player1, 2504 self, 2301; past step 3, `WaitRandom(5,10)` then two ReallyForceSpell 2107 | Lead `WaitRandom`: is it nudged into melee? | - |
 | S08 | 000700186 Carceri Return (AR0900) | Hezobol (0900HEZO): LOCALS `Scd_int_0` 1, hostile | Through all 12 steps, one spell per turn (2304, 2502, 2402 ...) | Counter progress per turn | - |
@@ -72,7 +83,7 @@ before the first action is replaced by an ordered attack (the nudge). Real-time 
 | S11 | 000700027 Cleared Entrance (AR0208) | Spawn STRAHAN, `ChangeAIScript("0209NECR",0)`, `SetGlobal("0209_Attack","AR0209",1)`, hostile | Spell sequence 2408, 2213, 2207, 2201, 2309, one per turn | `SpellPoint` at a point; chain progress | - |
 | S12 | 000700052 Got the Gem (AR3010A) | Spawn APPRENT..APPRENT5 with 3012APR1..5, LOCALS `Scd_int_0` 1, all hostile | Four casters each walk through their steps (ForceSpell 2107/2207/2202) | Four step counters at once; turn order | - |
 | S13 | 000700046 Killed Rotten Williams (AR3006D) | Spawn AOLA (3006AOLA), LOCALS `Scd_int_0` 1, hostile | 1106 self, 1103, 1204 ... one per turn | Counter | - |
-| S14 | 000700083 Got The Key (AR0403) | **Implemented** (`S14_starved_dog_mage.lua`): spawn SDMAGE + 0403MAGE, MortalKombat=1, hostile | MortalKombat climbs 1 to 5 | **First run (2026-11-26): ISSUE.** The counter stuck at 2; log `enemy 650065: turn end drops queue [Wait, IncrementGlobal] (script state lost)` | ISSUE |
+| S14 | 000700083 Got The Key (AR0403) | `S14_starved_dog_mage.lua`: spawn SDMAGE + 0403MAGE, MortalKombat=1, hostile | MortalKombat climbs 1 to 5 | First run: counter stuck at 2 (`turn end drops queue [Wait, IncrementGlobal]`) | FIXED 49e4c6c: 1 -> 5, one step per turn |
 | S15 | 000700061 Cleared Trash Warrens (AR0108) | Spawn SPELRAT, 0108SRAT, hostile | ReallyForceSpell chain 2207 x2, 2115, 2107 ..., then `AR0108Rat_Leader_Done`=1 | The same first spell every turn, the variable never set = ISSUE | - |
 | S16 | 000700077 Killed Many-As-One (AR1600) | Spawn SPELRAT, `ChangeAIScript("1600T2LD",0)`, hostile (`AR1600_PC_Enemy`=1) | Leader casts its Spell/Wait chain; `Leaving_2` global timer path works | Chain; global timer | - |
 | S17 | 000700070 Spoke with Hargrimm (AR1500) | A Dead Nations skeleton (1500INIT, then 1500HARG) made hostile | HP-gated self-spells (1102, 1202) and timer-gated 1103, 1204, 1301 at the right ranges | TIMER `1:` | - |
@@ -143,6 +154,20 @@ Extra checks folded into every run (they need no scenario of their own): quick-s
 toggling `[tbc] enabled=0` (vanilla behaviour must come back, the toggle check).
 
 ## Findings so far
+
+- **Finding 1 fixed (2026-11-26).** An AI turn end keeps the queued script actions for the creature's next turn
+  (`engine::ClearAIKeepQueue`: ClearAI without ClearActions, the running response's markers kept), a script Wait
+  before the first action is skipped when a non-move action follows (`SkipLeadWait`; a patrol route `Wait;
+  MoveToPoint` is still nudged), script bookkeeping (IncrementGlobal, SetGlobal, Enemy, ...) is no action, a second
+  action ends the turn and waits for the next one, and a finished turn that waits for its spell to land runs no more
+  script (`freeze_ai`). Toggle `[tbc] keep_queue`. S14: MortalKombat 1 -> 5, one step per turn.
+- **Held creatures ran scripts on triggers** (fixed): `CGameSprite::ProcessPendingTriggers` (vtable +0x1A8) runs the
+  next queued action, instant actions and the script for pending triggers outside ProcessAI. It is now held like
+  ProcessAI (dead creatures still run theirs).
+- The BCS variable `LOCALScd_int_0` is scope `LOCALS` + name `cd_int_0` (not `Scd_int_0`).
+- Walkthrough saves can load inside a party banter dialogue (the world waits): `lib.lua` steps it closed first.
+- Engine (vanilla): a cinematic spell freeze (`CPlanescape::SetGameFreeze`) pops and replaces queued actions of the
+  sprites in the area; a step queued behind it can be lost the same way in real time (seen in S05).
 
 - **S14 confirmed audit finding 1 in game.** The Starved Dog Mage's step counter stopped at 2; the log shows the
   `IncrementGlobal` behind `Wait(1)` dropped at its turn end. Proposed fix: when a `Wait` ends an AI turn, drop

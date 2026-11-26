@@ -468,6 +468,10 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   `-Id S00 -Save PREFIX` lists a save's creatures. Probes: `PSTF_Queue(id)`, `PSTF_Timers(id)`, `PSTF_FindActor(name[, n])`,
   `PSTF_Actors([r])`, `PSTF_ActorRefs()`; read a variable with `PSTF_Trigger(who, 0x400F, value, '', 'AR0403MortalKombat')`
   (Lua `S.global`). Unattended fights need env `PSTF_TBC_AUTOPARTY=1`. Spawned CREs lack their area actor's script:
-  `ChangeAIScript("SCRIPT",0)` (see `bcs.py who CRE`).
+  `ChangeAIScript("SCRIPT",0)` (see `bcs.py who CRE`). `lib.lua` drivers: `S.stepCaster{name, cre, script, last}`
+  (LOCALS counter, BCS `LOCALScd_int_0` = LOCALS + `cd_int_0`) and `S.chainCaster{name, casts, turns, done}`; S.find takes
+  the shown name; one action per `PSTF_EvalAs` (C:Eval runs only the first); saves that load in a banter dialogue are
+  stepped closed (`worldScreen:StepDialog()`). `[tbc] keep_queue`: AI queue kept across turns (combat.log `QUEUE ... keeps`),
+  held creatures' `ProcessPendingTriggers` waits for their turn.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

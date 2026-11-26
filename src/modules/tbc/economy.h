@@ -68,6 +68,7 @@ inline bool IsIdleAction(uint16_t id) {
     // ChangeTeam, BitSet, BitClear, ForceAIScript (a "Spell; Wait; IncrementGlobal" step's counter is not an action)
     case 7: case 10: case 60: case 109: case 111: case 115: case 146: case 153: case 369: case 392: case 404:
     case 405: case 433:
+    case 454:  // PlaySequence: a cosmetic animation (Shilandra's patrol), not the turn's action
       return true;
     default:
       return false;
