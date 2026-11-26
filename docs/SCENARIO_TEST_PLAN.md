@@ -165,7 +165,7 @@ These only matter while the creature is already a combatant, so each scenario st
 | S37 | 000700136 Spoke to Splinter (AR0601) | Attack Splinter | `Call_MK`=1, `GLOBALSplinter`=1, dialogue | Same as S36 | ok for turn-based: Splinter = 1, his dialogue opens in his own turn. Same caveat as S36: the reply-driven conversation is not closed by the test (the turn waits on the open dialogue, as the world does) |
 | S38 | 000700103 Get Hamrys Senior Plans (AR0510) | Attack the Vault 9 guard (0510VALT) | `Vault_Attack`=1 + dialogue | Same | ok: Vault_Attack = 1, his dialogue opens in his own turn, closes, the fight goes on |
 | S39 | 000700123 Exploring Maze (AR1342) / 000700128 (AR13WZ) | Modron constructs (CHIGH/CMED/CLOW, 1300CONS) near (686,498) | Help, Dialogue, Enemy, Attack in one response: dialogue first, then the fight | Dialogue inside the turn | ok: CHIGH/CMED/CLOW spawned with 1300CONS (no Dialogue in this script: Help, Enemy, Attack), Help brings the others in, 9 combatants, fight over after 3 rounds |
-| S40 | 000700189 Trias Time (AR0901) | Trias fight as the walkthrough plays it | Dialogue, then the fight; Trias' sword variable (`Trias_Sword`) decides Game_Over vs fight | No early Game_Over | - |
+| S40 | 000700189 Trias Time (AR0901) | Trias fight as the walkthrough plays it | Dialogue, then the fight; Trias' sword variable (`Trias_Sword`) decides Game_Over vs fight | No early Game_Over | OPEN (setup): the save opens in the Trias talk; a 2-reply node stays open even with reply clicks (`stuck ... a dialogue with replies is open`), so the fight never gets past round 1. Found on the way: the provoke opens his dialogue (no hit) and Game_Over stays 0; Trias_Sword 2 runs his Dialogue block (use 3) |
 
 ## E. Bosses and special mechanics
 
