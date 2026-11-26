@@ -181,11 +181,11 @@ These only matter while the creature is already a combatant, so each scenario st
 
 | ID | Save (area) | Setup / forcing | Expected | Watch | Outcome |
 |---|---|---|---|---|---|
-| S46 | 000700083 (AR0403) | Set TNO HP 1, let a thug kill him mid-fight | TNO's death: Mortuary area change; the fight ends; no held creature left over | Fight end reason; HUD gone | - |
-| S47 | 000700083 (AR0403) | Kill Morte mid-fight (HP 1) | The dead leave the fight, turn order goes on; Morte's own script on death | Order, no stuck | - |
+| S46 | 000700083 (AR0403) | Set TNO HP 1, let a thug kill him mid-fight | TNO's death: Mortuary area change; the fight ends; no held creature left over | Fight end reason; HUD gone | thin: ran with no fault or stuck turn, but the lone thug died in round 1 (fight over, 302 ticks) before the 1-HP protagonist fell; re-run with the thug at 200 HP to reach the death |
+| S47 | 000700083 (AR0403) | Kill Morte mid-fight (HP 1) | The dead leave the fight, turn order goes on; Morte's own script on death | Order, no stuck | thin: as S46 (620 ticks, fight over in round 1); Morte's death not reached |
 | S48 | 000000200 PSTF-8-Party (test save) | Spawn 6 Starved Dog thugs (CRE of the AR0403 thugs) next to the 8-member party | 8 party turns plus 6: party slots 7 and 8 get turns and cards | HUD cards, initiative | ok: 8-member party vs 6 thugs (60 HP), 14 combatants, every slot 1-8 had 4-5 turns, fight over after 5 rounds |
-| S49 | 000700083 (AR0403) | Charm a thug (`ApplySpell` with op 5) mid-fight, then let the charm end | Changes sides on charm (`tbc: X changes sides`), fights for the party, goes back when it ends | Sides, nudge target | - |
-| S50 | 000700083 (AR0403) | Make a thug invisible (op 20) mid-fight | Party scripts cannot see it; its turns still run (nudge `Attack(PlayerN)` needs no sight) | No stuck turn; HUD | - |
+| S49 | 000700083 (AR0403) | Charm a thug (`ApplySpell` with op 5) mid-fight, then let the charm end | Changes sides on charm (`tbc: X changes sides`), fights for the party, goes back when it ends | Sides, nudge target | ok: the charmed thug `changes sides (EA 7): now party side`, the fight ends (no hostile left) in round 1 |
+| S50 | 000700083 (AR0403) | Make a thug invisible (op 20) mid-fight | Party scripts cannot see it; its turns still run (nudge `Attack(PlayerN)` needs no sight) | No stuck turn; HUD | thin: fight over in round 1 (238 ticks); the invisible case not reached |
 
 Extra checks folded into every run (they need no scenario of their own): quick-save refused or allowed mid-fight
 (`PSTF_CanSave`), opening the inventory, map and record screens during an enemy turn, the options screen, and
