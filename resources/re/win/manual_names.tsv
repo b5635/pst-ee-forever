@@ -37,3 +37,4 @@
 14043A780	CGameSprite::FloatingHP(void)
 140196F90	CGameArea::GetTintColor(CPoint const&,uchar)
 1404AD630	CVidCell::FXRender3d(int,int,CRect const&,CRect const&,uint,int)
+140435E60	CGameSprite::UpdateTarget(CGameObject *)

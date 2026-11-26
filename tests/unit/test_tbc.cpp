@@ -116,6 +116,24 @@ TEST_CASE("tbc director: order, budgets, turn ends only on events") {
   CHECK(d.Clock() == 5000 + 51);
 }
 
+TEST_CASE("tbc director: a combatant changing sides keeps its turn; an empty side ends the fight") {
+  Director d(1, kRoundTicksPst);
+  d.Start({H(10, -50), P(1, 50), P(20, 10)}, 5000);  // 20: a neutral that joined on the party's side
+  CHECK((d.Order() == std::vector<int32_t>{1, 20, 10}));
+  CHECK(d.EndTurn(1));
+  CHECK(d.Current() == 20);
+  CHECK(!d.SetSide(20, Side::Party));   // same side: nothing
+  CHECK(!d.SetSide(99, Side::Hostile)); // not in the fight
+  CHECK(d.SetSide(20, Side::Hostile));  // its script turned it hostile on its own turn
+  CHECK(d.Running() && d.Current() == 20 && d.Find(20)->r.side == Side::Hostile);
+  CHECK(d.EndTurn(20));
+  CHECK(d.Current() == 10);
+  d.Remove(10);
+  CHECK(d.Running());                   // 20 still fights the party
+  CHECK(d.SetSide(20, Side::Party));    // ... until it is friendly again: no hostile left
+  CHECK(!d.Running());
+}
+
 TEST_CASE("tbc director: 3/2 APR gives 2 swings in round 1, 1 in round 2") {
   Director d(7, kRoundTicksPst);
   d.Start({P(1, 50, 3), H(10, -50)}, 0);
@@ -279,6 +297,47 @@ TEST_CASE("tbc census: start, join, leave") {
   // a party member who left the area (not in the list) leaves too
   auto e = Census({w[0]}, {1, 2}, true, r);
   CHECK((e.leave == std::vector<int32_t>{2}));
+}
+
+TEST_CASE("tbc census: a neutral fighting a combatant joins on the other side") {
+  Radii r;
+  auto find = [](const CensusOut& c, int32_t id) -> const Seen* {
+    for (const auto& s : c.join)
+      if (s.id == id) return &s;
+    return nullptr;
+  };
+  std::vector<Seen> w = {
+      {1, true, 2, true, 1000, 1000},
+      {10, false, 255, true, 1300, 1000},                 // hostile: starts the fight
+      {20, false, 128, true, 1350, 1000, 10, true},        // neutral attacking the hostile
+      {21, false, 128, true, 1100, 1000, 10, false},       // neutral whose last target was it, now idle
+      {22, false, 128, true, 1400, 1000, 23, true},        // neutral attacking neutral 23 ...
+      {23, false, 128, true, 1450, 1000, 10, true},        // ... who attacks the hostile: both join
+      {24, false, 128, true, 1500, 1000, 25, true},        // neutral vs neutral, nobody in the fight
+      {25, false, 128, true, 1550, 1000, 24, true},
+      {26, false, 128, true, 2500, 1000, 10, true},        // fights the hostile but beyond the join radius
+  };
+  auto c = Census(w, {}, false, r);
+  CHECK(c.start);
+  CHECK(find(c, 20) && find(c, 20)->ally);
+  CHECK(!find(c, 21));
+  CHECK(find(c, 23) && find(c, 23)->ally);
+  CHECK(find(c, 22) && !find(c, 22)->ally);  // it attacks the party's side
+  CHECK(!find(c, 24) && !find(c, 25) && !find(c, 26));
+  CHECK(c.join.size() == 5);  // 1, 10, 20, 22, 23
+
+  // running: the hostile (10, hostile side) attacks neutral 21 on its turn: 21 joins on the party side;
+  // a neutral attacking the party (1) joins on the hostile side
+  w[1].target = 21, w[1].fighting = true;
+  w[7] = {27, false, 128, true, 1050, 1000, 1, true};
+  auto d = Census(w, {1, 10, 20, 22, 23}, true, r, {10, 22});
+  CHECK(find(d, 21) && find(d, 21)->ally);
+  CHECK(find(d, 27) && !find(d, 27)->ally);
+  CHECK(!find(d, 24));
+  CHECK(d.join.size() == 2);
+  // nobody fighting: no neutral joins
+  for (auto& s : w) s.fighting = false;
+  CHECK(Census(w, {1, 10}, true, r, {10}).join.empty());
 }
 
 TEST_CASE("tbc turn clock: budget of busy ticks, AI idle end, party waits") {

@@ -110,9 +110,18 @@ std::string PartyNames() {
       out += "?";
       continue;
     }
-    const char* c = reinterpret_cast<const char*>(p + 0x478);  // char[32], inline
+    const char* c = reinterpret_cast<const char*>(p + sym::kOffObjScriptName);  // char[32], inline
     for (int i = 0; i < 32 && c[i]; ++i) out += c[i];
   }
+  return out;
+}
+
+std::string ScriptName(int32_t id) {
+  std::string out;
+  const uint64_t p = LookupSprite(id);
+  if (!p) return out;
+  const char* c = reinterpret_cast<const char*>(p + sym::kOffObjScriptName);
+  for (int i = 0; i < 32 && c[i]; ++i) out += c[i];
   return out;
 }
 

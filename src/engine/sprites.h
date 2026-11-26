@@ -23,6 +23,7 @@ struct SpriteInfo {
   int32_t bestiary = -1;   // PST bestiary index of its animation (-1: none)
   uint16_t action = 0;     // current action id (ACTION.IDS)
   bool has_path = false;   // the engine has a walk path for it
+  int32_t target = -1;     // object id of its current action's target (UpdateTarget), -1: none or unreadable
 };
 
 bool SpritesAvailable();

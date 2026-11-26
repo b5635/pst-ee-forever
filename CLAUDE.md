@@ -444,5 +444,11 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   seen, taken, added. Log `tbc: floater "..."` (first 80) and `tbc: text over X: ...`. UI text widths: Lua
   `pstfTextWidth(t, pt)` (Infinity_GetContentHeight only wraps between words: one word needs the ' |' calibration).
   Shots of UI need `PSTF_SHOT_DIR` (`PSTF_LightShot` is the world pass only, no menus).
+- Neutrals in fights (census.h): a neutral (EA 31..199) joins only while fighting a combatant (its attack/spell target
+  is one, or a combatant targets it: sprite +0x4940 target id, `UpdateTarget`), on the other side; a combatant whose EA
+  crosses a cutoff changes sides (`Director::SetSide`, log `tbc: X changes sides`). Test: `tools\launch.ps1 -Save 000000126
+  -Lua tests\ingame	bc_neutral.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'tbc_neutral: ok|TEST FAIL' -Close
+  -Timeout 600`. Probe `PSTF_Side(id)` -> side (0/1 party/2 hostile), target, action, EA, script name. Hive thug 0x140014's AI
+  does not run as a neutral (actions never start): stage with 0x220022. PST EA.IDS has no GOODCUTOFF/EVILCUTOFF (`[ENEMY]` works).
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

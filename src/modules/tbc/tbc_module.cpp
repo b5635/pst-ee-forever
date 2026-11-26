@@ -40,6 +40,7 @@
 #include "engine/gl_world.h"
 #include "engine/lua.h"
 #include "engine/menu.h"
+#include "engine/party.h"
 #include "engine/render.h"
 #include "engine/soft_draw.h"
 #include "engine/screens.h"
@@ -464,7 +465,7 @@ void EndFight(const char* why) {
 }
 
 Recruit ToRecruit(const Seen& s) {
-  const bool party_side = s.party || IsFriendlyEa(s.ea);
+  const bool party_side = s.party || IsFriendlyEa(s.ea) || s.ally;
   return {s.id, party_side ? Side::Party : Side::Hostile, 0, 2, 0};
 }
 
@@ -484,6 +485,10 @@ void StartFight(const std::vector<Seen>& join, uint32_t now) {
   std::string order;
   for (int32_t id : g.dir->Order()) order += (order.empty() ? "" : ", ") + Who(id);
   Log("tbc: fight %u starts, %zu combatants, order: %s", g.fights, who.size(), order.c_str());
+  for (const auto& s : join)
+    if (!s.party && !IsHostileEa(s.ea) && !IsFriendlyEa(s.ea))
+      Log("tbc: %s joins as a neutral fighting %s: %s side", Who(s.id).c_str(), Who(s.target).c_str(),
+          s.ally ? "party" : "hostile");
   RegisterNames(g.dir->Order());
   g.floats.clear();
   for (int32_t id : g.dir->Order())
@@ -526,12 +531,29 @@ void Scan(uint32_t now) {
   std::vector<Seen> seen;
   for (const auto& s : engine::AllSprites()) {
     if (s.area != g.area) continue;
-    seen.push_back({s.id, Contains(g.party, s.id), s.ea, s.alive, s.x, s.y});
+    seen.push_back({s.id, Contains(g.party, s.id), s.ea, s.alive, s.x, s.y, s.target,
+                    IsAttackAction(s.action) || IsCastAction(s.action)});
   }
-  const CensusOut c = Census(seen, g.in, g.running, g.radii);
+  std::vector<int32_t> hostile_side;
+  for (int32_t id : g.in)
+    if (const Combatant* hc = g.dir ? g.dir->Find(id) : nullptr)
+      if (hc->r.side == Side::Hostile) hostile_side.push_back(id);
+  const CensusOut c = Census(seen, g.in, g.running, g.radii, hostile_side);
   if (!g.running) {
     if (c.start && !g.no_fight) StartFight(c.join, now);
     return;
+  }
+  // A combatant whose EA crossed a cutoff (a neutral ally turned hostile by its script, a charmed foe) changes sides.
+  for (const auto& s : seen) {
+    const Combatant* sc = !s.party && s.alive && Contains(g.in, s.id) ? g.dir->Find(s.id) : nullptr;
+    const int want = SideOfEa(s.ea);
+    if (!sc || !want) continue;
+    const Side side = want == 1 ? Side::Party : Side::Hostile;
+    if (sc->r.side == side) continue;
+    Log("tbc: %s changes sides (EA %u): now %s side", Who(s.id).c_str(), s.ea, want == 1 ? "party" : "hostile");
+    CLog("SIDE", Name(s.id) + " now fights on the " + (want == 1 ? "party" : "hostile") + " side (EA " + std::to_string(s.ea) + ")");
+    g.dir->SetSide(s.id, side);
+    if (!g.dir->Running()) break;
   }
   for (int32_t id : c.leave) {
     engine::SpriteInfo o;
@@ -547,7 +569,9 @@ void Scan(uint32_t now) {
     g.dir->Join(ToRecruit(s));
     g.in.push_back(s.id);
     engine::DropPath(s.id);
-    Log("tbc: %s joins (round %u)", Who(s.id).c_str(), g.dir->Round());
+    Log("tbc: %s joins (round %u)%s", Who(s.id).c_str(), g.dir->Round(),
+        IsHostileEa(s.ea) || IsFriendlyEa(s.ea) || s.party ? ""
+        : s.ally ? ", a neutral fighting the party's foes: party side" : ", a neutral fighting the party's side: hostile side");
     RegisterNames({s.id});
     const Combatant* jc = g.dir->Find(s.id);
     const int ini = jc ? jc->initiative : 0;
@@ -2607,6 +2631,25 @@ int __cdecl LuaFightId(engine::LuaState* L) {
   engine::LuaPushNumber(L, id);
   return 1;
 }
+// PSTF_Side(id[, quiet]) -> its fight side (0 not in the fight, 1 party side, 2 hostile side), its current
+// action's target id (-1 none), its action id, its EA, its script name.
+int __cdecl LuaSide(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  const bool quiet = engine::LuaNumberArg(L, 2, 0) != 0;
+  const Combatant* c = g.running && g.dir ? g.dir->Find(id) : nullptr;
+  const int side = c ? (c->r.side == Side::Hostile ? 2 : 1) : 0;
+  engine::SpriteInfo s;
+  const bool ok = engine::GetSprite(id, &s);
+  if (!quiet)
+    Log("lua: PSTF_Side(%X) -> side %d, target %X, action %u, ea %u", static_cast<unsigned>(id), side,
+        static_cast<unsigned>(ok ? s.target : -1), ok ? s.action : 0, ok ? s.ea : 0);
+  engine::LuaPushNumber(L, side);
+  engine::LuaPushNumber(L, ok ? s.target : -1);
+  engine::LuaPushNumber(L, ok ? s.action : 0);
+  engine::LuaPushNumber(L, ok ? s.ea : -1);
+  engine::LuaPushString(L, engine::ScriptName(id).c_str());
+  return 5;
+}
 // PSTF_MakeEnemy(id) -> the engine's Enemy() on that creature.
 // PSTF_GroundFx(kind, id) -> 1: plays a maneuver ground effect at the creature's feet (0 run burst, 1 run trail,
 // 2 withdraw smoke, 3 withdraw trail, 4 knock-down dust), as UseManeuver/RunDust/ApplyTrips do. For screenshots.
@@ -3365,6 +3408,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_SetName", &LuaSetName);
   dev::AddLuaFunction("PSTF_EvalAs", &LuaEvalAs);
   dev::AddLuaFunction("PSTF_FightId", &LuaFightId);
+  dev::AddLuaFunction("PSTF_Side", &LuaSide);
   dev::AddLuaFunction("PSTF_SetHp", &LuaSetHp);
   dev::AddLuaFunction("PSTF_DiceAt", &LuaDiceAt);
   dev::AddLuaFunction("PSTF_HoverAt", &LuaHoverAt);

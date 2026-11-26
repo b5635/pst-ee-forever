@@ -250,6 +250,14 @@ void Director::Remove(int32_t id) {
   }
 }
 
+bool Director::SetSide(int32_t id, Side side) {
+  Combatant* c = Get(id);
+  if (!running_ || !c || c->r.side == side) return false;
+  c->r.side = side;
+  CheckEnd();
+  return true;
+}
+
 bool Director::CheckEnd() {
   bool party = false, hostile = false;
   for (auto& c : all_) {

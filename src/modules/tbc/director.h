@@ -62,6 +62,9 @@ class Director {
   void Start(const std::vector<Recruit>& who, uint32_t world_tick);
   void Join(const Recruit& r);
   void Remove(int32_t id);  // died, fled, or handed back (dialogue/cutscene)
+  // Its allegiance changed mid-fight (a neutral's script turned it hostile): it keeps its place in the
+  // initiative order and its turn; the fight ends if a side is left empty. False: not in it / same side.
+  bool SetSide(int32_t id, Side side);
   bool Running() const { return running_; }
 
   // Queries.

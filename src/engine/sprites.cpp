@@ -55,6 +55,14 @@ uint64_t Lookup(int32_t id) {
 }
 
 bool HudOk();
+bool TargetOk() {
+  static const int ok = [] {
+    for (const auto& s : sym::kAll)
+      if (s.rva == sym::kRvaTargetId) return CheckSymbol(s) ? 1 : 0;
+    return 0;
+  }();
+  return ok != 0;
+}
 }  // namespace
 
 // Adapter-internal (engine/sprite_ptr.h): raw lookups for other files of src/engine only.
@@ -76,6 +84,7 @@ SpriteInfo Info(uint64_t p) {
   s.hp = R<int16_t>(p + sym::kOffSpriteHp);
   s.busy = R<uint16_t>(p + sym::kOffSpriteCurAction) != 0 || R<int32_t>(p + sym::kOffSpriteQueueCount) > 0;
   s.action = R<uint16_t>(p + sym::kOffSpriteCurAction);
+  if (TargetOk()) s.target = R<int32_t>(p + sym::kOffSpriteTargetId);
   if (HudOk()) {
     s.max_hp = R<int16_t>(p + (R<int32_t>(p + sym::kOffSpriteStatsSel) ? sym::kOffSpriteMaxHpA
                                                                         : sym::kOffSpriteMaxHpB));

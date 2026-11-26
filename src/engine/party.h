@@ -25,6 +25,8 @@ std::string PartyDump();
 // Script names of the party in order ("NAMELESS,MORTE,..."; CGameSprite +0x478 char[32], the name
 // CPlanescape::PSIsCharacterInParty compares, lin 5A4780 / win AddCharacterToParty 1402D0C68).
 std::string PartyNames();
+// Script name of any creature (same field), "" if it has none or is unknown. Game thread only.
+std::string ScriptName(int32_t id);
 
 // Evaluates a status trigger the engine's way (CGameAIBase::EvaluateStatusTrigger) for creature `who`:
 // trigger id (TRIGGER.IDS), first integer parameter, optional object name and first string parameter

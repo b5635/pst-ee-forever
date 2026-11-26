@@ -284,6 +284,10 @@ constexpr uint32_t kStateDead = 0x800;
 // Current HP i16 at sprite+0x574 (CGameSprite::FloatingHP "%d/%d": lin this+698*2, win 14043A900).
 inline constexpr uint8_t kHpBytes[] = {0x44, 0x0F, 0xBF, 0x86, 0x74, 0x05, 0x00, 0x00};
 constexpr uint32_t kRvaHp = 0x43A900, kOffSpriteHp = 0x574;
+// Current target id i32 at sprite+0x4940 (CGameSprite::UpdateTarget, vtable slot 28: lin 4A5180 this+4682*4 = +0x4928,
+// win 140435E60 `cmp [rcx+4940h], eax`), set when an action resolves its target (CGameAIBase::GetTargetShare), -1 = none.
+inline constexpr uint8_t kTargetIdBytes[] = {0x39, 0x81, 0x40, 0x49, 0x00, 0x00};
+constexpr uint32_t kRvaTargetId = 0x435E78, kOffSpriteTargetId = 0x4940;
 
 // CGameSprite vtable (win 140649328; lin _ZTV11CGameSprite E57298). Windows slot = Linux slot - 1
 // around AIUpdate/ProcessAI (one MSVC deleting dtor vs two GCC dtors); slots 29..34 do NOT map 1:1.
@@ -1196,6 +1200,7 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CGameSprite::Enemy", kRvaEnemy, kEnemyBytes, "lin 4AEA80 / win 140408B00"),
     PSTF_SYM("CGameSprite::UnapplySpell", kRvaUnapplySpell, kUnapplySpellBytes, "lin 523AC0 / win 1403ED230"),
     PSTF_SYM("FloatingHP.hp", kRvaHp, kHpBytes, "lin 571E90 / win 14043A900"),
+    PSTF_SYM("UpdateTarget.targetId", kRvaTargetId, kTargetIdBytes, "lin 4A5180 / win 140435E78"),
     PSTF_SYM("luaL_loadstring", kRvaLuaLoadString, kLuaLoadStringBytes, "lin 6A58A0 / win 1400E7380"),
     PSTF_SYM("uiLoadMenu.copyText", kRvaMenuCopyCall, kMenuCopyCallBytes, "lin 581790 / win 140459EC3"),
     PSTF_SYM("CString::CString(char const*)", kRvaCStringCtor, kCStringCtorBytes,
