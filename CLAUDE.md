@@ -399,5 +399,18 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   -Close` (`cut=0` fails with 2 voices on NARRATIO: the toggle check). Probes `PSTF_VoiceCount(channel)`,
   `PSTF_Examine(strref)` (plays through the examine path; 828/856 = voiced Mortuary lines). Log `voice: dialogue ...`.
   Engine fact: channels 0 and 7..13 are "clear on play" yet a fire-and-forget examine line still stacks on channel 0.
+- Status-effect visuals (`[statusfx]`, `src/modules/statusfx/`, pure logic `statusfx_logic.h`): STATE bits -> our particle
+  effects (panic = black burning skulls swirling round the head, stunned = stars + lightning, blind = growing glints,
+  poisoned = acid sparks + green burst, silenced = the same white), timings/rates/sizes ported from the NWN models
+  vdr_mindhit04/vim_mentstun/vdr_mindhit03/vim_blinddeaf/vim_shwng*01/vim_cntmantle (numbers only; art ours:
+  `python -I tools/make_statusfx_art.py [--preview OUT.png]` -> `data/statusfx_atlas.bin` + `data/override/PFVBLANK.BAM`).
+  Timed colour glows (op 8/9/51/52/61) end after `glow_seconds` (engine::ExpireEffectNow), at once for a replaced
+  state's spell; a blinding spell's pending op 369 overlay is pointed at PFVBLANK. Magic resistance ("Spell resisted",
+  CheckSave resist mark, symbols.h kRvaResistMark) plays the spell mantle + `sounds/spell_resist.wav`. Head height =
+  the engine's overhead-text height (`engine::SpriteTextHeight`). Test: `tools\launch.ps1 -Save 000000126 -Lua
+  tests\ingame\statusfx.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'} -Until 'statusfx: ok|TEST FAIL' -Close
+  -Timeout 240`; look: `tests\ingame\statusfx_look.lua` (`-Until 'statusfx_look: ok|TEST FAIL'`) then
+  `python -I tools/statusfx_sheet.py`. Probes: `PSTF_StatusFx()`, `PSTF_StatusFxOn(id)`, `PSTF_StatusFxPlay(id, fx|stop:fx)`,
+  `PSTF_StatusFxApply(id, op, p1, p2, s)`. `ApplySpellRES` skips the magic resistance roll: test MR with a real cast.
 - Combat log: `<game>\pst_forever\logs\combat.log` (wall clock, world tick, round, ticks into the turn, event):
   read it first after a fight.

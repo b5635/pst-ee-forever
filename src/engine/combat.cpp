@@ -59,6 +59,7 @@ OnsetSyncFn g_onset_sync = nullptr;
 // a new effect the old one's kind (Submerge the Will's 29-tick shield round-clocked to its caster's next turn).
 tbc::OnsetBook g_onsets;  // round_rules.h
 bool g_clock = false;
+ResistFn g_resist_fn = nullptr;  // statusfx: a spell resisted by magic resistance
 
 extern "C" bool __cdecl PstfPersistFrozen(void* sprite) {
   if (!g_frozen || !sprite) return false;
@@ -418,6 +419,89 @@ std::vector<ColorEffectView> ColorEffects(int32_t id) {
     out.push_back(v);
   });
   return out;
+}
+
+// --- status visuals (statusfx) ----------------------------------------------------------------------
+std::vector<EffectEntry> EffectEntries(int32_t id) {
+  std::vector<EffectEntry> out;
+  static const int ok = AllOk({sym::kRvaEffResLea}) ? 1 : 0;
+  const uint64_t p = ok && ClockSymbolsOk() ? LookupSprite(id) : 0;
+  if (!p) return out;
+  for (uint32_t off : {sym::kOffSpriteEffTimed, sym::kOffSpriteEffEquip}) {
+    uint64_t node = R<uint64_t>(p + off + 8);
+    for (int guard = 0; node && guard < 4096 && PlausiblePtr(node); ++guard) {
+      const uint64_t eff = R<uint64_t>(node + 0x10);
+      node = R<uint64_t>(node);
+      if (!PlausiblePtr(eff)) continue;
+      EffectEntry e;
+      e.key = eff;
+      e.opcode = R<int32_t>(eff + sym::kOffEffOpcode);
+      e.type = R<uint32_t>(eff + sym::kOffEffType);
+      e.equipped = off == sym::kOffSpriteEffEquip;
+      for (int i = 0; i < 8; ++i) {
+        const char c = R<char>(eff + sym::kOffEffParentRes + i), r = R<char>(eff + sym::kOffEffRes + i);
+        e.parent[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        e.res[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(r)));
+      }
+      out.push_back(e);
+    }
+  }
+  return out;
+}
+
+namespace {
+uint64_t FindEffect(uint64_t p, uint64_t key) {
+  uint64_t found = 0;
+  ForEachEffect(p, [&](uint64_t eff) {
+    if (eff == key) found = eff;
+  });
+  return found;
+}
+}  // namespace
+
+bool ExpireEffectNow(int32_t id, uint64_t key) {
+  const uint64_t p = ClockSymbolsOk() ? LookupSprite(id) : 0;
+  const uint64_t g = GameObject();
+  if (!p || !g || !FindEffect(p, key)) return false;
+  if (R<uint32_t>(key + sym::kOffEffType) != 4096) return false;  // running timed effects only (a delayed one would start)
+  const uint32_t now = R<uint32_t>(g + 0x7820);
+  if (static_cast<int32_t>(R<uint32_t>(key + sym::kOffEffTick) - now) <= 1) return true;
+  W<uint32_t>(key + sym::kOffEffTick, now + 1);
+  W<int32_t>(p + sym::kOffSpriteForceEffects, 1);
+  return true;
+}
+
+bool SetEffectResource(int32_t id, uint64_t key, const char* res) {
+  static const int ok = AllOk({sym::kRvaEffResLea}) ? 1 : 0;
+  const uint64_t p = ok && ClockSymbolsOk() ? LookupSprite(id) : 0;
+  if (!p || !FindEffect(p, key)) return false;
+  for (int i = 0; i < 8; ++i) W<char>(key + sym::kOffEffRes + i, res && *res ? *res++ : 0);
+  return true;
+}
+
+int SpriteTextHeight(int32_t id) {
+  static const int ok = AllOk({sym::kRvaFxRectCall}) ? 1 : 0;
+  const uint64_t p = ok ? LookupSprite(id) : 0;
+  if (!p) return -1;
+  const uint64_t anim = R<uint64_t>(p + sym::kOffSpriteAnim);
+  if (!PlausiblePtr(anim)) return -1;
+  const uint64_t vt = R<uint64_t>(anim);
+  if (!PlausiblePtr(vt)) return -1;
+  using FxRectFn = void(__fastcall*)(uint64_t anim, int32_t* rect, int32_t* ref, int z);
+  const auto fn = reinterpret_cast<FxRectFn>(R<uint64_t>(vt + sym::kSlotCalcFxRect));
+  int32_t rect[4] = {}, ref[2] = {};
+  const int z = R<int32_t>(p + sym::kOffSpriteZ);
+  fn(anim, rect, ref, z);
+  const int h = ref[1] + z;
+  return h > 0 && h < 1000 ? h : -1;
+}
+
+void SetResistListener(ResistFn fn) {
+  if (fn && !AllOk({sym::kRvaResistMark})) {
+    Log("combat: CheckSave resist mark differs; no resist events");
+    return;
+  }
+  g_resist_fn = fn;
 }
 
 int PersistentCount(int32_t id) {
@@ -833,7 +917,10 @@ int64_t __fastcall HookCheckSave(void* eff, void* sprite, uint8_t* poly, uint8_t
   uint8_t* by_bit[5] = {spell, breath, death, wand, poly};
   uint8_t before[5] = {};
   for (int i = 0; i < 5; ++i) before[i] = by_bit[i] ? *by_bit[i] : 0;
+  const uint8_t resist_before = resist ? *resist : 0x80;
   const int64_t r = g_check_save(eff, sprite, poly, wand, death, breath, spell, resist);
+  // symbols.h kRvaResistMark: the engine marks the roll when it prints "Spell resisted" (once per spell).
+  if (g_resist_fn && resist && !(resist_before & 0x80) && (*resist & 0x80) && r == 0) g_resist_fn(IdOf(sprite));
   if (flags && g_rolls.size() < 64) {
     RollEvent e;
     e.kind = RollEvent::Save;

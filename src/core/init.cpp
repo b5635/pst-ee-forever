@@ -13,6 +13,7 @@
 #include "modules/gore/gore_module.h"
 #include "modules/party/party_module.h"
 #include "modules/smooth/smooth_module.h"
+#include "modules/statusfx/statusfx_module.h"
 #include "modules/tbc/tbc_module.h"
 #include "modules/dev/lua_bridge.h"
 #include "modules/voice/examine_voice.h"
@@ -50,6 +51,7 @@ extern "C" __declspec(dllexport) int __cdecl PSTF_Init() {
   pstf::tbc::InstallTbc(ini);
   pstf::lighting::InstallLighting(ini);
   pstf::gore::InstallGore(ini);
+  pstf::statusfx::InstallStatusFx(ini);
   pstf::dlgroll::InstallDialogueRolls(ini);
   pstf::locks::InstallLockRolls(ini);
   return 0;

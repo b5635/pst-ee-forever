@@ -50,6 +50,7 @@ Put 'data\arealights.tsv'  'pst_forever\assets\lighting'
 Put 'data\d20_numbers.bin' 'pst_forever\assets\dice'
 Put 'data\hitmat.2da'      'pst_forever\assets\gore'
 Put 'data\hitarmor.tsv'    'pst_forever\assets\gore'
+Put 'data\statusfx_atlas.bin' 'pst_forever\assets\statusfx'
 $sounds = Join-Path $stage 'pst_forever\sounds'
 New-Item -ItemType Directory -Force $sounds | Out-Null
 Get-ChildItem (Join-Path $root 'sounds') -Filter *.wav | ForEach-Object { Copy-Item $_.FullName $sounds }

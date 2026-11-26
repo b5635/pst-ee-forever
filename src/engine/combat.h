@@ -84,6 +84,32 @@ struct ColorEffectView {
 std::vector<ColorEffectView> ColorEffects(int32_t id);
 int PersistentCount(int32_t id);
 
+// --- status visuals (statusfx module; symbols.h "Magic resistance", kOffEffRes, kRvaFxRectCall) ----------
+// Every effect on the creature (timed and equipped lists): opcode, duration type (4096 running timed,
+// 6/7/8 delayed), parent SPL/ITM resref and the effect's own resource (op 369: its BAM), upper case.
+struct EffectEntry {
+  uint64_t key = 0;  // identity while it lives (compare only)
+  int opcode = -1;
+  uint32_t type = 0;
+  bool equipped = false;
+  char parent[9] = {};
+  char res[9] = {};
+};
+std::vector<EffectEntry> EffectEntries(int32_t id);
+// A running timed effect (type 4096) of that creature ends on the next world tick, the engine's way (as its
+// own expiry). False when it is not on the creature or not running. Presentation effects only (colour glows).
+bool ExpireEffectNow(int32_t id, uint64_t key);
+// Rewrites the resource of an effect still on the creature (8 chars, "" = none): a pending op 369 plays
+// another BAM.
+bool SetEffectResource(int32_t id, uint64_t key, const char* res);
+// Px above the feet where the engine puts the creature's overhead text (its animation's CalculateFxRect
+// reference point + z, as CMessageDisplayText::Run); -1 unknown.
+int SpriteTextHeight(int32_t id);
+// Called with the target when the engine reports "Spell resisted" (magic resistance; once per spell and
+// creature). Needs InstallRollHooks (the CheckSave hook).
+using ResistFn = void (*)(int32_t target);
+void SetResistListener(ResistFn fn);
+
 // Every projectile's AIUpdate asks `run(caster id, projectile id, lingers)` first and is skipped on
 // false (vtable slot 3 of each projectile class met in the area is redirected, after checking it is
 // an engine CGameObject vtable). `lingers`: an area cloud or Swarm Curse that has landed and now

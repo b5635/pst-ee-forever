@@ -837,6 +837,24 @@ constexpr uint32_t kOffSpriteClass = 0x3B, kOffSpriteSpecific = 0x45;
 // 0 = saved. Save flags effect +0x40 (bits 0..4), bonus +0x44 (lin L177/L226).
 inline constexpr uint8_t kCheckSaveBytes[] = {0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55};
 constexpr uint32_t kRvaCheckSave = 0x1EC460, kOffEffSaveFlags = 0x40, kOffEffSaveBonus = 0x44;
+// Magic resistance (statusfx "spell resisted"): CheckSave compares the target's derived magic resistance (word
+// +0x26, win 1401EC59F `movsx eax, word [rdx+26h]`) with the resist roll (its 8th argument, r12 =
+// [rbp+3Fh+arg_38]); the first effect of a spell that is resisted prints "Spell resisted" (strref 0xF00519,
+// 1401EC61F) and marks the roll `or byte [r12], 80h` (1401EC713; lin 1FBED0 L179 `*a8 = v19 | 0x80`), so the
+// mark appearing during one CheckSave call = that spell was resisted by that creature, once per spell.
+inline constexpr uint8_t kResistMarkBytes[] = {0x41, 0x80, 0x0C, 0x24, 0x80};
+constexpr uint32_t kRvaResistMark = 0x1EC713;
+// CGameEffect resource (EFF v2 0x28) at +0x30: CGameEffectPlaySound::ApplyEffect (lin 1EE760 `this + 48`;
+// win 1401D924C `lea rdx, [rcx+30h]` then CGameEffect::PlaySound). Op 369 (sticky BAM) reads its BAM there.
+inline constexpr uint8_t kEffResLeaBytes[] = {0x48, 0x8D, 0x51, 0x30};
+constexpr uint32_t kRvaEffResLea = 0x1D924C, kOffEffRes = 0x30;
+// Overhead text height: CMessageDisplayText::Run (lin 293970 L97, win 140234960) calls the creature's
+// animation CalculateFxRect(CRect&, CPoint& ref, z) (`mov rcx,[rax+3950h]; mov r9d,[rax+14h]; call
+// [r10+8]`: Windows slot +8, one destructor; lin slot 2) and puts the text ref.y + z (sprite +0x14) above
+// the feet. ref = the current frame's centre point (+1, or +6 for PST characters with a flag).
+inline constexpr uint8_t kFxRectCallBytes[] = {0x48, 0x8B, 0x88, 0x50, 0x39, 0x00, 0x00, 0x44, 0x8B,
+                                               0x48, 0x14, 0x4C, 0x8B, 0x11, 0x41, 0xFF, 0x52, 0x08};
+constexpr uint32_t kRvaFxRectCall = 0x234960, kSlotCalcFxRect = 0x08, kOffSpriteZ = 0x14;
 // Action bar: game:GetButtonArray() = CInfGame+0x79C0 (tolua 14046102E); 12 CButtonData of 0x2A0
 // (PreRenderButton lin 3608B0: this + 672 * i); icon resref at +0 (GetQuickSlotData lin 357760).
 inline constexpr uint8_t kButtonArrayBytes[] = {0x48, 0x8D, 0x97, 0xC0, 0x79, 0x00, 0x00};
@@ -1203,6 +1221,9 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("Swing.hit3", kRvaSwingHit3, kSwingHit3Bytes, "win 14043422D"),
     PSTF_SYM("Hit.thac0ac", kRvaThac0Ac, kThac0AcBytes, "lin 4C29F0 / win 140414888"),
     PSTF_SYM("CGameEffect::CheckSave", kRvaCheckSave, kCheckSaveBytes, "lin 1FBED0 / win 1401EC460"),
+    PSTF_SYM("CheckSave.resist_mark", kRvaResistMark, kResistMarkBytes, "lin 1FBED0 L179 / win 1401EC713"),
+    PSTF_SYM("CGameEffectPlaySound.res", kRvaEffResLea, kEffResLeaBytes, "lin 1EE760 / win 1401D924C"),
+    PSTF_SYM("CMessageDisplayText::Run.fxrect", kRvaFxRectCall, kFxRectCallBytes, "lin 293970 L97 / win 140234960"),
     PSTF_SYM("CGameEffect::DecodeEffect", kRvaDecodeEffect, kDecodeEffectBytes, "lin 2012B0 / win 1401FE380"),
     PSTF_SYM("CGameSprite::UpdateSpriteEffect.count", kRvaAttachedCount, kAttachedCountBytes, "lin 50F9C0 / win 1403F97D2"),
     PSTF_SYM("CGameSprite::UpdateSpriteEffect.list", kRvaAttachedList, kAttachedListBytes, "lin 50F9C0 / win 1403F9800"),

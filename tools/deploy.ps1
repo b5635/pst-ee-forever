@@ -52,6 +52,9 @@ $gore = Join-Path $data 'assets\gore'
 New-Item -ItemType Directory -Force $gore | Out-Null
 Copy-Item (Join-Path $root 'data\hitmat.2da') $gore -Force    # material rows (gore module; GemRB unhardcoded/pst)
 Copy-Item (Join-Path $root 'data\hitarmor.tsv') $gore -Force  # animation -> armor (tools/hitmat.py)
+$sfx = Join-Path $data 'assets\statusfx'
+New-Item -ItemType Directory -Force $sfx | Out-Null
+Copy-Item (Join-Path $root 'data\statusfx_atlas.bin') $sfx -Force  # status-effect particle art (tools/make_statusfx_art.py)
 # Turn-based hotbar BAMs (tools/make_ui_bams.py): PF* names, nothing of the game's is replaced.
 Get-ChildItem (Join-Path $root 'data\override') -File -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $Game 'override') -Force }
 $ini = Join-Path $data 'pst_forever.ini'

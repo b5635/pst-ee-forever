@@ -26,6 +26,7 @@ add_library(pstf_logic STATIC
   src/core/inflate.cpp
   src/core/gameres.cpp
   src/modules/gore/gore_logic.cpp
+  src/modules/statusfx/statusfx_logic.cpp
 )
 target_include_directories(pstf_logic PUBLIC src)
 
@@ -75,6 +76,7 @@ add_library(pst_forever SHARED
   src/modules/rolls/roll_panel.cpp
   src/engine/locks.cpp
   src/modules/locks/locks_module.cpp
+  src/modules/statusfx/statusfx_module.cpp
 )
 target_link_libraries(pst_forever PRIVATE pstf_logic bcrypt winmm)
 # Map file: tools/crash.py names pst_forever.dll addresses from it.
@@ -86,7 +88,7 @@ target_compile_options(pst_forever PRIVATE /Zi)
 add_executable(pstf_tests tests/unit/test_main.cpp tests/unit/test_logic.cpp tests/unit/test_tbc.cpp tests/unit/test_lighting.cpp
   tests/unit/test_sprite_depth.cpp tests/unit/test_gore.cpp tests/unit/test_gameres.cpp
   tests/unit/test_party.cpp tests/unit/test_maneuvers.cpp tests/unit/test_spells.cpp tests/unit/test_dlgroll.cpp
-  tests/unit/test_locks.cpp tests/unit/test_die3d.cpp tests/unit/test_ini_doc.cpp)
+  tests/unit/test_locks.cpp tests/unit/test_die3d.cpp tests/unit/test_ini_doc.cpp tests/unit/test_statusfx.cpp)
 target_link_libraries(pstf_tests PRIVATE pstf_logic)
 target_compile_definitions(pstf_tests PRIVATE PSTF_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_include_directories(pstf_tests PRIVATE tests/unit)
