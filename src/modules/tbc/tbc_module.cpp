@@ -1541,7 +1541,8 @@ std::vector<StatusIconView> StatusIconsOf(int32_t id, int box, size_t max_icons)
   bool running = false;
   engine::WorldTime(&now, &running);
   AttributeOrphans(id, &fx, now, &g.orphans);
-  const int round = engine::RoundLengthTicks() ? engine::RoundLengthTicks() : kRoundTicksPst;
+  // rounds of effect time: the round clock steps g.effect_round_ticks (75) per turn start, not ROUND_LENGTH (51)
+  const int round = static_cast<int>(g.effect_round_ticks);
   for (const StatusIcon& s : CollectStatus(id, fx, now, round, &g.status_spans, max_icons * 2)) {
     std::string bam;
     int32_t name = -1;

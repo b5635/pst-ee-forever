@@ -15,14 +15,16 @@ constexpr int32_t kRoundTicks5s = 75;  // 5 game seconds x 15 ticks: one combat 
 //   - otherwise, if it is less than a round and a half away (Cone of Cold's 100-tick onset, a
 //     projectile's impact), it is the spell resolving: it runs on world time now and the caster's turn
 //     waits for it.
+inline bool OnFiveSecondStep(int32_t left) {
+  const int32_t m = left % kRoundTicks5s;
+  return m <= 3 || m >= kRoundTicks5s - 3;  // a tick or two may pass before we see it
+}
 inline bool OnsetResolvesNow(int32_t left) {
   // A few ticks away is now (Adder's Kiss' op374 casting feature sits 3 ticks out: the old
   // "within 3 of a 75-tick step" test read it as step 0 and deferred the spell a round).
   if (left <= 3) return true;
   if (left >= kRoundTicks5s + kRoundTicks5s / 2) return false;
-  const int32_t m = left % kRoundTicks5s;
-  const bool on_step = m <= 3 || m >= kRoundTicks5s - 3;  // a tick or two may pass before we see it
-  return !on_step;
+  return !OnFiveSecondStep(left);
 }
 
 // PST:EE opcodes that only show or play something (glows, colour pulses, sounds, BAM/VVC plays): a
@@ -50,6 +52,9 @@ inline int OnsetKind(int32_t left, int opcode) {
 // step: it resolves now too (Stygian Ice Storm: op12 8d8 at 75 ticks, its ice drop op373 at 65, shake op269 and
 // sound op174 at 70; deferred a round it looked like the storm did no damage). A series (the same opcode at
 // another step from the same source, Adder's Kiss' later hits) stays round-clocked.
+// A hit off the 5-second steps that continues a series resolving now (the same opcode from the same source within
+// half a round of a hit that resolves now) is that impact spread over the animation, not a later round: Desert
+// Hell's op12 hits at 30/60/90/120 ticks; 120 alone is past a round and a half and would land a round late.
 struct OnsetSeen {
   int32_t left;     // ticks to the onset
   int opcode;
@@ -68,6 +73,18 @@ inline void SyncSpellOnsets(OnsetSeen* v, int n) {
       if (OnsetKind(v[j].left, v[j].opcode) != 0 && d <= kOnsetSync) synced = true;
     }
     if (synced && !series) v[i].kind = 1;
+  }
+  for (bool changed = true; changed;) {
+    changed = false;
+    for (int i = 0; i < n; ++i) {
+      if (v[i].kind != 0 || OnFiveSecondStep(v[i].left)) continue;
+      for (int j = 0; j < n; ++j) {
+        if (j == i || v[j].kind != 1 || v[j].source != v[i].source || v[j].opcode != v[i].opcode) continue;
+        if (std::abs(v[j].left - v[i].left) > kRoundTicks5s / 2) continue;
+        v[i].kind = 1, changed = true;
+        break;
+      }
+    }
   }
 }
 

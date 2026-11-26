@@ -5,6 +5,7 @@
 // fails here until tools/spell_list.py and the suite have been run again.
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 #include "mini_test.h"
 #include "modules/tbc/round_rules.h"
@@ -91,4 +92,65 @@ TEST_CASE("spells: Submerge the Will and Power of One add parentless effects the
   // the 375 carrier at least; its op 0 + ops 33..37 come on the attached object's own update (6 when it ran before
   // the turn ended, 1 when not: both seen with the same 44-tick turn)
   CHECK(r && std::strcmp(r->verdict, "ok") == 0 && (r->fx == 1 || r->fx == 6));
+}
+
+namespace {
+// The delayed non-presentation effects of one spell as the round clock sees them one tick after it landed.
+std::vector<tbc::OnsetSeen> OnsetsOf(const spelltable::Spell& s) {
+  std::vector<tbc::OnsetSeen> v;
+  for (int i = s.first; i < s.first + s.count; ++i) {
+    const auto& f = spelltable::kFx[i];
+    if (f.timing != 4 || tbc::IsPresentationOpcode(f.op) || f.duration < 2) continue;
+    const int32_t left = static_cast<int32_t>(f.duration) - 1;
+    v.push_back({left, f.op, 1, tbc::OnsetKind(left, f.op)});
+  }
+  tbc::SyncSpellOnsets(v.data(), static_cast<int>(v.size()));
+  return v;
+}
+}  // namespace
+
+TEST_CASE("spells: Desert Hell's four heat hits (30/60/90/120 ticks) all land in the caster's turn") {
+  // SPWI505: op12 1d10 fire at 30, 60, 90 and 120 ticks. 120 is past a round and a half, so alone it would be
+  // round-clocked to the victim's next turn: one hit of an instant spell a round late.
+  int hits = 0;
+  for (const auto& s : spelltable::kSpells) {
+    if (std::strcmp(s.res, "SPWI505") != 0) continue;
+    for (const auto& o : OnsetsOf(s)) {
+      if (o.opcode != 12) continue;
+      ++hits;
+      CHECK(o.kind == 1);
+    }
+  }
+  CHECK(hits == 4);
+}
+
+TEST_CASE("spells: no player spell's own delayed damage is split between this turn and a later one") {
+  // A spell's delayed damage series either resolves together now (an impact spread over its animation) or is a
+  // damage-over-time series on 5-second steps that is round-clocked as a whole.
+  for (const auto& s : spelltable::kSpells) {
+    const auto v = OnsetsOf(s);
+    bool now = false, later = false;
+    for (const auto& o : v)
+      if (o.opcode == 12) (o.kind == 0 ? later : now) = true;
+    if (now && later) std::printf("  %s (%s): delayed damage split across turns\n", s.res, s.name);
+    CHECK(!(now && later));
+  }
+}
+
+TEST_CASE("spells: a timed buff's icon shows the rounds the round clock really runs it") {
+  // Effect time steps kRoundTicks5s (75) at each of the owner's turn starts, so the icon counts 75-tick rounds,
+  // not ROUND_LENGTH (51): Blessing's 30 s = 450 ticks = 6 rounds (with 51 it showed 9).
+  for (const auto& s : spelltable::kSpells) {
+    if (std::strcmp(s.res, "SPPR101") != 0) continue;
+    const auto& f = spelltable::kFx[s.first];
+    CHECK(f.op == 130 && f.timing == 0 && f.duration == 30);
+    tbc::StatusEffect e;
+    e.parent_type = 1, e.parent = s.res, e.timed = true, e.left = static_cast<int32_t>(f.duration) * 15;
+    const auto icons = tbc::CollectStatus(1, {e}, 0, tbc::kRoundTicks5s, nullptr, 8);
+    CHECK(icons.size() == 1 && icons[0].rounds == 6);
+    // and the clock ends it after exactly that many turn-start steps
+    int32_t left = e.left, steps = 0;
+    while (left > 0) left -= tbc::kRoundTicks5s, ++steps;
+    CHECK(steps == icons[0].rounds);
+  }
 }
