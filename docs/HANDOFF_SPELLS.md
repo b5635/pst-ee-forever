@@ -69,7 +69,7 @@ For each spell (and each special ability):
   levels 1-3 done except Pacify (skip), Knock (needs a lock), Hold Undead (no undead). Fixed on the way: icons of
   effects with no end (Armor), attached visuals no longer hold an icon (Friends). Tasha's Laughter now right.
 - Next: mage levels 4-9 (SPWI4xx..SPWI914), then special abilities SPIN101-108.
-- Mage levels 4-9 done (2026-11-25, commits bd9f5d6, d5eeff5, 4f48b61). Turn-based bugs found and fixed: multi-fire
+- Mage levels 4-9 done (2026-11-25, the four "Vet mage level 4 / 5-6 / 7-9, special abilities" commits). Turn-based bugs found and fixed: multi-fire
   missiles (Force Missiles, Elemental Strike, Ice Knife) lost or fireable out of turn; the idle nudge and directed AI
   overrode confusion/panic (confused thugs attacked, panicked ones never moved); a stale STATE read cost a disabled
   creature an extra turn (LoseTurnCheck); Globe and Celestial Host held turns to the cap; Deathbolt landed in the next
