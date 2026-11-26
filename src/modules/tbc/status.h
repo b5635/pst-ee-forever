@@ -24,6 +24,7 @@ struct StatusEffect {
   bool delayed = false;      // not running yet (a spell on its way)
   uint64_t key = 0;          // the effect's identity while it lives
   int opcode = -1;           // -1 unknown (an attached spell object)
+  bool orphan = false;       // its parent was given by AttributeOrphans (an engine-built effect)
 };
 
 // Effects a spell adds through the engine's own code carry no parent: Submerge the Will's AC and saves
@@ -84,6 +85,7 @@ inline void AttributeOrphans(int32_t id, std::vector<StatusEffect>* fx, int64_t 
     }
     keep[e.key] = p;
     e.parent = p.res, e.parent_type = p.type, e.parent_flags = p.flags;
+    e.orphan = true;
   }
   mine.swap(keep);  // effects that are gone forget their parent (their keys may be reused)
   m->orphans[id].swap(orphan_keys);
@@ -121,6 +123,7 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
     uint32_t type = 0, flags = 0;
     int32_t left = 0;     // longest of its own timed effects
     int32_t attached = 0; // longest of its attached spell objects (opcode -1)
+    int32_t orphan = 0;   // longest of its engine-built (parentless) timed effects
   };
   (void)now;  // spans follow the time left, not the world clock (frozen in a fight)
   std::vector<Src> src;
@@ -134,16 +137,19 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
     // and made the icon a round too long; a spell with nothing but such effects left has no status
     if (IsPresentationOpcode(e.opcode)) continue;
     auto it = std::find_if(src.begin(), src.end(), [&](const Src& s) { return s.res == e.parent; });
-    if (it == src.end()) it = src.insert(src.end(), {e.parent, e.parent_type, e.parent_flags, 0, 0});
+    if (it == src.end()) it = src.insert(src.end(), {e.parent, e.parent_type, e.parent_flags, 0, 0, 0});
     // An attached spell object counts only for a spell with no timed effect of its own: Friends' sparkle (its op
     // 369 visual, an attached object) outlived its CHR bonus by a round and held the icon (spell_follow, 2026-11-25);
     // Submerge the Will's and the shields' objects carry their spell when the effects are short re-applies.
-    (e.opcode == -1 ? it->attached : it->left) = std::max(e.opcode == -1 ? it->attached : it->left, e.left);
+    // Antimagic Shell's object re-applies 60-tick parentless resistances: those never decide against the object's own
+    // 5 minutes (the icon showed r1 while they were up, r59 between; spell_follow -During, 2026-11-25).
+    int32_t& slot = e.opcode == -1 ? it->attached : e.orphan ? it->orphan : it->left;
+    slot = std::max(slot, e.left);
     it->flags |= e.parent_flags;
   }
   std::vector<StatusIcon> out;
   for (Src s : src) {
-    if (s.left <= 0) s.left = s.attached;
+    if (s.left <= 0) s.left = std::max(s.orphan, s.attached);
     StatusIcon icon;
     icon.parent = s.res;
     icon.parent_type = s.type;

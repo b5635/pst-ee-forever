@@ -100,6 +100,25 @@ inline bool LosesTurn(int64_t state) {
   return state >= 0 && (static_cast<uint32_t>(state) & 0x800) == 0 && (static_cast<uint32_t>(state) & kLoseTurnStates) != 0;
 }
 
+// The "turn lost" check waits kTicks world ticks after the turn start: the round clock's step runs a sleep or a
+// paralysis out (Blacksphere's 150 ticks, Cone of Cold's 105: gone at the owner's 2nd turn start), but the engine
+// drops the expired effect and clears its STATE bit only on the creature's next update (ForceEffects); read at once,
+// the stale bit cost a 2-round disable a 3rd turn. Due() is true once, on the first tick at or after kTicks.
+struct LoseTurnCheck {
+  static constexpr uint32_t kTicks = 2;
+  bool armed = false;
+  uint32_t waited = 0;
+  void Start() { armed = true, waited = 0; }
+  void Stop() { armed = false; }
+  bool Due(uint32_t dt) {
+    if (!armed) return false;
+    waited += dt;
+    if (waited < kTicks) return false;
+    armed = false;
+    return true;
+  }
+};
+
 // Panic 0x4 (Horror, op 24), berserk 0x2 and confusion 0x80000000 (op 128): the engine's own AI picks what the
 // creature does on its turn (flee, attack anyone, wander or stand). Our turn layer must not order anything for it:
 // no "idle: attack the nearest party member" nudge (a confused thug attacked the party every turn of Confusion),

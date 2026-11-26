@@ -442,14 +442,24 @@ bool LingerOk() {
   return ok != 0;
 }
 
+// A landed cloud/swarm (its "arrived" flag), or a globe (always): it pulses where it is instead of flying.
+bool LingeringFn(uint64_t fn, uint64_t o) {
+  if (!LingerOk()) return false;
+  if (fn == sym::kImageBase + sym::kRvaGlobeAI) {
+    static const int ok = AllOk({sym::kRvaGlobeAI}) ? 1 : 0;
+    return ok != 0;
+  }
+  return (fn == sym::kImageBase + sym::kRvaAreaAI || fn == sym::kImageBase + sym::kRvaSwarmAI) &&
+         R<int32_t>(o + sym::kOffProjArrived) != 0;
+}
+
 void __fastcall HookProjAI(void* obj) {
   const uint64_t o = reinterpret_cast<uint64_t>(obj);
   const auto it = g_proj_orig.find(R<uint64_t>(o));
   if (it == g_proj_orig.end()) return;  // cannot happen: only hooked vtables call here
   if (g_proj_gate) {
     const uint64_t fn = reinterpret_cast<uint64_t>(it->second);
-    const bool lingers = (fn == sym::kImageBase + sym::kRvaAreaAI || fn == sym::kImageBase + sym::kRvaSwarmAI) &&
-                         LingerOk() && R<int32_t>(o + sym::kOffProjArrived) != 0;
+    const bool lingers = LingeringFn(fn, o);
     if (!g_proj_gate(R<int32_t>(o + sym::kOffProjSource), R<int32_t>(o + sym::kOffSpriteId), lingers)) return;
   }
   it->second(obj);
@@ -477,12 +487,18 @@ void SetProjectileGate(ProjGateFn run) { g_proj_gate = run; }
 
 bool ProjectileLingers(int32_t projectile) {
   const uint64_t p = LookupObject(projectile);
-  if (!p || R<uint8_t>(p + 8) != 0 || !LingerOk()) return false;
+  if (!p || R<uint8_t>(p + 8) != 0) return false;
   const auto it = g_proj_orig.find(R<uint64_t>(p));
   if (it == g_proj_orig.end()) return false;
-  const uint64_t fn = reinterpret_cast<uint64_t>(it->second);
-  return (fn == sym::kImageBase + sym::kRvaAreaAI || fn == sym::kImageBase + sym::kRvaSwarmAI) &&
-         R<int32_t>(p + sym::kOffProjArrived) != 0;
+  return LingeringFn(reinterpret_cast<uint64_t>(it->second), p);
+}
+
+uint64_t ProjectileUpdateFn(int32_t projectile) {
+  const uint64_t p = LookupObject(projectile);
+  if (!p || R<uint8_t>(p + 8) != 0) return 0;
+  const uint64_t vt = R<uint64_t>(p);
+  const auto it = g_proj_orig.find(vt);
+  return it != g_proj_orig.end() ? reinterpret_cast<uint64_t>(it->second) : R<uint64_t>(vt + sym::kVtblObjAIUpdate);
 }
 
 void WatchProjectiles() {
@@ -1218,6 +1234,20 @@ bool MultiOk() {
 }
 bool IsMultiSpell(int n) { return n == 2207 || n == 2405 || n == 2410; }
 }  // namespace
+void AreaListCount(int32_t id, int* front, int* back) {
+  *front = *back = -1;
+  const uint64_t p = LookupSprite(id);
+  const uint64_t area = p ? R<uint64_t>(p + sym::kOffSpriteArea) : 0;
+  if (!PlausiblePtr(area)) return;
+  auto count = [&](uint32_t off) {
+    int n = 0, guard = 0;
+    for (uint64_t node = R<uint64_t>(area + off); node && PlausiblePtr(node) && guard < 4096; node = R<uint64_t>(node), ++guard)
+      if (R<int32_t>(node + 0x10) == id) ++n;
+    return n;
+  };
+  *front = count(sym::kOffAreaFrontHead);
+  *back = count(sym::kOffAreaBackHead);
+}
 void MultiFireRaw(int32_t caster, int* left, int* spell) {
   const uint64_t p = MultiOk() ? LookupSprite(caster) : 0;
   *left = p ? R<int32_t>(p + sym::kOffSpriteMultiLeft) : -1;

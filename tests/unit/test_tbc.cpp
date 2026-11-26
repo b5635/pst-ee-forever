@@ -983,6 +983,18 @@ TEST_CASE("tbc status: Halo's parentless AC takes the spell whose glow arrived w
   CHECK(first[1].parent.empty());
 }
 
+TEST_CASE("tbc turns: the turn-lost check waits for the engine's state after the step") {
+  LoseTurnCheck c;
+  CHECK(!c.Due(5));  // not started
+  c.Start();
+  CHECK(!c.Due(0));  // the turn-start frame itself: STATE still has the expired sleep's bit
+  CHECK(!c.Due(1));
+  CHECK(c.Due(1));   // 2 ticks in: read now
+  CHECK(!c.Due(1));  // once per turn
+  c.Start();
+  CHECK(c.Due(3));
+}
+
 TEST_CASE("tbc turns: confused, panicked and berserk creatures are left to the engine's AI") {
   // Confusion (SPWI402) set 0x80000000 on the thug; the idle nudge then ordered Attack(Player6) every turn
   CHECK(EngineDrivesAi(0x80000000LL));
@@ -1142,4 +1154,21 @@ TEST_CASE("tbc status: an attached visual does not hold the icon past the spell'
   std::vector<StatusEffect> only{{1, "SPWI119", 0, 1080, true, false, 0, -1}};
   icons = CollectStatus(1, only, 0, kRoundTicks5s, &spans, 8);
   CHECK(icons.size() == 1 && icons[0].rounds == 15);
+}
+
+TEST_CASE("tbc status: an attached object's re-applied parentless effects do not shorten its icon (Antimagic Shell)") {
+  using namespace pstf::tbc;
+  // spell_follow SPWI601, end of the cast turn: 13 resistances of 60 ticks (engine-built, given the spell by
+  // AttributeOrphans) and the shell object with 4500 ticks: r60, not r1
+  StatusSpans spans;
+  StatusEffect res{1, "SPWI601", 0, 60, true, false, 1, 0};
+  res.orphan = true;
+  std::vector<StatusEffect> fx{res, {1, "SPWI601", 0, 4500, true, false, 0, -1}};
+  auto icons = CollectStatus(1, fx, 0, kRoundTicks5s, &spans, 8);
+  CHECK(icons.size() == 1 && icons[0].rounds == 60);
+  // engine-built effects alone (Power of One's strength) keep their own length
+  std::vector<StatusEffect> alone{res};
+  alone[0].left = 600;
+  icons = CollectStatus(1, alone, 0, kRoundTicks5s, &spans, 8);
+  CHECK(icons.size() == 1 && icons[0].rounds == 8);
 }

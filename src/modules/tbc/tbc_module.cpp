@@ -157,6 +157,9 @@ struct State {
   SpellWait resolving_why = SpellWait::None;  // what the turn's end last waited for (logged on a change)
   bool resolving_capped = false;     // the spell hold cap fired this turn (logged once)
   PulseBudget pulses;                // lingering spells: one round of pulse ticks per caster round
+  std::string turn_cast_res;          // the spell the current creature cast this turn (orphan effects' parent)
+  uint32_t turn_cast_flags = 0;
+  LoseTurnCheck lose_check;          // the "turn lost" check, a few ticks into the turn
   ProjectilePace proj_pace;          // which projectiles move (theirs in their caster's turn; born free fly on)
   int sight_radius = 448;            // [tbc] sight_radius: px of fog lifted around each foe in the fight
   bool select_voice = true;          // [tbc] select_voice: a party member's turn plays its selection line
@@ -643,12 +646,19 @@ void OnTurnChange(int32_t prev, int32_t next) {
   }
   (void)party;
   Say(b);
-  const int64_t state = engine::SpriteState(next);
-  if (LosesTurn(state)) {
-    g.end_requested = true;
-    Say(Who(next) + " cannot act: turn lost");
-    CLog("TURN", Name(next) + " cannot act (state " + std::to_string(static_cast<long long>(state)) + "): turn lost");
-  }
+  g.turn_cast_res.clear();
+  g.lose_check.Start();  // after the engine has applied this step (round_rules.h LoseTurnCheck)
+}
+
+// A creature that cannot act (asleep, stunned, helpless, frozen, stone) loses the turn, read once the engine has
+// re-evaluated its state after the turn-start step.
+void CheckLostTurn(uint32_t dt) {
+  if (g.current == -1 || !g.lose_check.Due(dt)) return;
+  const int64_t state = engine::SpriteState(g.current);
+  if (!LosesTurn(state)) return;
+  g.end_requested = true;
+  Say(Who(g.current) + " cannot act: turn lost");
+  CLog("TURN", Name(g.current) + " cannot act (state " + std::to_string(static_cast<long long>(state)) + "): turn lost");
 }
 
 bool OurWindowFocused() {
@@ -1839,6 +1849,7 @@ void OnTick(uint64_t frame) {
   // Effect round clock: nobody's timed effects or natural regeneration move with world time.
   if (g.round_effects && engine::EffectClockInstalled() && dt > 0 && dt < 1000)
     for (int32_t id : g.in) engine::ShiftEffectClock(id, static_cast<int32_t>(dt));
+  CheckLostTurn(dt);
   // The spell being cast now: parentless effects its projectile builds take it for their icon (status.h NoteCast).
   if (g.current != -1 && g.res && g.econ.acting && IsCastAction(g.econ.act_action)) {  // +0x47F8 outlives the cast
     const std::string res = engine::CurrentSpell(g.current);
@@ -1851,7 +1862,14 @@ void OnTick(uint64_t frame) {
     if (!res.empty()) {
       const SpellFacts* f = g.res->Spell(res);
       g.orphans.NoteCast(res, f ? f->flags : 0, now);
+      g.turn_cast_res = res, g.turn_cast_flags = f ? f->flags : 0;
     }
+  } else if (g.current != -1 && !g.turn_cast_res.empty()) {
+    // its projectile still on the way (Howl of Pandemonium's wind stuns the far ones seconds after the cast): what it
+    // builds belongs to that spell too, until the projectile is gone
+    engine::SpriteInfo cs;
+    if (engine::GetSprite(g.current, &cs) && CasterProjectiles(g.current, cs.area).flying > 0)
+      g.orphans.NoteCast(g.turn_cast_res, g.turn_cast_flags, now);
   }
   // A persistent effect added in a fight (Prayer's aura, Detect Evil) is frozen with its owner until the owner's next
   // turn start; real time would run its first update on the next tick: run it now, in the turn it was cast.
@@ -2076,6 +2094,10 @@ void OnTick(uint64_t frame) {
       Log("tbc: %s: WARNING spell hold cap: turn ends after %u ticks (casting %d, %d flying, %d pulsing, %d onsets)",
           Who(cur).c_str(), g.resolve_ticks, in.casting ? 1 : 0, in.flying, in.lingering, in.onsets);
       CLog("SPELL", Name(cur) + ": spell still not finished after 4 rounds: turn ends anyway");
+      for (const auto& o : engine::AllObjects())
+        if (o.source == cur && o.area == s.area && o.type == 0)
+          Log("tbc: %s: still up: projectile %X (AIUpdate %llX)", Who(cur).c_str(), static_cast<unsigned>(o.id),
+              static_cast<unsigned long long>(engine::ProjectileUpdateFn(o.id)));
     }
     if (w != SpellWait::None && w != SpellWait::Capped) {
       wait_spell = true;
@@ -2541,6 +2563,17 @@ int __cdecl LuaBarSlots(engine::LuaState* L) {
 // PSTF_Cursor() -> the game's cursor mode (20: a hovering Missile of Patience waits for a target).
 int __cdecl LuaCursor(engine::LuaState* L) {
   engine::LuaPushNumber(L, engine::GameCursorMode());
+  return 1;
+}
+// PSTF_AreaLists(id) -> "front,back": how often the creature is in its area's front / back object lists (probe).
+int __cdecl LuaAreaLists(engine::LuaState* L) {
+  const auto id = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  int f = 0, b = 0;
+  engine::AreaListCount(id, &f, &b);
+  char buf[32];
+  std::snprintf(buf, sizeof buf, "%d,%d", f, b);
+  Log("lua: PSTF_AreaLists(%X) -> %s", static_cast<unsigned>(id), buf);
+  engine::LuaPushString(L, buf);
   return 1;
 }
 // PSTF_MultiLeft(caster) -> missiles of Force Missiles / Elemental Strike / Ice Knife still to aim (test probe).
@@ -3022,6 +3055,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_Cursor", &LuaCursor);
   dev::AddLuaFunction("PSTF_MopFire", &LuaMopFire);
   dev::AddLuaFunction("PSTF_MultiLeft", &LuaMultiLeft);
+  dev::AddLuaFunction("PSTF_AreaLists", &LuaAreaLists);
   dev::AddLuaFunction("PSTF_MultiFire", &LuaMultiFire);
   dev::AddLuaFunction("PSTF_BarScroll", &LuaBarScroll);
   dev::AddLuaFunction("PSTF_BarHex", &LuaBarHex);

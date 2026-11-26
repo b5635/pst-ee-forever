@@ -172,5 +172,32 @@ inline constexpr Expect kExpect[] = {
     {"SPWI410", "-", 0x0U, "none", -196, -154, 0,
      "Elemental Strike (multi-fire as Force Missiles, FRBLGREN): the engine gives it the same 7 missiles at 20 "
      "(the text's every-3rd-level is not what TransferEffects does: vanilla), 2d4 + level blast each"},
+    {"SPWI501", "*", ~0U, "none", -1000, 0, 0,
+     "Cloudkill (projectile 230): op 13 death by HD (the suite's thug dies: STATE 0x800), else 1d10 poison; the turn "
+     "waits for the cloud to land"},
+    {"SPWI502", "-", 0x20U, "r2:debuff", -100, -10, 2,
+     "Cone of Cold (projectile 243): 10d4 + 10 cold at 100 ticks (resolves in the cast turn) and op 109 paralysis 105 "
+     "ticks; a creature in two of the cone's layers takes it twice (real time too at the same distance: vanilla); the "
+     "paralysed foe loses 1 turn and acts at its 2nd turn start (a stale STATE read cost it a 2nd: LoseTurnCheck)"},
+    {"SPWI504", "8:+1", 0x400000U, "r24:buff", 0, 0, 24,
+     "Enoll Eva's Duplication (op 1 200 %, 357, 375): APR 3/2 -> 5/2 (the engine's stat; the text's 60 s is 120 s in "
+     "the SPL), the turn swings 2, 3, 2 as the stat says (spell_follow -CasterAttacks)"},
+    {"SPWI505", "-", 0x0U, "r2:debuff", -40, -4, 2,
+     "Desert Hell: four 1d10 fire hits at 30/60/90/120 ticks, all in the cast turn (F1), save 1/2"},
+    {"SPWI506", "-", 0x0U, "none", -60, -2, 0,
+     "Fire and Ice (projectile 245): a fire sphere then a cold sphere, both land in the cast turn"},
+    {"SPWI601", "2:+7,7:+1,42:-4,51:+100,52:+100,73:+100", 0x0U, "r60:buff", 0, 0, 60,
+     "Antimagic Shell (op 375 type 8, 300 s = 60 rounds): the object re-applies 60-tick resistances (MR 100 ...); they "
+     "lapse at the caster's turn start and are back for every enemy turn (spell_follow -During); the icon follows the "
+     "object (r60, r59 ...: the re-applied effects showed r1, fixed in status.h)"},
+    {"SPWI602", "-", 0x0U, "r*:buff", 0, 0, 0,
+     "Globe of Invulnerability (CPsSpellGlobeOfInvulnerability): the globe re-applies its 3 s protection; now paced "
+     "as a lingering object (one round of ticks per caster round); it held every later turn to the 4-round cap as a "
+     "projectile 'in flight' (fixed)"},
+    {"SPWI603", "-", 0x8U, "r*:debuff", 0, 0, 0,
+     "Howl of Pandemonium (projectile 231): engine stun by HD (STATE 0x8, random length), stunned foes lose their "
+     "turns; its icon comes from the spell while its wind is still out (turn_cast_res; it was missing for far ones)"},
+    {"SPWI604", "-", 0x0U, "none", -70, -3, 0,
+     "Chain Lightning Storm (projectile 246): 7d10 electric on hostiles, save 1/2, in the cast turn"},
 };
 }  // namespace pstf::spellexpect

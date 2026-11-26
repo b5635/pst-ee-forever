@@ -878,6 +878,9 @@ inline constexpr uint8_t kMultiFireBytes[] = {0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B
 inline constexpr uint8_t kMultiFireSpellBytes[] = {0x8B, 0x81, 0x28, 0x51, 0x00, 0x00};
 // CInfGame::SetState(state, arg) prologue (lin 36DA40 / win 1402F3240).
 inline constexpr uint8_t kGameSetStateBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20};
+// CGameArea object lists for area effects (CProjectileConeOfCold::Fire: GetAllInPoly front list area +0xC18 head, win
+// 140192DD0; GetAllInPolyBack back list +0xC50 head, win 140192F60). Nodes: next +0, object id +0x10.
+constexpr uint32_t kOffAreaFrontHead = 0xC18, kOffAreaBackHead = 0xC50;
 constexpr uint32_t kRvaMultiFire = 0x257B10, kRvaMultiFireSpell = 0x257B75, kRvaGameSetState = 0x2F3240;
 constexpr uint32_t kOffSpriteMultiLeft = 0x5124, kOffSpriteMultiSpell = 0x5128;
 // g_PST (kVaPlanescape) +0x6B4: a hovering Missile of Patience is up (Fire sets 1, RemoveSelf 0; AIUpdate 140275758
@@ -953,6 +956,11 @@ inline constexpr uint8_t kSwarmAIBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 
                                             0x7C, 0x24, 0x20, 0x55, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57};
 inline constexpr uint8_t kAreaArrivedBytes[] = {0x83, 0xBB, 0xE8, 0x03, 0x00, 0x00, 0x00};
 inline constexpr uint8_t kSwarmArrivedBytes[] = {0x83, 0xB9, 0xE8, 0x03, 0x00, 0x00, 0x00};
+// CPsSpellGlobeOfInvulnerability::AIUpdate (lin 302560 / win 140273030): the globe sits on its caster for the
+// spell's duration and re-applies its protection to everyone inside every few ticks (AIUpdateFly + DecodeProjectile).
+// It never "arrives": a lingering object from its first tick, paced like a cloud (one round of ticks per caster round).
+inline constexpr uint8_t kGlobeAIBytes[] = {0x40, 0x55, 0x53, 0x57, 0x41, 0x55, 0x48, 0x8D, 0x6C, 0x24, 0xC1, 0x48};
+constexpr uint32_t kRvaGlobeAI = 0x273030;
 constexpr uint32_t kRvaAreaAI = 0x262180, kRvaSwarmAI = 0x2783F0, kRvaAreaArrived = 0x262222,
                    kRvaSwarmArrived = 0x278422, kOffProjArrived = 0x3E8;
 
@@ -1220,6 +1228,7 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CInfGame::SetState.store", kRvaGameStateStore, kGameStateStoreBytes, "lin 36DA40 / win 1402F327A"),
     PSTF_SYM("CProjectileArea::AIUpdate", kRvaAreaAI, kAreaAIBytes, "lin 308680 / win 140262180"),
     PSTF_SYM("CPsSpellSwarmCurse::AIUpdate", kRvaSwarmAI, kSwarmAIBytes, "lin 2F8E30 / win 1402783F0"),
+    PSTF_SYM("CPsSpellGlobeOfInvulnerability::AIUpdate", kRvaGlobeAI, kGlobeAIBytes, "lin 302560 / win 140273030"),
     PSTF_SYM("CProjectileArea.arrived", kRvaAreaArrived, kAreaArrivedBytes, "win 140262222"),
     PSTF_SYM("CPsSpellSwarmCurse.arrived", kRvaSwarmArrived, kSwarmArrivedBytes, "win 140278422"),
     PSTF_SYM("CInfinity::SetViewPosition", kRvaSetViewPos, kSetViewPosBytes, "lin 3AE2B0 / win 140309630"),

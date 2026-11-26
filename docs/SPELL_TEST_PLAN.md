@@ -152,15 +152,15 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 | SPWI408 | Shroud of Shadows | hidden + AC (projectile 229) | HARDCODED BUFF | B | AC; foes lose sight? | U2 G | yes 2026-11-25 |
 | SPWI409 | Remove Curse | as SPPR307 | OOC | - | as SPPR307 | G | yes 2026-11-25 |
 | SPWI410 | Elemental Strike | globes 2d4 fire + blast | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
-| SPWI501 | Cloudkill | kills low HD (by save/dice), else 1d10 poison; foes only | INSTANT | - | low-HD thugs die, high-HD take damage; party unhurt | U1 U2 |  |
-| SPWI502 | Cone of Cold | 10d4 + 10 cold after 100 ticks + brief paralyse | ONSET | - | HP in the caster's turn (exists) | U1 U2 |  |
-| SPWI504 | Enoll Eva's Duplication | 2x attacks per round, 60 s (op 1, 357, 375) | BUFF | B 12 | APR doubled; **check tbc swings** (`PSTF_TbcAttacks` 2x) | U1 U2 G |  |
-| SPWI505 | Desert Hell | heat 1d10 x 4 hits at 30/60/90/120 ticks + stun | ONSET (+ DOT?) | - | see finding F1 | U1 U2 |  |
-| SPWI506 | Fire and Ice | two spheres, fire then cold, 30 ft | HARDCODED INSTANT | - | HP bounds; both land in the turn | U2 |  |
-| SPWI601 | Antimagic Shell | caster immune to magic, 5 min (op 375) | ATTACHED, PROTECT | B 60 | a spell at the caster refused; the caster can't cast either | G |  |
-| SPWI602 | Globe of Invulnerability | immune to spell levels 1-4 (3 s re-applied while inside) | PROTECT | B | level-4 spell refused, level-5 lands; one steady icon (exists: quarter-round rule) | U2 G |  |
-| SPWI603 | Howl of Pandemonium | stun foes / deafen | HARDCODED DISABLE | D | targets lose turns | U2 |  |
-| SPWI604 | Chain Lightning Storm | 7d10 electric chained, save 1/2 | INSTANT | - | HP bounds | U1 U2 |  |
+| SPWI501 | Cloudkill | kills low HD (by save/dice), else 1d10 poison; foes only | INSTANT | - | low-HD thugs die, high-HD take damage; party unhurt | U1 U2 | yes 2026-11-25 |
+| SPWI502 | Cone of Cold | 10d4 + 10 cold after 100 ticks + brief paralyse | ONSET | - | HP in the caster's turn (exists) | U1 U2 | yes 2026-11-25 |
+| SPWI504 | Enoll Eva's Duplication | 2x attacks per round, 60 s (op 1, 357, 375) | BUFF | B 12 | APR doubled; **check tbc swings** (`PSTF_TbcAttacks` 2x) | U1 U2 G | yes 2026-11-25 |
+| SPWI505 | Desert Hell | heat 1d10 x 4 hits at 30/60/90/120 ticks + stun | ONSET (+ DOT?) | - | see finding F1 | U1 U2 | yes 2026-11-25 |
+| SPWI506 | Fire and Ice | two spheres, fire then cold, 30 ft | HARDCODED INSTANT | - | HP bounds; both land in the turn | U2 | yes 2026-11-25 |
+| SPWI601 | Antimagic Shell | caster immune to magic, 5 min (op 375) | ATTACHED, PROTECT | B 60 | a spell at the caster refused; the caster can't cast either | G | yes 2026-11-25 |
+| SPWI602 | Globe of Invulnerability | immune to spell levels 1-4 (3 s re-applied while inside) | PROTECT | B | level-4 spell refused, level-5 lands; one steady icon (exists: quarter-round rule) | U2 G | yes 2026-11-25 |
+| SPWI603 | Howl of Pandemonium | stun foes / deafen | HARDCODED DISABLE | D | targets lose turns | U2 | yes 2026-11-25 |
+| SPWI604 | Chain Lightning Storm | 7d10 electric chained, save 1/2 | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
 
 ### Mage, levels 7-9
 

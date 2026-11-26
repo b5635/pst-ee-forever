@@ -119,7 +119,9 @@ bool MopClickTarget(int32_t caster, int32_t target);  // test probe: a target cl
 bool MopUp();                                     // a hovering Missile of Patience is up (g_PST +0x6B4)
 // Multi-fire spells (Ice Knife, Force Missiles, Elemental Strike): missiles the caster still has to aim (0: none).
 int MultiFireLeft(int32_t caster);
-void MultiFireRaw(int32_t caster, int* left, int* spell);  // the two sprite fields as they are (probe)
+void MultiFireRaw(int32_t caster, int* left, int* spell);
+uint64_t ProjectileUpdateFn(int32_t projectile);  // its class's AIUpdate VA (which projectile it is; logs)
+void AreaListCount(int32_t id, int* front, int* back);  // times it is in its area's front/back object list (probe)  // the two sprite fields as they are (probe)
 // one missile at target, as the player's click (MultiFireSpell); spell (2207/2405/2410) first sets the caster's
 // readied spell number as a bar cast does (a scripted cast leaves it 0)
 bool MultiFire(int32_t caster, int32_t target, int spell = 0);

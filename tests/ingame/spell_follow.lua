@@ -33,6 +33,7 @@ local function show(id, when)
 	local _, icons = PSTF_Status(id, 0)  -- logged with the raw parent effects
 	PSTF_Effects(id)  -- logs op:type:ticks
 	local x, y = PSTF_SpritePos(id, 1)
+	if F.lists then for w in pairs(snap0) do PSTF_AreaLists(w) end end
 	note(string.format('%s: %X hp %d stats [%s] state %X icons %s at %d,%d', when, id, hp(id), st, PSTF_State(id, 1) or 0,
 		(icons ~= '' and icons) or 'none', x or -1, y or -1))
 end
@@ -85,6 +86,14 @@ function pstfTestTick()
 	if castTurnOver and F.foeAttacks and id == foe and frames == turnStart + 2 then
 		PSTF_EvalAs(foe, 'Attack(' .. F.foeAttacks .. ')', 1)
 	end
+	-- the caster attacks the foe on its later turns (Enoll Eva's duplicated swings: casterAttacks = true)
+	if castTurnOver and F.casterAttacks and id == caster and frames == turnStart + 2 then
+		PSTF_EvalAs(caster, 'Attack(NearestEnemyOf(Myself))', 1)
+	end
+	-- the owner as seen in other creatures' turns (protections re-applied by an attached object: Antimagic Shell)
+	if castTurnOver and F.during and id ~= owner and id ~= -1 and frames == turnStart + 10 then
+		show(owner, string.format('during the turn of %X', id))
+	end
 	if castTurnOver and id == owner and frames == turnStart + 3 then
 		ownerTurns = ownerTurns + 1
 		show(owner, 'owner turn start ' .. ownerTurns)
@@ -111,8 +120,12 @@ function pstfTestTick()
 	elseif id == caster and issued and not castTurnOver and frames - castFrame > 60 then
 		local _, _, _, used, acting = PSTF_TbcCurrent()
 		if not acting then PSTF_EndTurn() end
-	elseif id ~= -1 and isParty(id) and frames == turnStart + 6 and not (id == caster and not issued) then
+	elseif id ~= -1 and isParty(id) and frames == turnStart + 6 and not (id == caster and not issued) and not (F.casterAttacks and id == caster) then
 		PSTF_EndTurn()
+	end
+	if castTurnOver and F.casterAttacks and id == caster and frames > turnStart + 60 then
+		local _, _, _, _, acting = PSTF_TbcCurrent()
+		if not acting and frames - turnStart > 300 then PSTF_EndTurn() end
 	end
 	if frames > 30000 then fail('timeout') end
 end
