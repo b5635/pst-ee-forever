@@ -63,6 +63,11 @@ function pstfTestTick()
 		end
 	end
 	if frames == 30 then PSTF_MakeEnemy(foe) rig(foe) end
+	if frames == 31 and F.kill then  -- a party member dies in the fight first (Raise Dead): kill = 'Morte'
+		local k = PSTF_PartyId(slotOf(F.kill))
+		PSTF_EvalAs(k, 'Kill(Myself)', 1)
+		note('killing ' .. F.kill)
+	end
 	if frames < 33 then return end
 	local id = PSTF_TbcCurrent()
 	if id == -1 then
@@ -116,6 +121,7 @@ function pstfTestTick()
 			if not isParty(w) then fx0[w] = PSTF_Effects(w) end
 		end
 		if F.ownerHp then PSTF_SetHp(owner, F.ownerHp) end  -- room for a heal (Blood Bridge, cures)
+		if F.kill then note(F.kill .. string.format(' before the cast: hp %d', hp(PSTF_PartyId(slotOf(F.kill))))) end
 		show(owner, 'before the cast')
 		note('cast by ' .. string.format('%X', caster) .. ': ' .. F.cast)
 		PSTF_EvalAs(caster, F.cast, 1)

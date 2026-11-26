@@ -69,6 +69,21 @@ For each spell (and each special ability):
   levels 1-3 done except Pacify (skip), Knock (needs a lock), Hold Undead (no undead). Fixed on the way: icons of
   effects with no end (Armor), attached visuals no longer hold an icon (Friends). Tasha's Laughter now right.
 - Next: mage levels 4-9 (SPWI4xx..SPWI914), then special abilities SPIN101-108.
+- Mage levels 4-9 done (2026-11-25, commits bd9f5d6, d5eeff5, 4f48b61). Turn-based bugs found and fixed: multi-fire
+  missiles (Force Missiles, Elemental Strike, Ice Knife) lost or fireable out of turn; the idle nudge and directed AI
+  overrode confusion/panic (confused thugs attacked, panicked ones never moved); a stale STATE read cost a disabled
+  creature an extra turn (LoseTurnCheck); Globe and Celestial Host held turns to the cap; Deathbolt landed in the next
+  turn (kSpellLandTicks); Conflagration burned in world time (attached pulse on the round clock); icons: Antimagic
+  r1, Howl's stun, reused effect addresses (Black-Barbed Shield, Balance). Vanilla noted, not changed: Cone of Cold's
+  double layer, Force Missiles' blast on adjacent casters, Enoll Eva APR 5/2, PW Blind/Kill HP limits.
+- Special abilities SPIN101-108 checked in game (spell_follow, plan table "Vetted"): no turn-based bugs found.
+  Still not vetted (need set-ups): Pacify, Knock, Hold Undead, Speak with Dead, Remove Curse (cursed item), Raise
+  Dead SPPR502; SPIN001-015 plumbing.
+- **Open design question for the user:** a disable of N rounds on a foe costs it N-1 of its own turns (the round
+  clock steps 75 ticks at its first turn start even when the spell landed just before it in the same round). BG3-style
+  "loses N turns" would need the first step after a mid-round application to be skipped or partial.
+- Probes added: `PSTF_MultiLeft/MultiFire`, `PSTF_AreaLists`, `PSTF_ProjectilesOf` (cinematic stage, freeze owner);
+  spell_follow `-CasterAttacks -During -Lists -FoeHp`; the hold-cap warning logs the projectiles still up.
 
 ## Next, in order
 

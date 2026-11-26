@@ -184,16 +184,16 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 
 ### Special abilities
 
-| Res | Ability (who) | Intended | TBC | Icon | Check | Layer |
+| Res | Ability (who) | Intended | TBC | Icon | Check | Layer | Vetted |
 |---|---|---|---|---|---|---|---|
-| SPIN101 | Litany of Curses (Morte) | target berserks at Morte: -2 AC/hit/dmg, 10 s/lvl, save neg; 2 s stun | DISABLE (AI) + DEBUFF | D | stats change; target attacks Morte on its turns | U1 U2 G |  |
-| SPIN102 | Skull Mob (Morte) | skulls bite, no save, no MR (projectile 216) | HARDCODED INSTANT | - | HP loss in Morte's turn | U2 |  |
-| SPIN103 | Stories-Bones-Tell (TNO) | talk to undead/corpses (EFF SPIN103/103B, 300-tick tail) | OOC | - | dialogue opens; the delayed EFF does not hold a fight turn | G |  |
-| SPIN104 | Sensory Touch (Grace) | takes 1d10 of the target's wounds onto Grace | ONSET | - | target +n, Grace -n | U1 U2 |  |
-| SPIN106 | Horror (creature) | fear 50 s, save neg | DISABLE (AI) | D 10 | as Horror; from an enemy caster | U1 G |  |
-| SPIN107 | Kiss (Grace) | drains 2d4 to Grace, ignores weapon immunity | ONSET | - | target -n, Grace +n | U1 U2 |  |
-| SPIN108 | Raise Dead (TNO) | revive, 3/day | INSTANT | - | as SPPR502; uses left drop | G |  |
-| SPIN001-015 | script plumbing | give/remove the abilities above, hiccups (381), uncurse | none | - | U1 only: give/remove pairs match (001/002 -> SPIN101 ...) | U1 |
+| SPIN101 | Litany of Curses (Morte) | target berserks at Morte: -2 AC/hit/dmg, 10 s/lvl, save neg; 2 s stun | DISABLE (AI) + DEBUFF | D | stats change; target attacks Morte on its turns | U1 U2 G |  | yes 2026-11-25: AC/hit/dmg penalties and 2 s stun in Morte's turn, r28 at 14 down per turn, the foe attacks Morte |
+| SPIN102 | Skull Mob (Morte) | skulls bite, no save, no MR (projectile 216) | HARDCODED INSTANT | - | HP loss in Morte's turn | U2 |  | yes 2026-11-25: -35 in Morte's turn (14 x 1d4) |
+| SPIN103 | Stories-Bones-Tell (TNO) | talk to undead/corpses (EFF SPIN103/103B, 300-tick tail) | OOC | - | dialogue opens; the delayed EFF does not hold a fight turn | G |  | yes 2026-11-25: in a fight the turn ends normally (123 ticks), the EFF tail holds nothing; the dialogue not looked at |
+| SPIN104 | Sensory Touch (Grace) | takes 1d10 of the target's wounds onto Grace | ONSET | - | target +n, Grace -n | U1 U2 |  | yes 2026-11-25: Morte +3 in Grace's turn |
+| SPIN106 | Horror (creature) | fear 50 s, save neg | DISABLE (AI) | D 10 | as Horror; from an enemy caster | U1 G |  | yes 2026-11-25: panic r10 (50 s), down per turn, the foe flees |
+| SPIN107 | Kiss (Grace) | drains 2d4 to Grace, ignores weapon immunity | ONSET | - | target -n, Grace +n | U1 U2 |  | yes 2026-11-25: foe -2, Grace +2 in her turn; nothing when Grace is unhurt (vanilla: op 383 heals a wounded caster) |
+| SPIN108 | Raise Dead (TNO) | revive, 3/day | INSTANT | - | as SPPR502; uses left drop | G |  | yes 2026-11-25: a dead Morte stands up in TNO's turn (HP 1, the engine's), rejoins the order |
+| SPIN001-015 | script plumbing | give/remove the abilities above, hiccups (381), uncurse | none | - | U1 only: give/remove pairs match (001/002 -> SPIN101 ...) | U1 |  |
 
 Special abilities are not in `spell_list.py` today: add SPIN1xx with a name (and SPIN106) to the table and to the
 suite's caster list (Morte, Grace, TNO need the ability: `AddSpell` / the SPIN00x give spells).
