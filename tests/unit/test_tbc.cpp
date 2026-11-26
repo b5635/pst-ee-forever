@@ -720,6 +720,8 @@ TEST_CASE("tbc script queue: an AI keeps its sequence across turns, a lead Wait 
   CHECK(SkipLeadWait(lead, 2));
   const uint16_t waits[] = {63, 368};
   CHECK(!SkipLeadWait(waits, 2));
+  const uint16_t patrol[] = {63, 23, 143, 63, 23};  // Jumble's pre-fight route: not his fight script
+  CHECK(!SkipLeadWait(patrol, 5));
   const uint16_t act[] = {31, 63};
   CHECK(!SkipLeadWait(act, 2));
   // the step counter after its spell is bookkeeping, not a second action (no "No action left" stop)

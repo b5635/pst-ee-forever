@@ -72,6 +72,8 @@ namespace {
 
 using SpriteFn = void(__fastcall*)(void*);
 SpriteFn g_process_ai = nullptr;
+using PendingFn = uint64_t(__fastcall*)(void*, int);
+PendingFn g_pending = nullptr;
 SpriteFn g_walk = nullptr;
 
 struct State {
@@ -322,6 +324,16 @@ void __fastcall HookProcessAI(void* sprite) {
     return;
   }
   g_process_ai(sprite);
+}
+// CGameSprite::ProcessPendingTriggers: the other way a creature's script and actions run (a trigger such as
+// AttackedBy arrives; ResolveInstants runs instant actions and the next queued action starts). Held the same as
+// ProcessAI ([tbc] keep_queue): the triggers stay pending until its own turn. The dead still run theirs (Die()).
+uint64_t __fastcall HookPendingTriggers(void* sprite, int a2) {
+  if (g.running && g.keep_queue) {
+    const int32_t sid = engine::SpriteIdOf(sprite);
+    if ((Held(sid) || (g.freeze_ai && sid == g.current)) && !(engine::SpriteState(sid) & sym::kStateDead)) return 0;
+  }
+  return g_pending(sprite, a2);
 }
 void __fastcall HookWalk(void* sprite) {
   const int32_t id = engine::SpriteIdOf(sprite);
@@ -3471,6 +3483,15 @@ bool InstallTbc(const IniMap& ini) {
   }
   g_walk = reinterpret_cast<SpriteFn>(walk1);
   g_process_ai = reinterpret_cast<SpriteFn>(pai);
+  for (const auto& s : sym::kData)
+    if (s.rva == sym::kRvaSlotPendingTriggers && CheckSymbol(s)) {
+      const uint64_t ppt = ReplacePointer(s, reinterpret_cast<void*>(&HookPendingTriggers));
+      if (ppt == sym::kImageBase + sym::kRvaPendingTriggers) g_pending = reinterpret_cast<PendingFn>(ppt);
+      else if (ppt) ReplacePointer(s, reinterpret_cast<void*>(ppt));
+    }
+  if (!g_pending) {
+    Log("tbc: ProcessPendingTriggers slot differs from the manifest: held creatures' triggers run at once");
+  }
   if (!AddTickHandler(&OnTick)) return false;
   // Presentation, so it belongs to the draw pass, not to world ticks (CameraStep). If that hook cannot be
   // installed, the camera still follows, just once per tick as before.

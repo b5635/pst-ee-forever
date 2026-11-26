@@ -91,6 +91,10 @@ local lastCur, turnStart, started, lastRound = -2, 0, false, 0
 function pstfTestTick()
 	if finished then return end
 	S.frame = S.frame + 1
+	-- Walkthrough saves can open inside a party banter dialogue (the world waits for it): step it closed first.
+	if S.frame <= 24 and S.frame % 3 == 1 and worldScreen and worldScreen.StepDialog and not S.keepDialog then
+		pcall(worldScreen.StepDialog, worldScreen)
+	end
 	local f = S.steps[S.frame]
 	if f then
 		local ok, err = pcall(f)
@@ -134,5 +138,84 @@ function pstfTestTick()
 	if S.frame >= S.maxFrames then
 		if S.done then pcall(S.done, 'timeout') end
 		return S.finish('timeout')
+	end
+end
+
+-- Step-counter casters (section A): a creature whose script walks a counter (LOCALS Scd_int_0 1..N or a global),
+-- one Spell per step. o = {name = script/shown name, cre = CRE to spawn when absent, script = BCS to give it,
+-- var = 'cd_int_0', scope = 'LOCALS' | area | 'GLOBAL', start = 1, last = N (finish when reached), hp = 400,
+-- setup = fn(id) extra forcing, maxFrames}. Checks: the counter climbs to `last`; at most one cast per own turn
+-- (PSTF_Casts); every own turn noted with the counter value.
+function S.stepCaster(o)
+	o.var = o.var or 'cd_int_0'  -- BCS "LOCALScd_int_0" = scope LOCALS + name cd_int_0
+	o.scope = o.scope or 'LOCALS'
+	o.start = o.start or 1
+	if o.near == nil then o.near = {200, 40} end
+	S.maxFrames = o.maxFrames or 6000
+	local id, top, turns, casts0 = -1, nil, 0, 0
+	local function val()
+		for v = (top or o.start), o.last + 2 do
+			if S.global(o.var, o.scope, v, o.scope == 'LOCALS' and id or nil) then return v end
+		end
+		return top
+	end
+	S.steps[26] = function()
+		id = S.find(o.name)
+		if id == -1 and o.cre then S.spawn(o.cre, 200, 40) end
+	end
+	S.steps[29] = function()
+		if id == -1 then id = S.find(o.name) end
+		if id == -1 and o.cre then id = S.find(o.cre) end
+		if id == -1 then return S.fail(o.name .. ' not found') end
+		S.caster = id
+		S.note(string.format('%s is %X', o.name, id))
+		S.watch[id] = true
+		-- one action per C:Eval (it runs only the first of several); the first clears its queue
+		local acts = {}
+		if o.script then acts[#acts + 1] = 'ChangeAIScript("' .. o.script .. '",0)' end
+		if o.scope == 'LOCALS' then acts[#acts + 1] = 'SetGlobal("' .. o.var .. '","LOCALS",' .. o.start .. ')' end
+		if o.near then
+			local x, y = PSTF_SpritePos(S.tno(), 1)
+			acts[#acts + 1] = 'JumpToPoint([' .. math.floor(x + o.near[1]) .. '.' .. math.floor(y + o.near[2]) .. '])'
+		end
+		for i, a in ipairs(acts) do PSTF_EvalAs(id, a, i == 1 and 1 or 0) end
+		if o.go then  -- the party goes to it (a creature whose AI is idle off-screen does not jump)
+			local x, y = S.pos(id)
+			for i = 0, 7 do
+				local p = PSTF_PartyId(i)
+				if p and p ~= -1 then PSTF_EvalAs(p, 'JumpToPoint([' .. math.floor(x + o.go[1] + 30 * i) .. '.' .. math.floor(y + o.go[2]) .. '])', 1) end
+			end
+		end
+		if o.scope ~= 'LOCALS' then PSTF_EvalAs(S.tno(), 'SetGlobal("' .. o.var .. '","' .. o.scope .. '",' .. o.start .. ')') end
+	end
+	S.steps[60] = function()
+		local x, y = S.pos(id)
+		local tx, ty = S.pos(S.tno())
+		S.note(string.format('%X at %d,%d, protagonist at %d,%d, queue [%s]', id, x or -1, y or -1, tx, ty, PSTF_Queue(id, 1)))
+		PSTF_SetHp(id, o.hp or 3000, o.hp or 3000)
+		for i = 0, 7 do local p = PSTF_PartyId(i) if p and p ~= -1 then PSTF_SetHp(p, 400, 400) end end
+		if not S.global(o.var, o.scope, o.start, o.scope == 'LOCALS' and id or nil) then return S.fail('could not set ' .. o.var) end
+		top = o.start
+		if o.setup then o.setup(id) end
+		PSTF_MakeEnemy(id)
+	end
+	local lastCur2 = -2
+	S.tick = function(frame, cur)
+		if not top then return end
+		local v = val()
+		if v and v ~= top then
+			S.note(string.format('%s = %d at tick %d (its turn %d)', o.var, v, frame, turns))
+			top = v
+		end
+		if cur ~= lastCur2 then
+			if lastCur2 == id then
+				local c = PSTF_Casts(id)
+				if c - casts0 > 1 then S.issue(string.format('%d casts in one turn (turn %d)', c - casts0, turns)) end
+			end
+			if cur == id then turns = turns + 1 casts0 = PSTF_Casts(id) end
+			lastCur2 = cur
+		end
+		if top >= o.last then return S.finish(string.format('%s reached %d in %d of its turns', o.var, top, turns)) end
+		if frame == S.maxFrames - 50 then S.issue(string.format('%s stuck at %d after %d of its turns (expected %d)', o.var, top, turns, o.last)) end
 	end
 end

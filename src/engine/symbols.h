@@ -314,6 +314,11 @@ constexpr uint32_t kRvaSlotProcessAI = 0x649440;
 inline constexpr uint8_t kProcessAIBytes[] = {0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x55, 0x48,
                                               0x8D, 0x6C, 0x24, 0xF0, 0x48, 0x81, 0xEC, 0x10};
 constexpr uint32_t kRvaProcessAI = 0x421830;
+// CGameSprite::ProcessPendingTriggers(int) (lin 4A24B0 vtable slot 54 +0x1B0 / win 140425D30, slot at win 1406494D0 =
+// vtbl +0x1A8): takes the next queued action when the current one is done (+0x3E8), runs instant actions
+// (ResolveInstants) and the script for pending triggers, outside ProcessAI. tbc holds it like ProcessAI.
+inline constexpr uint8_t kSlotPendingTriggersBytes[] = {0x30, 0x5D, 0x42, 0x40, 0x01, 0x00, 0x00, 0x00};
+constexpr uint32_t kRvaSlotPendingTriggers = 0x6494D0, kRvaPendingTriggers = 0x425D30;
 // CGameSprite::AIUpdate calls CGameSprite::AIUpdateWalk (lin 51FFA0, win 1403B6D20) at two sites; void.
 inline constexpr uint8_t kWalkCall1Bytes[] = {0xE8, 0x0A, 0x0B, 0x00, 0x00};
 inline constexpr uint8_t kWalkCall2Bytes[] = {0xE8, 0x9C, 0x05, 0x00, 0x00};
@@ -1405,6 +1410,8 @@ inline constexpr Symbol kAll[] = {
 inline constexpr Symbol kData[] = {
     PSTF_SYM("CGameSprite.vtbl.ProcessAI", kRvaSlotProcessAI, kSlotProcessAIBytes,
              "vtable win 140649328 slot 35 / lin E57298 slot 36"),
+    PSTF_SYM("CGameSprite.vtbl.ProcessPendingTriggers", kRvaSlotPendingTriggers, kSlotPendingTriggersBytes,
+             "vtable win 140649328 +0x1A8 / lin E57298 +0x1B0"),
     PSTF_SYM("CVisibilityMap flags/masks/square", kRvaVisMasks, kVisMaskBytes, "rdata win 14063976C"),
     PSTF_SYM("AnimPst.vtbl.SetRunning", kRvaSlotSetRunning, kSlotSetRunningBytes,
              "vtable win 1406470B0 +0x1F0 / lin slot 63"),

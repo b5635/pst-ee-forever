@@ -130,7 +130,7 @@ inline bool KeepCurrentAtTurnEnd(uint16_t current) {
 inline bool SkipLeadWait(const uint16_t* q, int n) {
   if (n < 2 || !IsWaitAction(q[0])) return false;
   for (int i = 1; i < n; ++i)
-    if (q[i] != 0 && !IsWaitAction(q[i])) return true;
+    if (q[i] != 0 && !IsWaitAction(q[i])) return !IsMoveAction(q[i]);  // a patrol route (Wait; MoveToPoint ...): nudged
   return false;
 }
 
