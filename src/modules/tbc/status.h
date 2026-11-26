@@ -110,6 +110,9 @@ struct StatusSpans {
 };
 
 constexpr uint32_t kHostileFlag = 0x400;
+// Effects "until destroyed" (Armor's AC, op 375 type 7) run ~INT_MAX ticks: no countdown (rounds 0), a full frame.
+// (left + round - 1) overflowed int32 and showed r-28633114.
+constexpr int32_t kNoEndTicks = 15 * 60 * 60 * 24;  // a day of world time
 
 inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<StatusEffect>& fx, int64_t now,
                                              int round_ticks, StatusSpans* spans, size_t max_icons) {
@@ -142,20 +145,21 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
     StatusIcon icon;
     icon.parent = s.res;
     icon.parent_type = s.type;
-    icon.rounds = (s.left + round_ticks - 1) / round_ticks;
+    const bool no_end = s.left >= kNoEndTicks;
+    icon.rounds = no_end ? 0 : static_cast<int>((int64_t(s.left) + round_ticks - 1) / round_ticks);
     icon.debuff = (s.flags & kHostileFlag) != 0;
     if (spans) {
       auto& span = spans->spans[{id, s.res}];
       if (span.last_left < 0 || s.left > span.last_left + 1) span.length = std::max<int32_t>(1, s.left);  // first / recast
       span.last_left = s.left;
-      icon.share = std::clamp(double(s.left) / double(span.length), 0.0, 1.0);
+      icon.share = no_end ? 1.0 : std::clamp(double(s.left) / double(span.length), 0.0, 1.0);
     }
     out.push_back(icon);
   }
   // debuffs first, then the ones running out soonest
   std::stable_sort(out.begin(), out.end(), [](const StatusIcon& a, const StatusIcon& b) {
     if (a.debuff != b.debuff) return a.debuff;
-    return a.rounds < b.rounds;
+    return (a.rounds ? a.rounds : INT32_MAX) < (b.rounds ? b.rounds : INT32_MAX);  // no end: last
   });
   if (out.size() > max_icons) out.resize(max_icons);
   return out;

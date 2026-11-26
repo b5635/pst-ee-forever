@@ -465,6 +465,7 @@ function pstfStTip(p, i)
 	local s = pstfSt(p, i)
 	if not s then return nil end
 	local name = (s.n and s.n >= 0) and Infinity_FetchString(s.n) or s.b
+	if s.r == 0 then return name .. '\n' .. (s.d and 'Debuff' or 'Buff') .. ': until it ends' end  -- Armor: no countdown
 	return name .. '\n' .. (s.d and 'Debuff' or 'Buff') .. ': ' .. s.r .. (s.r == 1 and ' round' or ' rounds') .. ' left'
 end
 function pstfStSeg(p, i, k, debuff)

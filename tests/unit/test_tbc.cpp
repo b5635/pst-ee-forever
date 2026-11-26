@@ -1074,3 +1074,15 @@ TEST_CASE("tbc: a turn does not end before its spell has finished for this round
   melee.since_action = 3;
   CHECK(TurnWaitsForSpell(melee) == SpellWait::None);
 }
+
+TEST_CASE("tbc status: an effect until destroyed (Armor, ~INT_MAX ticks) has an icon with no countdown") {
+  using namespace pstf::tbc;
+  // spell_follow on SPWI102: op 8 and op 0 with 2147483640 ticks; the icon read r-28633114 (int32 overflow)
+  std::vector<StatusEffect> fx{{1, "SPWI102", 0, 2147483640, true, false, 0, 0},
+                               {1, "SPPR101", 0, 450, true, false, 0, 130}};
+  StatusSpans spans;
+  const auto icons = CollectStatus(1, fx, 0, kRoundTicks5s, &spans, 8);
+  CHECK(icons.size() == 2);
+  CHECK(icons[0].parent == "SPPR101" && icons[0].rounds == 6);  // the one with an end first
+  CHECK(icons[1].parent == "SPWI102" && icons[1].rounds == 0 && icons[1].share == 1.0);
+}

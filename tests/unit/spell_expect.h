@@ -10,7 +10,7 @@ struct Expect {
   const char* res;
   const char* stats;  // exact derived stat changes on the measured creature, as spell_results.h writes them
   unsigned state;     // STATE bits set
-  const char* icon;   // status icon at the end of the cast turn ("rN:buff", "rN:debuff", "none")
+  const char* icon;   // status icon at the end of the cast turn ("rN:buff", "rN:debuff", "none"; "r*:..." any rounds)
   int hp_min, hp_max; // HP change of the measured creature in the cast turn (heals +, damage -)
   int rounds;         // owner turn starts until it is gone (0: instant / not timed)
   const char* note;
@@ -27,6 +27,13 @@ inline constexpr Expect kExpect[] = {
     {"SPPR202", "-", 0x0U, "none", 11, 11, 0, "Cure Moderate Wounds: op 17 +11 in the cast turn"},
     {"SPPR401", "-", 0x0U, "none", 17, 17, 0,
      "Cure Serious Wounds: op 17 +17 in the cast turn (an r2 icon seen in a full run was the previous spell's)"},
+    {"SPPR104", "-", 0x0U, "r60:buff", 0, 0, 60,
+     "Detect Evil (op 376): 50 s + 25 s/level capped at 5 min by the engine (r60 at 14); the turn ends at once (45 "
+     "ticks). The evil highlight itself was not looked at"},
+    {"SPPR501", "-", 0x0U, "none", 27, 27, 0, "Cure Critical Wounds: op 17 +27 in the cast turn (speed 8: 134 ticks)"},
+    {"SPPR601", "-", 0x0U, "none", 66, 66, 0,
+     "Heal: op 17 to full HP (Grace 30 -> 96) in the cast turn; its blindness/disease cures (op 75/79, instant) were "
+     "not exercised"},
     {"SPPR105", "2:+2", 0x0U, "r56:debuff", 0, 0, 56,
      "Halo of Lesser Revelation (projectile 259): hostiles AC +2, no save, 20 s/level (4200 ticks at 14); the caster "
      "untouched; icon via the spell being cast (CurrentSpell read the CResHelper's inline resref, fixed 2026-11-25)"},
@@ -47,6 +54,21 @@ inline constexpr Expect kExpect[] = {
     {"SPPR303", "9:-1,10:-1,11:-1,12:-1,13:-1,50:+1,151:+1", 0x800000U, "r14:buff", 0, 0, 14,
      "Prayer (op 378): friends +1 hit/damage/saves, foes -1 hit/damage every round for 5 s/level (14 rounds at 14, "
      "spell_follow on the foe); the aura pulses once per owner round (StepEffectClock's extra 0-tick call)"},
+    {"SPWI101", "-", 0x20U, "r*:debuff", -40, -4, 0,
+     "Chromatic Orb at level 20 (black, header 8): 4d10 and paralysis 10/20/30/40 s (one of four rows), save negates; "
+     "the paralysed foe loses its turns (log: cannot act: turn lost)"},
+    {"SPWI102", "-", 0x0U, "r0:buff", 0, 0, 0,
+     "Armor (op 375 type 7): base AC 6 until destroyed (no change on the Nameless One, AC 2 already); the icon has no "
+     "countdown (its effects run ~INT_MAX ticks: was r-28633114, fixed 2026-11-25)"},
+    {"SPWI103", "1:+8,2:-1", 0x0U, "r30:buff", 2, 8, 30,
+     "Minor Embalming (op 380): 2d4 HP through UtilRandInt with the target's luck (the lucky Nameless One rolls 8), "
+     "AC +1, 150 s (the SPL's, not the text's half hour)"},
+    {"SPWI104", "51:+100,52:+100", 0x0U, "r21:buff", 0, 0, 21,
+     "Fist of Iron (op 382): 5 s + 5 s/level (105 s at 20), 100% spell failure while on; the +3/+6 punch is the "
+     "engine's attack code (not measured)"},
+    {"SPWI105", "-", 0x0U, "none", 0, 0, 0, "Identify: no casting time, spends the action, the turn goes on (31 ticks)"},
+    {"SPWI107", "-", 0x0U, "none", -25, -10, 0,
+     "Magic Missile: 5 missiles at level >= 9, each 1d4+1, no save (16-20 measured)"},
     {"SPWI115", "2:+4,7:+4", 0x40000U, "r12:debuff", 0, 0, 12,
      "Blindness (op 74, 60 s): THAC0 +4, AC +4, STATE_BLIND (CGameEffectBlindness::ApplyEffect); a save negates it "
      "all (-Saves pass: no effect, no icon); decay as Vilquar's Eye's op 74 (tbc_decay.lua)"},

@@ -76,7 +76,7 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 | SPPR101 | Blessing | allies in 70 ft: +1 hit, +1 saves, 30 s | BUFF | B 6 | THAC0 -1, saves +1 on every ally in radius, not on foes; gone after 6 rounds | U1 U2 | yes 2026-11-25 |
 | SPPR102 | Cure Light Wounds | heal 8 | INSTANT | - | HP +8 (capped at max) | U1 U2 | yes 2026-11-25 |
 | SPPR103 | Curse | foes in 50 ft: -1 hit, -1 saves, 30 s, non-cumulative | DEBUFF | D 6 | THAC0 +1, saves -1 on foes only; a 2nd cast does not stack | U1 U2 | yes 2026-11-25 |
-| SPPR104 | Detect Evil | reveals evil creatures (op 376) for a time | OOC | B? | engine highlight on; does not stall the turn | U2 G |  |
+| SPPR104 | Detect Evil | reveals evil creatures (op 376) for a time | OOC | B? | engine highlight on; does not stall the turn | U2 G | yes 2026-11-25 |
 | SPPR105 | Halo of Lesser Revelation | foes in area outlined, easier to hit (hardcoded projectile 259) | HARDCODED DEBUFF | D (20 s/lvl) | foes' AC worse by the engine's value; icon via the projectile's effects | U2 G | yes 2026-11-25 |
 | SPPR106 | Protection from Evil | +2 AC/saves vs evil, 10 s/lvl (op 375 PROT) | ATTACHED | B | AC/saves change; ends on its stamp shifted by rounds | U2 | yes 2026-11-25 |
 | SPPR201 | Aid | +1 hit, +1 saves, + HP (only if not already fighting), 10 s + 10 s/lvl | BUFF | B | THAC0/saves/max HP; check the "not in combat" condition in a tbc fight (is a tbc fight "in combat"?) | U1 U2 | yes 2026-11-25 |
@@ -88,20 +88,20 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 | SPPR304 | Speak with Dead | talk to a corpse (projectile 205) | OOC | - | dialogue opens on a corpse | G |  |
 | SPPR307 | Remove Curse | lets cursed items be removed | OOC | - | cursed item unequips after | G |  |
 | SPPR401 | Cure Serious Wounds | heal 17 | INSTANT | - | HP +17 | U1 U2 | yes 2026-11-25 |
-| SPPR501 | Cure Critical Wounds | heal 27 | INSTANT | - | HP +27 | U1 U2 |  |
+| SPPR501 | Cure Critical Wounds | heal 27 | INSTANT | - | HP +27 | U1 U2 | yes 2026-11-25 |
 | SPPR502 | Raise Dead | revive a dead ally, HP set 50 % | INSTANT | - | dead ally alive; joins the fight order at its next round | G |  |
-| SPPR601 | Heal | full HP, cure blind and disease | INSTANT | - | HP = max; blindness (Blindness first) gone; its icon gone | U2 G |  |
+| SPPR601 | Heal | full HP, cure blind and disease | INSTANT | - | HP = max; blindness (Blindness first) gone; its icon gone | U2 G | yes 2026-11-25 |
 
 ### Mage, levels 1-3
 
 | Res | Spell | Intended | TBC | Icon | Check | Layer | Vetted |
 |---|---|---|---|---|---|---|---|
-| SPWI101 | Chromatic Orb | colour by level: damage 4d10 + paralyse 10-40 s etc., save neg | INSTANT + DISABLE | D | at the suite's level: HP and paralyse; paralysed target loses its turns for N rounds | U1 U2 |  |
-| SPWI102 | Armor | AC 6 until destroyed by damage (op 375) | ATTACHED | B (no rounds) | AC; still there after rounds pass; gone after enough damage | U2 G |  |
-| SPWI103 | Minor Embalming | TNO only: AC/HP bonus, 30 min (op 380) | BUFF | B (360 rounds) | TNO stats change; refused on others | U1 U2 |  |
-| SPWI104 | Fist of Iron | TNO fists hit harder, 5 s + 5 s/lvl; 100 % spell failure while on | BUFF | B | punch damage up; **op 60: later casts fail** (the suite already removes it) | U1 U2 |  |
-| SPWI105 | Identify | identify an item | OOC | - | item identified; no-cast-time cast spends the action | G (exists) |  |
-| SPWI107 | Magic Missile | 1-5 missiles 1d4+1 | INSTANT | - | HP loss = n x (2..5); all missiles land in the turn | U1 U2 |  |
+| SPWI101 | Chromatic Orb | colour by level: damage 4d10 + paralyse 10-40 s etc., save neg | INSTANT + DISABLE | D | at the suite's level: HP and paralyse; paralysed target loses its turns for N rounds | U1 U2 | yes 2026-11-25 |
+| SPWI102 | Armor | AC 6 until destroyed by damage (op 375) | ATTACHED | B (no rounds) | AC; still there after rounds pass; gone after enough damage | U2 G | yes 2026-11-25 |
+| SPWI103 | Minor Embalming | TNO only: AC/HP bonus, 30 min (op 380) | BUFF | B (360 rounds) | TNO stats change; refused on others | U1 U2 | yes 2026-11-25 |
+| SPWI104 | Fist of Iron | TNO fists hit harder, 5 s + 5 s/lvl; 100 % spell failure while on | BUFF | B | punch damage up; **op 60: later casts fail** (the suite already removes it) | U1 U2 | yes 2026-11-25 |
+| SPWI105 | Identify | identify an item | OOC | - | item identified; no-cast-time cast spends the action | G (exists) | yes 2026-11-25 |
+| SPWI107 | Magic Missile | 1-5 missiles 1d4+1 | INSTANT | - | HP loss = n x (2..5); all missiles land in the turn | U1 U2 | yes 2026-11-25 |
 | SPWI108 | Pacify | 2-8 non-undead stop fighting (paralyse + sleep-like), 40 s + 5 s/lvl; broken by damage (SPWI108A) | DISABLE, LINGER | D | targets lose their turns; damage ends it (they act next turn) | U2 G |  |
 | SPWI111 | Shield | AC 3 vs most, MM immunity (op 375) | ATTACHED | B | AC; Magic Missile refused | U2 G |  |
 | SPWI113 | Missile of Patience | hovers, fires when the caster clicks (cursor 20), 3 shots | special | - | exists: `tbc_mop.lua` | G (exists) |  |

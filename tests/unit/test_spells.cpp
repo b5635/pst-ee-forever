@@ -282,6 +282,14 @@ TEST_CASE("spells: damage lands in the caster's turn, heals heal") {
   CHECK(bad.empty());
 }
 
+namespace {
+// "r*:debuff" = any rounds of that kind (a random duration: Chromatic Orb's paralysis 10-40 s)
+bool IconMatches(const char* got, const char* want) {
+  if (std::strncmp(want, "r*:", 3) == 0) return got[0] == 'r' && std::strstr(got, want + 2) != nullptr;
+  return std::strcmp(got, want) == 0;
+}
+}  // namespace
+
 TEST_CASE("spells: every hand-vetted spell still measures as vetted (spell_expect.h vs spell_results.h)") {
   int n = 0;
   for (const auto& e : spellexpect::kExpect) {
@@ -290,7 +298,7 @@ TEST_CASE("spells: every hand-vetted spell still measures as vetted (spell_expec
     if (!r) continue;
     ++n;
     const bool ok = std::strcmp(r->verdict, "ok") == 0 && std::strcmp(r->stats, e.stats) == 0 && r->state == e.state &&
-                    std::strcmp(r->icon, e.icon) == 0 && r->hp >= e.hp_min && r->hp <= e.hp_max &&
+                    IconMatches(r->icon, e.icon) && r->hp >= e.hp_min && r->hp <= e.hp_max &&
                     (IconRounds(e.icon) == 0 || IconRounds(e.icon) == e.rounds);
     if (!ok)
       std::printf("  %s: measured %s st=%s state=%X icon=%s hp=%d; vetted st=%s state=%X icon=%s hp %d..%d\n", e.res,
