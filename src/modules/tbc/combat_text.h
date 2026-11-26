@@ -5,7 +5,8 @@
 // sits there and fades out. Lines of one creature share that point and stack in slots from the top down: a new
 // line takes the highest free slot ("Miss!" over the head, the damage row under it, a save line under that...).
 // Damage is a bare number, white for weapon damage and coloured by damage type; numbers that land together share
-// a row ("13 12"). "Miss!" or "Critical Miss!" (never both), "Critical Hit!" in red. A buff or debuff shows its name
+// a row ("13 12"); numbers of one colour within kCtMergeMs are one number (a dagger's 1d6 + 1 shows "7", not "6 1").
+// "Miss!" or "Critical Miss!" (never both), "Critical Hit!" in red. A buff or debuff shows its name
 // when it starts; when it ends the name shows again and a line is drawn through it from left to right.
 #include <cstdint>
 #include <cstdlib>
@@ -21,6 +22,7 @@ constexpr uint32_t kCtLifeMs = 2800;
 constexpr uint32_t kCtStrikeDelayMs = 300;  // a status that ends: shown plain, then struck through
 constexpr uint32_t kCtStrikeMs = 400;       // the line crosses the name in this time
 constexpr uint32_t kCtJoinMs = 400;         // damage numbers of one creature this close share a row
+constexpr uint32_t kCtMergeMs = 100;        // ...and of one colour (damage type) this close add up: 6 + 1 -> "7"
 constexpr int kCtLines = 24;                // on screen at once (UI menus PSTF_CT1..N)
 constexpr int kCtSegs = 4;                  // numbers in one row
 constexpr int kCtSlots = 6;                 // lines over one creature
@@ -123,6 +125,8 @@ inline double CtStrike(uint32_t ms) {
 struct CtSeg {
   std::string text;  // "@123" = TLK strref 123 (the UI fetches it)
   uint32_t color = kCtWhite;
+  int value = -1;    // a damage/heal number (>= 0): numbers of one colour close together add up
+  uint32_t t = 0;    // ms when it appeared (set by Add)
 };
 struct CtLine {
   int32_t id = -1;        // the creature it is about
@@ -137,13 +141,24 @@ struct CtLine {
 class CombatTextBook {
  public:
   // A new line over creature `id` whose head point is (x, y) now. Damage/heal numbers join that creature's newest
-  // number row when it is younger than kCtJoinMs and has room. -> the line (or the row it joined).
+  // number row when it is younger than kCtJoinMs and has room; a number of the same colour as one in that row
+  // that came less than kCtMergeMs ago is added to it (Merged() says so). -> the line (or the row it joined).
   const CtLine& Add(int32_t id, int x, int y, CtKind kind, CtSeg seg, uint32_t now) {
     Expire(now);
+    merged_ = false;
+    seg.t = now;
     const bool number = kind == CtKind::Damage || kind == CtKind::Heal;
     if (number) {
       for (auto it = lines_.rbegin(); it != lines_.rend(); ++it) {
         if (it->id != id || (it->kind != CtKind::Damage && it->kind != CtKind::Heal)) continue;
+        if (seg.value >= 0)
+          for (CtSeg& s : it->segs)
+            if (s.value >= 0 && s.color == seg.color && now - s.t < kCtMergeMs) {
+              s.value += seg.value;
+              s.text = std::to_string(s.value);
+              merged_ = true;
+              return *it;
+            }
         if (now - it->t0 < kCtJoinMs && static_cast<int>(it->segs.size()) < kCtSegs) {
           it->segs.push_back(std::move(seg));
           return *it;
@@ -185,6 +200,7 @@ class CombatTextBook {
   }
   void Clear() { lines_.clear(); }
   const std::vector<CtLine>& Lines() const { return lines_; }
+  bool Merged() const { return merged_; }  // the last Add added its number to an earlier one
   static int FirstFree(uint32_t used) {
     for (int s = 0; s < kCtSlots; ++s)
       if (!(used & (1u << s))) return s;
@@ -193,6 +209,7 @@ class CombatTextBook {
 
  private:
   std::vector<CtLine> lines_;  // oldest first
+  bool merged_ = false;
 };
 
 }  // namespace pstf::tbc

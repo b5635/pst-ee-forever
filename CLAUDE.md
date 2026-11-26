@@ -439,7 +439,8 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - BG3 combat text (`[tbc] combat_text`, rules `src/modules/tbc/combat_text.h`, reference youtube.com/watch?v=mfZz9N57glw):
   nothing rises; a line sits at the world point where the creature's head was (slots from the top down, neighbours
   share rows), fades at 2.3-2.8 s. Damage = bare number coloured by damage type (white weapons), numbers within
-  0.4 s share a row, heals green, "Miss!" xor "Critical Miss!", "Critical Hit!" red, a status's name on start and
+  0.4 s share a row, one colour (damage type) within 0.1 s adds up (`kCtMergeMs`; dagger 1d6+1 = "7", log `tbc: text over X:
+  N added to the same damage type's number`), heals green, "Miss!" xor "Critical Miss!", "Critical Hit!" red, a status's name on start and
   struck through (left to right) on end, casts show the spell name, "Trip: Missed/Failed/Success"; the save banner takes a slot.
   Engine side: every rising text goes through `CGameArea::AddToFloaterList` (`engine::InstallFloaterHook`; type 5 =
   a creature's own words, left to the engine), damage type from `CGameEffectDamage::ApplyEffect`'s param2. Test:

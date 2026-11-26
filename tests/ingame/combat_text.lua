@@ -4,7 +4,7 @@
 --      -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'combat_text: ok|TEST FAIL' -Close -Timeout 400
 -- 1. Blessing on the Nameless One: its name shows (status on); removed: shown again and struck through.
 -- 2. Damage effects on a companion: 4 fire -> a number in the fire colour, 3 crushing -> a white number, landing
---    together in one row; a heal -> a green number. The engine's own "Damage: N" floaters are taken over.
+--    together in one row (a second 1 crushing in the same tick adds to the 3: "4"); a heal -> a green number. The engine's own "Damage: N" floaters are taken over.
 -- 3. A fight against the nearest Hive thug (its AC raised: the party misses): "Miss!" or "Critical Miss!" over it,
 --    weapon damage as white numbers; a line never moves while the view does not (it stays where it appeared).
 -- Shots: pst_forever/logs/ctext_{status,strike,numbers,fight,hover}.bmp
@@ -20,7 +20,7 @@ local function lines()
   for i = 1, 24 do
     local on, x, y, a, s, k, cnt, t1, c1, t2, c2, t3, c3, t4, c4, id, slot = PSTF_CombatText(i)
     if on == 1 then
-      out[#out + 1] = {x = x, y = y, a = a, s = s, k = k, n = cnt, t = t1, c = c1, t2 = t2, c2 = c2, cs = {c1, c2, c3, c4}, id = id, slot = slot}
+      out[#out + 1] = {x = x, y = y, a = a, s = s, k = k, n = cnt, t = t1, c = c1, t2 = t2, c2 = c2, cs = {c1, c2, c3, c4}, ts = {t1, t2, t3, t4}, id = id, slot = slot}
     end
   end
   return out
@@ -41,6 +41,7 @@ local function scan()
       if l.c == FIRE or l.c2 == FIRE then got.fire = true end
       if l.c == WHITE or l.c2 == WHITE then got.white = true end
       if l.n >= 2 then got.row = true shot('numbers') end
+      for j = 1, l.n do if l.cs[j] == WHITE and l.ts[j] == '4' then got.merged = true end end
       if fight_at > 0 and l.c == WHITE then got.wnum = true end
     end
     if l.k == 3 or l.k == 4 then  -- a heal landing with damage shares its row
@@ -84,6 +85,7 @@ function pstfTestTick()
     if not got.strike then return fail('no struck-through line when Blessing ended') end
     PSTF_StatusFxApply(party[2], 12, 4, 0x80000, 0)  -- 4 fire
     PSTF_StatusFxApply(party[2], 12, 3, 0, 0)        -- 3 crushing
+    PSTF_StatusFxApply(party[2], 12, 1, 0, 0)        -- + 1 crushing in the same tick: one white "4"
     return
   end
   if n == 84 then PSTF_StatusFxApply(party[2], 17, 2, 0, 0) return end  -- heal 2
@@ -95,6 +97,7 @@ function pstfTestTick()
     if not got.white then return fail('no white number for crushing damage') end
     if not got.row then return fail('the two numbers did not share a row') end
     if not got.heal then return fail('no green heal number') end
+    if not got.merged then return fail('3 + 1 crushing in one tick did not show one white 4') end
     if (taken or 0) < 2 then return fail('the engine floaters were not taken over') end
     enemy = PSTF_MakeEnemyNearest()
     if enemy == -1 then return fail('no creature to fight') end

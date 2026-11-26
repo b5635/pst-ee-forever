@@ -107,6 +107,42 @@ TEST_CASE("numbers that land together share a row; later ones start a new row") 
   CHECK(b.Lines().size() == 3);
 }
 
+TEST_CASE("numbers of one damage type within kCtMergeMs add up: a dagger's 1d6 + 1 shows 7") {
+  CombatTextBook b;
+  b.Add(7, 0, 0, CtKind::Damage, {"6", kCtNumber, 6}, 1000);
+  CHECK(!b.Merged());
+  const CtLine& row = b.Add(7, 0, 0, CtKind::Damage, {"1", kCtNumber, 1}, 1000);  // same tick
+  CHECK(b.Merged());
+  CHECK(row.segs.size() == 1);
+  CHECK(row.segs[0].text == "7");
+  CHECK(row.segs[0].value == 7);
+  b.Add(7, 0, 0, CtKind::Damage, {"2", kCtNumber, 2}, 1000 + kCtMergeMs - 1);  // still within the window
+  CHECK(b.Lines().back().segs[0].text == "9");
+  // another type: its own number in the row
+  b.Add(7, 0, 0, CtKind::Damage, {"4", DamageColor(0x8), 4}, 1050);
+  CHECK(!b.Merged());
+  CHECK(b.Lines().back().segs.size() == 2);
+  // the same type but later than the window (still inside the row's join time): a second number
+  b.Add(7, 0, 0, CtKind::Damage, {"3", kCtNumber, 3}, 1000 + kCtMergeMs);
+  CHECK(!b.Merged());
+  CHECK(b.Lines().back().segs.size() == 3);
+  CHECK(b.Lines().back().segs[2].text == "3");
+  // a heal never adds to damage; two heals do add up
+  b.Add(7, 0, 0, CtKind::Heal, {"5", kCtHeal, 5}, 1150);
+  b.Add(7, 0, 0, CtKind::Heal, {"2", kCtHeal, 2}, 1160);
+  CHECK(b.Merged());
+  CHECK(b.Lines().back().segs.size() == 4);
+  CHECK(b.Lines().back().segs[3].text == "7");
+  // another creature's number never adds
+  b.Add(8, 0, 0, CtKind::Damage, {"1", kCtNumber, 1}, 1160);
+  CHECK(!b.Merged());
+  CHECK(b.Lines().size() == 2);
+  // text segments (no value) never add
+  b.Add(9, 0, 0, CtKind::Damage, {"x"}, 2000);
+  b.Add(9, 0, 0, CtKind::Damage, {"y"}, 2000);
+  CHECK(b.Lines().back().segs.size() == 2);
+}
+
 TEST_CASE("a full stack drops its oldest line; the book holds at most kCtLines") {
   CombatTextBook b;
   for (int i = 0; i < kCtSlots; ++i) b.Add(3, 0, 0, CtKind::Text, {"x" + std::to_string(i)}, 10 * i);

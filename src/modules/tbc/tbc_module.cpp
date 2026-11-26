@@ -1758,10 +1758,14 @@ bool OnFloater(const engine::FloaterInfo& f) {
   engine::SpriteInfo o;
   if (id == -1 || !engine::GetSprite(id, &o)) return false;
   const FloaterParse p = ParseFloater(f.text, f.in_damage);
-  if (p.kind == CtKind::Damage) {
-    CtAdd(id, CtKind::Damage, {std::to_string(p.value), DamageColor(f.damage_bits)});
-  } else if (p.kind == CtKind::Heal) {
-    CtAdd(id, CtKind::Heal, {std::to_string(p.value), kCtHeal});
+  if (p.kind == CtKind::Damage || p.kind == CtKind::Heal) {
+    const uint32_t colour = p.kind == CtKind::Heal ? kCtHeal : DamageColor(f.damage_bits);
+    const CtLine* l = CtAdd(id, p.kind, {std::to_string(p.value), colour, p.value});
+    if (l && g.ct.Merged()) {
+      std::string row;
+      for (const CtSeg& s : l->segs) row += (row.empty() ? "" : " ") + s.text;
+      Log("tbc: text over %s: %d added to the same damage type's number (row \"%s\")", Who(id).c_str(), p.value, row.c_str());
+    }
   } else if (g.rolls && f.text.compare(0, 8, "Critical") == 0) {
     // AttackCombatText says it
   } else if (const std::string t = CleanFloaterText(f.text); !t.empty()) {
