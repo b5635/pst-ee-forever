@@ -1364,6 +1364,46 @@ TEST_CASE("tbc script timers: one round of timer time per round") {
   CHECK(c.Owe(75, 200) == 0 && c.debt == 0);  // a long turn (its spell landing) owes nothing
 }
 
+TEST_CASE("tbc stalemate: whole quiet rounds end the fight") {
+  // S31: three party members and a Hive thug that cannot reach each other, 4 turns a round, HP 82 in all
+  Stalemate s;
+  bool end = false;
+  for (uint32_t r = 1; r <= 3; ++r)
+    for (int t = 0; t < 4; ++t) {
+      CHECK(!end);
+      s.Turn(false, false, false, 82, 4);
+      end = s.Round(t == 3 ? r + 1 : r, 3);  // the last turn's end hands over to the next round
+    }
+  CHECK(end && s.quiet == 3);  // round 4 would start: three whole quiet rounds, the fight ends
+  // a swing, a walk, a cast, an HP change or a join breaks the streak
+  Stalemate b;
+  b.Turn(false, false, false, 82, 4); b.Round(1, 2);
+  b.Turn(false, false, false, 82, 4); b.Round(2, 2);
+  CHECK(b.quiet == 1);
+  b.Turn(false, false, false, 80, 4); b.Round(3, 2);  // a hit in round 2
+  CHECK(b.quiet == 0);
+  b.Turn(false, false, false, 80, 4); b.Round(4, 2);
+  CHECK(b.quiet == 1);
+  b.Turn(false, false, false, 80, 5); b.Round(5, 2);  // a join in round 4
+  CHECK(b.quiet == 0);
+  b.Turn(true, false, false, 80, 5); b.Round(6, 2);
+  b.Turn(false, true, false, 80, 5); b.Round(7, 2);
+  b.Turn(false, false, true, 80, 5); b.Round(8, 2);
+  CHECK(b.quiet == 0);
+  CHECK(!Stalemate{}.Round(9, 0));  // limit 0 = off
+}
+
+TEST_CASE("tbc stalemate: no new fight until a creature changed") {
+  StaleHold h;
+  CHECK(!h.Holds({{8, 2252, 2110, 16}}));  // no stalemate yet
+  h.at = {{0x80008, 2252, 2110, 16}, {0x950095, 2132, 2150, 16}};
+  CHECK(h.Holds({{0x80008, 2252, 2110, 16}, {0x950095, 2132, 2150, 16}}));
+  CHECK(h.Holds({{0x80008, 2260, 2120, 16}, {0x950095, 2132, 2150, 16}}));   // a step on the spot
+  CHECK(!h.Holds({{0x80008, 2252, 2110, 12}, {0x950095, 2132, 2150, 16}}));  // hurt
+  CHECK(!h.Holds({{0x80008, 2300, 2110, 16}, {0x950095, 2132, 2150, 16}}));  // walked 48 px
+  CHECK(!h.Holds({{0x80008, 2252, 2110, 16}, {0x40004, 2000, 2000, 30}}));   // someone new
+}
+
 TEST_CASE("tbc economy: a spent Spell gives its action back") {
   Economy e(31.0, 51, false);
   e.Feed(1, 0, false, 31);  // Spell starts: the action is taken

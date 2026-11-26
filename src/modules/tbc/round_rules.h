@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <map>
+#include <vector>
 
 namespace pstf::tbc {
 
@@ -201,6 +202,54 @@ struct TimerClock {
     const int s = static_cast<int>(debt / 15);
     debt -= static_cast<uint32_t>(s) * 15;
     return s;
+  }
+};
+
+// A fight in which nobody can reach anybody (a foe behind a wall or on ground the search map closes, an order
+// the engine drops at once) would hold turn-based forever: real time stands the same way, so after `limit`
+// whole rounds in which no combatant walked, swung, cast, or lost or gained HP and nobody joined or left,
+// the fight ends and real time goes on. Turn() is called at each turn end; Round() after it, with the round
+// the next turn belongs to: true = end the fight.
+struct Stalemate {
+  uint32_t round = 0;   // round being watched (0 = none yet)
+  uint32_t quiet = 0;   // whole quiet rounds in a row
+  bool busy = false;    // something happened in the watched round
+  int64_t last_hp = -1; // HP total and combatant count at the last turn end
+  uint32_t last_n = 0;
+  void Turn(bool walked, bool swung, bool cast, int64_t hp_total, uint32_t n) {
+    if (walked || swung || cast || (last_hp >= 0 && (hp_total != last_hp || n != last_n))) busy = true;
+    last_hp = hp_total;
+    last_n = n;
+  }
+  bool Round(uint32_t r, uint32_t limit) {
+    if (r != round) {
+      if (round) quiet = busy ? 0 : quiet + 1;
+      busy = false;
+      round = r;
+    }
+    return limit && quiet >= limit;
+  }
+};
+
+// After a stalemate the same creatures would start a new fight at once (they are still in range): a new fight
+// waits until something changed: a creature of the would-be fight not in the stalemate, an HP change, or one
+// moved more than kMovePx from where it stood.
+struct StaleHold {
+  struct At { int32_t id; int x, y, hp; };
+  static constexpr int kMovePx = 32;  // two search-map cells across
+  std::vector<At> at;                 // empty = no hold
+  bool Holds(const std::vector<At>& now) const {
+    if (at.empty() || now.empty()) return false;
+    for (const auto& n : now) {
+      bool same = false;
+      for (const auto& a : at)
+        if (a.id == n.id) {
+          same = a.hp == n.hp && std::abs(a.x - n.x) <= kMovePx && std::abs(a.y - n.y) <= kMovePx;
+          break;
+        }
+      if (!same) return false;
+    }
+    return true;
   }
 };
 

@@ -313,7 +313,7 @@ function S.chainCaster(o)
 			if total < (o.casts or 1) then S.issue(string.format('%d casts in %d of its turns (expected %d)', total, turns - 1, o.casts)) end
 			return S.finish(string.format('%d casts in %d of its turns', total, turns - 1))
 		end
-		if frame == S.maxFrames - 50 then S.issue(string.format('only %d of its turns, %d casts', turns, total)) end
+		if frame == S.maxFrames - 50 and not o.anyTurns then S.issue(string.format('only %d of its turns, %d casts', turns, total)) end
 	end
 end
 
@@ -387,14 +387,17 @@ end
 
 -- Crowd fights (section C): the protagonist attacks one creature (provoke) or it is made hostile; the fight that
 -- grows from it must end (a side gone, fled or no longer hostile) without a stuck turn or endless rounds.
--- o = {name, cre, spawn, provoke (default true), hostile, hp, expect = {{var, scope, v}}, maxFrames, notes}.
--- ok = the fight ran and has been over for 90 ticks (and every expect held at some point).
+-- o = {name, cre, spawn, provoke (default true), hostile, hp, expect = {{var, scope, v}}, maxFrames, rounds, notes}.
+-- ok = the fight ran and has been over for 90 ticks, or (rounds = N, crowds too big to finish in a run) round N
+-- began with no stuck turn (and every expect held at some point). The provoked creature may die or flee: its own
+-- turn count is not checked.
 function S.brawl(o)
 	if o.provoke == nil then o.provoke = true end
 	local ran, over, most, rounds = false, 0, 0, 0
 	o.hp = o.hp or -1          -- its own HP: the fight must be able to end
 	if o.partyHp == nil then o.partyHp = false end
 	o.maxFrames = o.maxFrames or 9000
+	o.anyTurns = true
 	o.check = function(id)
 		local cur, round = PSTF_TbcCurrent()
 		if cur ~= -1 then
@@ -403,6 +406,9 @@ function S.brawl(o)
 			if n > most then most = n end
 			if round and round > rounds then rounds = round end
 		elseif ran then over = over + 1 end
+		if o.rounds and rounds >= o.rounds and cur ~= -1 then
+			return true, string.format('round %d of a %d-combatant fight began', rounds, most)
+		end
 		return ran and over > 90, string.format('fight over (%d rounds, up to %d combatants)', rounds, most)
 	end
 	S.plot(o)

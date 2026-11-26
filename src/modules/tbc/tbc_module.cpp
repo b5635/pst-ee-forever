@@ -213,6 +213,10 @@ struct State {
   bool keep_queue = true;            // [tbc] keep_queue: an AI's script sequence goes on at its next turn
   bool script_timers = true;         // [tbc] script_timers: script timers run one round per round
   std::map<int32_t, TimerClock> timer_clock;
+  int stalemate_rounds = 3;          // [tbc] stalemate_rounds: quiet whole rounds that end the fight (0 = never)
+  Stalemate stalemate;
+  StaleHold stale_hold;               // the stalemate's creatures: no new fight until one of them changed
+  bool stale_logged = false;
   std::map<int32_t, int> timer_owed;  // whole seconds owed to its script timers at its next turn start
   int refunds = 0;                   // spent Spells handed back this turn
   int lead_skips = 0;                // Waits skipped before the current creature's action this turn
@@ -504,6 +508,7 @@ void StartFight(const std::vector<Seen>& join, uint32_t now) {
   std::vector<Recruit> who;
   for (const auto& s : join) who.push_back(ToRecruit(s));
   g.dir = std::make_unique<Director>(GetTickCount() | 1u, g.round_ticks);
+  g.stalemate = Stalemate{};
   g.dir->Start(who, now);
   g.in.clear();
   for (const auto& r : who) {
@@ -549,6 +554,15 @@ void StartFight(const std::vector<Seen>& join, uint32_t now) {
   Say("Combat! Turn-based. End turn: End key");
 }
 
+std::vector<StaleHold::At> StaleAt(const std::vector<Seen>& who) {
+  std::vector<StaleHold::At> v;
+  for (const auto& s : who) {
+    engine::SpriteInfo o;
+    if (engine::GetSprite(s.id, &o)) v.push_back({s.id, o.x, o.y, o.hp});
+  }
+  return v;
+}
+
 void Scan(uint32_t now) {
   g.party = engine::PartyIds();
   if (g.party.empty()) return;
@@ -571,6 +585,15 @@ void Scan(uint32_t now) {
       if (hc->r.side == Side::Hostile) hostile_side.push_back(id);
   const CensusOut c = Census(seen, g.in, g.running, g.radii, hostile_side);
   if (!g.running) {
+    if (c.start && !g.no_fight && !g.stale_hold.at.empty()) {
+      if (g.stale_hold.Holds(StaleAt(c.join))) {
+        if (!g.stale_logged) Log("tbc: no new fight: the stalemate's creatures stand as they stood");
+        g.stale_logged = true;
+        return;
+      }
+      Log("tbc: stalemate hold over (a creature moved, was hurt or arrived)");
+      g.stale_hold.at.clear();
+    }
     if (c.start && !g.no_fight) StartFight(c.join, now);
     return;
   }
@@ -2501,9 +2524,16 @@ void OnTick(uint64_t frame) {
     const SpellWait w = TurnWaitsForSpell(in);
     if (w == SpellWait::Capped && !g.resolving_capped) {
       g.resolving_capped = true;
-      Log("tbc: %s: WARNING spell hold cap: turn ends after %u ticks (casting %d, %d flying, %d pulsing, %d onsets)",
-          Who(cur).c_str(), g.resolve_ticks, in.casting ? 1 : 0, in.flying, in.lingering, in.onsets);
-      CLog("SPELL", Name(cur) + ": spell still not finished after 4 rounds: turn ends anyway");
+      int32_t cip = 0;
+      int16_t aura = 0;
+      bool crun = false;
+      engine::CastState(cur, &cip, &aura, &crun);
+      const std::string res = engine::CurrentSpell(cur);
+      Log("tbc: %s: WARNING spell hold cap: turn ends after %u ticks (spell %s, action %d, cast flag %d, aura %d, running %d; "
+          "casting %d, %d flying, %d pulsing, %d onsets)", Who(cur).c_str(), g.resolve_ticks, res.empty() ? "-" : res.c_str(),
+          s.action, cip, aura, crun ? 1 : 0, in.casting ? 1 : 0, in.flying, in.lingering, in.onsets);
+      CLog("SPELL", Name(cur) + ": spell " + (res.empty() ? std::string("-") : res) +
+                        " still not finished after 4 rounds: turn ends anyway (aura " + std::to_string(aura) + ")");
       for (const auto& o : engine::AllObjects())
         if (o.source == cur && o.area == s.area && o.type == 0)
           Log("tbc: %s: still up: projectile %X (AIUpdate %llX): %s", Who(cur).c_str(), static_cast<unsigned>(o.id),
@@ -2519,9 +2549,11 @@ void OnTick(uint64_t frame) {
       if (w != g.resolving_why) {
         g.resolving_why = w;
         if (w != SpellWait::Appearing) {
-          Log("tbc: %s: turn waits for its spell (%s: casting %d, %d flying, %d pulsing, %d onsets)", Who(cur).c_str(),
-              SpellWaitName(w), in.casting ? 1 : 0, in.flying, in.lingering, in.onsets);
-          CLog("SPELL", Name(cur) + ": turn waits for its spell (" + SpellWaitName(w) + ")");
+          const std::string res = engine::CurrentSpell(cur);
+          Log("tbc: %s: turn waits for its spell %s (%s: casting %d, %d flying, %d pulsing, %d onsets)", Who(cur).c_str(),
+              res.empty() ? "-" : res.c_str(), SpellWaitName(w), in.casting ? 1 : 0, in.flying, in.lingering, in.onsets);
+          CLog("SPELL", Name(cur) + ": turn waits for its spell " + (res.empty() ? std::string("-") : res) + " (" +
+                            SpellWaitName(w) + ")");
         }
       }
     }
@@ -2546,9 +2578,28 @@ void OnTick(uint64_t frame) {
         Who(cur).c_str(), g.end_requested ? "End Turn" : "economy",
         g.econ.action_used ? "used" : "unused", g.econ.move_ft, g.econ.max_ft, g.clock.busy,
         g.econ.total, hps.c_str());
+    int64_t hp_total = 0;
+    for (int32_t id : g.in) {
+      engine::SpriteInfo o;
+      if (engine::GetSprite(id, &o)) hp_total += o.hp;
+    }
+    const bool cast = g.cast_feedback && engine::SpellCasts(cur) > g.turn_casts;
+    g.stalemate.Turn(g.econ.walked_ft >= 1.0, g.econ.swings > 0, cast, hp_total, static_cast<uint32_t>(g.in.size()));
     g.dir->EndTurn(cur);
     if (!g.dir->Running()) {
       EndFight("one side is gone");
+      return;
+    }
+    if (g.stalemate.Round(g.dir->Round(), static_cast<uint32_t>(g.stalemate_rounds > 0 ? g.stalemate_rounds : 0))) {
+      char why[96];
+      std::snprintf(why, sizeof why, "stalemate: %u whole rounds with no walk, swing, cast or HP change", g.stalemate.quiet);
+      g.stale_hold.at.clear();
+      for (int32_t id : g.in) {
+        engine::SpriteInfo o;
+        if (engine::GetSprite(id, &o)) g.stale_hold.at.push_back({id, o.x, o.y, o.hp});
+      }
+      g.stale_logged = false;
+      EndFight(why);
       return;
     }
   }
@@ -3525,6 +3576,7 @@ bool InstallTbc(const IniMap& ini) {
   g.no_push = IniBool(ini, "tbc.no_push", true);
   g.keep_queue = IniBool(ini, "tbc.keep_queue", true);
   g.script_timers = IniBool(ini, "tbc.script_timers", true);
+  g.stalemate_rounds = IniInt(ini, "tbc.stalemate_rounds", 3);
   g.mop_limit = IniInt(ini, "tbc.mop_shots", 3);
   g.party_max = IniInt(ini, "party.size", 6) >= 8 && IniBool(ini, "party.enabled", false) ? 8 : 6;
   {
