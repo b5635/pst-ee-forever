@@ -56,7 +56,10 @@ For each spell (and each special ability):
   Lightning, SPPR302 Flamewalk, SPPR303 Prayer. Fixed on the way: `CurrentSpell` (Halo/Black-Barbed icons), Prayer's
   aura missed a round (StepEffectClock's extra 0-tick call), the suite's cleanup left attached spells' parentless
   effects (`ExpireOrphans`), check.ps1 left PATH without python.
-- Next: continue the per-spell pass (item 4) with the rest of section 3.
+- Batches 3-5: priest done except Raise Dead, Speak with Dead, Remove Curse (need a corpse / cursed item); mage
+  levels 1-3 done except Pacify (skip), Knock (needs a lock), Hold Undead (no undead). Fixed on the way: icons of
+  effects with no end (Armor), attached visuals no longer hold an icon (Friends). Tasha's Laughter now right.
+- Next: mage levels 4-9 (SPWI4xx..SPWI914), then special abilities SPIN101-108.
 
 ## Next, in order
 

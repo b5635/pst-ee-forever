@@ -134,17 +134,17 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 
 | Res | Spell | Intended | TBC | Icon | Check | Layer | Vetted |
 |---|---|---|---|---|---|---|---|
-| SPWI301 | Ball Lightning | up to 4 spheres hit nearest foes, save 1/2 (op 374) | INSTANT | - | HP loss on up to 4 foes, all in the turn | U2 |  |
-| SPWI304 | Cloak of Warding | absorbs 3d4 + lvl damage (op 375) | ATTACHED | B | damage absorbed, then gone | G |  |
-| SPWI305 | Elysium's Tears | meteor stream at one target | HARDCODED INSTANT | - | HP bounds; turn long (241 = cap: check it is the stream, not a stall) | U2 |  |
+| SPWI301 | Ball Lightning | up to 4 spheres hit nearest foes, save 1/2 (op 374) | INSTANT | - | HP loss on up to 4 foes, all in the turn | U2 | yes 2026-11-25 |
+| SPWI304 | Cloak of Warding | absorbs 3d4 + lvl damage (op 375) | ATTACHED | B | damage absorbed, then gone | G | yes 2026-11-25 |
+| SPWI305 | Elysium's Tears | meteor stream at one target | HARDCODED INSTANT | - | HP bounds; turn long (241 = cap: check it is the stream, not a stall) | U2 | yes 2026-11-25 |
 | SPWI307 | Hold Undead | 1d3 undead held | DISABLE | D | undead lose turns; living unaffected | G (needs undead: Mortuary save) |  |
-| SPWI308 | Tasha's Laughter | foes laugh (stop actions 45 ticks), then -2 AC/dmg/hit | DISABLE, LINGER | D | targets lose their next turn, then penalties | U1 U2 |  |
-| SPWI309 | Vampiric Touch | drain 1d6 / 2 lvls to caster | ONSET | - | target down, caster up, same amount, in turn | U1 U2 |  |
-| SPWI310 | Ax of Torment | ax, 1d8 + growing, save neg | HARDCODED INSTANT | - | HP; 241 = cap: check its repeated swings follow the caster's rounds | U2 G |  |
-| SPWI311 | Zerthimon's Focus | crit chance +3 | BUFF | B | crit stat +3 | U1 U2 |  |
-| SPWI312 | Infernal Shield | fire heals instead (op 375) | ATTACHED | B | Ignus' fire heals the caster | G |  |
-| SPWI313 | Fiery Rain | fire meteors 2d4 each, area | INSTANT | - | HP bounds | U1 U2 |  |
-| SPWI314 | Balance in All Things | reflect after N hits (op 375) | ATTACHED | B | as Pain Mirror | G |  |
+| SPWI308 | Tasha's Laughter | foes laugh (stop actions 45 ticks), then -2 AC/dmg/hit | DISABLE, LINGER | D | targets lose their next turn, then penalties | U1 U2 | yes 2026-11-25 |
+| SPWI309 | Vampiric Touch | drain 1d6 / 2 lvls to caster | ONSET | - | target down, caster up, same amount, in turn | U1 U2 | yes 2026-11-25 |
+| SPWI310 | Ax of Torment | ax, 1d8 + growing, save neg | HARDCODED INSTANT | - | HP; 241 = cap: check its repeated swings follow the caster's rounds | U2 G | yes 2026-11-25 |
+| SPWI311 | Zerthimon's Focus | crit chance +3 | BUFF | B | crit stat +3 | U1 U2 | yes 2026-11-25 |
+| SPWI312 | Infernal Shield | fire heals instead (op 375) | ATTACHED | B | Ignus' fire heals the caster | G | yes 2026-11-25 |
+| SPWI313 | Fiery Rain | fire meteors 2d4 each, area | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
+| SPWI314 | Balance in All Things | reflect after N hits (op 375) | ATTACHED | B | as Pain Mirror | G | yes 2026-11-25 |
 | SPWI401 | Blacksphere | force burst damages + imprisons (sleep op 39) | INSTANT + DISABLE | D | HP + targets lose turns | U2 |  |
 | SPWI402 | Confusion | 1-4 + lvl creatures confused 10 s + 1 s/lvl | DISABLE (AI) | D | targets do not act normally; icon ends | U1 U2 G |  |
 | SPWI405 | Force Missiles | globes 2d4 each, unerring | INSTANT | - | HP bounds | U1 U2 |  |

@@ -297,7 +297,7 @@ TEST_CASE("spells: every hand-vetted spell still measures as vetted (spell_expec
     CHECK(r != nullptr);
     if (!r) continue;
     ++n;
-    const bool ok = std::strcmp(r->verdict, "ok") == 0 && (std::strcmp(e.stats, "*") == 0 || std::strcmp(r->stats, e.stats) == 0) && r->state == e.state &&
+    const bool ok = std::strcmp(r->verdict, "ok") == 0 && (std::strcmp(e.stats, "*") == 0 || std::strcmp(r->stats, e.stats) == 0) && (e.state == ~0U || r->state == e.state) &&
                     IconMatches(r->icon, e.icon) && r->hp >= e.hp_min && r->hp <= e.hp_max &&
                     (IconRounds(e.icon) == 0 || IconRounds(e.icon) == e.rounds);
     if (!ok)

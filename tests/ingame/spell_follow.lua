@@ -12,7 +12,7 @@ local F = pstfFollow or {}
 local frames, cur, turnStart, castTurnOver = 0, -1, 0, false
 local caster, owner, foe = nil, nil, 0x180018
 local castFrame, issued, ownerTurns = nil, false, 0
-local snap0 = {}
+local snap0, fx0 = {}, {}  -- HP and effect list of every combatant just before the cast (owner 'hit')
 local function note(m) PSTF_Note('spell_follow: ' .. m) end
 local function fail(m) PSTF_Note('TEST FAIL: spell_follow: ' .. m) pstfTestTick = nil end
 local function hp(id) local _, _, h = PSTF_SpritePos(id, 1) return h or -1 end
@@ -70,7 +70,10 @@ function pstfTestTick()
 		if issued and cur == caster and not castTurnOver then
 			castTurnOver = true
 			if F.owner == 'hit' then
-				for w, h0 in pairs(snap0) do if hp(w) ~= h0 then owner = w end end
+				owner = nil
+				for w, h0 in pairs(snap0) do
+					if hp(w) ~= h0 or (fx0[w] and PSTF_Effects(w) ~= fx0[w]) then owner = w end  -- hurt, or new effects
+				end
 				owner = owner or foe
 			end
 			show(owner, 'end of the cast turn')
@@ -98,6 +101,7 @@ function pstfTestTick()
 			if w == -1 then break end
 			if not isParty(w) then PSTF_SetHp(w, 1000, 1000) end
 			snap0[w] = (not isParty(w)) and 1000 or hp(w)
+			if not isParty(w) then fx0[w] = PSTF_Effects(w) end
 		end
 		if F.ownerHp then PSTF_SetHp(owner, F.ownerHp) end  -- room for a heal (Blood Bridge, cures)
 		show(owner, 'before the cast')

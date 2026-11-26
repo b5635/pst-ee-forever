@@ -9,7 +9,7 @@ namespace pstf::spellexpect {
 struct Expect {
   const char* res;
   const char* stats;  // exact derived stat changes on the measured creature, as spell_results.h writes them; "*" random
-  unsigned state;     // STATE bits set
+  unsigned state;     // STATE bits set (~0U: random, not compared)
   const char* icon;   // status icon at the end of the cast turn ("rN:buff", "rN:debuff", "none"; "r*:..." any rounds)
   int hp_min, hp_max; // HP change of the measured creature in the cast turn (heals +, damage -)
   int rounds;         // owner turn starts until it is gone (0: instant / not timed)
@@ -130,5 +130,25 @@ inline constexpr Expect kExpect[] = {
     {"SPWI219", "*", 0x0U, "r600:buff", 0, 0, 600,
      "Power of One (projectile 287): STR +1d8+1 for the fighter class (2-5 measured), the engine's duration "
      "(600 rounds); its effects are parentless (named by the spell on its way)"},
+    {"SPWI301", "-", 0x0U, "none", -32, -8, 0, "Ball Lightning (op 374): its balls strike in the cast turn (19-26 on one foe)"},
+    {"SPWI304", "-", 0x0U, "r20:buff", 0, 0, 20,
+     "Cloak of Warding (op 375 type 0): absorbs 3d4 + level damage (two hits taken at 87 HP, spell_follow), 100 s"},
+    {"SPWI305", "-", 0x0U, "none", -60, -3, 0,
+     "Elysium's Tears: one meteor per level (10) of 1d2 + 1d4 around the target; the turn holds until the last lands"},
+    {"SPWI308", "2:+2,50:-2,151:-2", 0x0U, "r20:debuff", 0, 0, 20,
+     "Tasha's Laughter: AC +2, -2 hit, -2 damage in the cast turn, 5 s/level (1500 ticks), icon r20 down by one per "
+     "turn (spell_follow; the late penalties of section 4 are gone)"},
+    {"SPWI309", "-", 0x0U, "none", -60, -10, 0,
+     "Vampiric Touch (op 383): 1d6 per 2 levels (10d6) drained in the cast turn, the caster gains it (over max = "
+     "temporary max HP)"},
+    {"SPWI310", "-", ~0U, "none", -1000, -1, 0,
+     "Ax of Torment: 1d8 then one random final blow (damage, paralysis, teleport, stone: a stoned foe lost 963); "
+     "the turn holds for the ax"},
+    {"SPWI311", "146:+3", 0x0U, "r20:buff", 0, 0, 20, "Zerthimon's Focus (op 301): critical chance +3, 5 s/level"},
+    {"SPWI312", "14:+150", 0x0U, "r20:buff", 0, 0, 20, "Infernal Shield (op 375 type 14): fire resistance +150, 5 s/level"},
+    {"SPWI313", "-", 0x0U, "none", -80, -2, 0, "Fiery Rain: 10 meteors of 2d4 fire (save) around the target"},
+    {"SPWI314", "-", 0x0U, "r20:buff", 0, 0, 20,
+     "Balance in All Things (op 375 type 16): each melee hit on the caster hurts the attacker as much, for level/4 "
+     "(5) hits or 100 s (spell_follow: 4/4, 2/2, 4/4, then gone after the 5th)"},
 };
 }  // namespace pstf::spellexpect
