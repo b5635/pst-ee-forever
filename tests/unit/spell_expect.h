@@ -199,5 +199,35 @@ inline constexpr Expect kExpect[] = {
      "turns; its icon comes from the spell while its wind is still out (turn_cast_res; it was missing for far ones)"},
     {"SPWI604", "-", 0x0U, "none", -70, -3, 0,
      "Chain Lightning Storm (projectile 246): 7d10 electric on hostiles, save 1/2, in the cast turn"},
+    {"SPWI701", "-", 0x0U, "none", 0, 0, 0,
+     "Acid Storm (projectile 247): no hit in the cast turn; the acid is a DOT step at each victim turn start (-9, -3, "
+     "-4), its icon r5 counting down from the first step (spell_follow)"},
+    {"SPWI702", "-", 0x0U, "none", -140, -10, 0, "Blade Storm (projectile): shards on every foe in range, save 1/2, in the cast turn"},
+    {"SPWI704", "-", 0x0U, "r30:buff", 0, 0, 30, "Guardian Mantle (op 375): 50 s + 5 s/level (150 s), the object's icon"},
+    {"SPWI705", "-", 0x80000020U, "r*:debuff", -64, -8, 0,
+     "Stygian Ice Storm: 8d8 cold with its visuals (SyncSpellOnsets), paralysis and the projectile's confusion"},
+    {"SPWI802", "-", 0x0U, "none", -120, -5, 0, "Meteor Storm Bombardment: 10d12 to all foes, save 1/2, in the cast turn"},
+    {"SPWI803", "-", ~0U, "none", -1000, 0, 0,
+     "Deathbolt (CPsSpellDeathBolt, ~280 ticks of flight): death on a failed save, else 10d6; its effects reach the "
+     "foe just after the bolt object is gone: the turn holds kSpellLandTicks for them (they came in the next "
+     "creature's turn: fixed); the suite's foe dies and the fight ends before its reading (skip)"},
+    {"SPWI804", "-", 0x0U, "r*:debuff", -200, -10, 0, "Ignus' Fury (projectile): fire on foes in the cast turn"},
+    {"SPWI805", "-", 0x0U, "none", 0, 0, 0,
+     "Power Word, Blind: nothing on a foe over 100 HP (vanilla; the suite's has 1000); a 50 HP foe is blinded "
+     "(STATE 0x40000) in the cast turn, r23 down by one per turn (spell_follow -FoeHp 50)"},
+    {"SPWI807", "-", 0x0U, "none", -90, -30, 0, "Mechanus Cannon: 20d4 + 10, in the cast turn"},
+    {"SPWI901", "-", 0x0U, "none", -120, -40, 0,
+     "Celestial Host (CPsSpellCelestialHost, a ~40 s cinematic owning the game freeze): its turn waits up to 20 "
+     "rounds (kCinematicCapTicks); the 4-round cap cut it at stage 13 and it did nothing (fixed); 40d3 on foes"},
+    {"SPWI902", "-", 0x0U, "none", 0, 0, 0,
+     "Conflagration: the flames are an attached object (kind 13) on each victim: 2d6 at each victim turn start for "
+     "50 s (its pulse countdown on the round clock: PulseAfterShift; it burned every 51 world ticks, in anyone's "
+     "turn); it spreads to creatures in 10 ft, the party too (vanilla)"},
+    {"SPWI905", "-", 0x0U, "none", -80, -5, 0,
+     "Elysium's Fires: fire bursts in the cast turn (it 'fizzled' while Celestial Host's projectile held the freeze)"},
+    {"SPWI909", "-", 0x0U, "none", 0, 0, 0,
+     "Power Word, Kill: nothing over 120 HP (vanilla; the suite's foe has 1000); a 100 HP foe dies in the cast turn"},
+    {"SPWI912", "-", ~0U, "none", -1000, -1, 0, "Abyssal Fury (projectile 234): the ground swallows the foe in the cast turn"},
+    {"SPWI914", "-", 0x0U, "none", -100, -30, 0, "Rune of Torment: 14d6 + 16 in the area, a long cast not cut"},
 };
 }  // namespace pstf::spellexpect

@@ -159,6 +159,7 @@ struct State {
   PulseBudget pulses;                // lingering spells: one round of pulse ticks per caster round
   std::string turn_cast_res;          // the spell the current creature cast this turn (orphan effects' parent)
   uint32_t turn_cast_flags = 0;
+  uint32_t since_flying = 1000;       // ticks since the current creature's last projectile was in the air
   LoseTurnCheck lose_check;          // the "turn lost" check, a few ticks into the turn
   ProjectilePace proj_pace;          // which projectiles move (theirs in their caster's turn; born free fly on)
   int sight_radius = 448;            // [tbc] sight_radius: px of fog lifted around each foe in the fight
@@ -647,6 +648,7 @@ void OnTurnChange(int32_t prev, int32_t next) {
   (void)party;
   Say(b);
   g.turn_cast_res.clear();
+  g.since_flying = 1000;
   g.lose_check.Start();  // after the engine has applied this step (round_rules.h LoseTurnCheck)
 }
 
@@ -1850,6 +1852,11 @@ void OnTick(uint64_t frame) {
   if (g.round_effects && engine::EffectClockInstalled() && dt > 0 && dt < 1000)
     for (int32_t id : g.in) engine::ShiftEffectClock(id, static_cast<int32_t>(dt));
   CheckLostTurn(dt);
+  if (g.current != -1) {  // when the current creature's last projectile went (its effects arrive just after)
+    engine::SpriteInfo cs;
+    const bool up = engine::GetSprite(g.current, &cs) && CasterProjectiles(g.current, cs.area).flying > 0;
+    g.since_flying = up ? 0 : std::min<uint32_t>(g.since_flying + dt, 1000);
+  }
   // The spell being cast now: parentless effects its projectile builds take it for their icon (status.h NoteCast).
   if (g.current != -1 && g.res && g.econ.acting && IsCastAction(g.econ.act_action)) {  // +0x47F8 outlives the cast
     const std::string res = engine::CurrentSpell(g.current);
@@ -2088,6 +2095,13 @@ void OnTick(uint64_t frame) {
     in.lingering = pend.lingering;
     for (int32_t id : g.in) in.onsets += engine::ResolvingOnsets(id);
     in.waited = g.resolve_ticks;
+    in.since_flying = g.since_flying;
+    {
+      const int32_t owner = engine::GameFreezeOwner();
+      if (owner != -1)
+        for (const auto& o : engine::AllObjects())
+          if (o.id == owner && o.source == cur) in.cinematic = true;
+    }
     const SpellWait w = TurnWaitsForSpell(in);
     if (w == SpellWait::Capped && !g.resolving_capped) {
       g.resolving_capped = true;
@@ -2096,8 +2110,8 @@ void OnTick(uint64_t frame) {
       CLog("SPELL", Name(cur) + ": spell still not finished after 4 rounds: turn ends anyway");
       for (const auto& o : engine::AllObjects())
         if (o.source == cur && o.area == s.area && o.type == 0)
-          Log("tbc: %s: still up: projectile %X (AIUpdate %llX)", Who(cur).c_str(), static_cast<unsigned>(o.id),
-              static_cast<unsigned long long>(engine::ProjectileUpdateFn(o.id)));
+          Log("tbc: %s: still up: projectile %X (AIUpdate %llX): %s", Who(cur).c_str(), static_cast<unsigned>(o.id),
+              static_cast<unsigned long long>(engine::ProjectileUpdateFn(o.id)), engine::CinematicProbe(o.id).c_str());
     }
     if (w != SpellWait::None && w != SpellWait::Capped) {
       wait_spell = true;
@@ -2574,6 +2588,21 @@ int __cdecl LuaAreaLists(engine::LuaState* L) {
   std::snprintf(buf, sizeof buf, "%d,%d", f, b);
   Log("lua: PSTF_AreaLists(%X) -> %s", static_cast<unsigned>(id), buf);
   engine::LuaPushString(L, buf);
+  return 1;
+}
+// PSTF_ProjectilesOf(caster) -> "id AIUpdate: stage ...;" for each of its projectiles (cinematic spell probe).
+int __cdecl LuaProjectilesOf(engine::LuaState* L) {
+  const auto c = static_cast<int32_t>(engine::LuaNumberArg(L, 1, -1));
+  std::string out;
+  for (const auto& o : engine::AllObjects()) {
+    if (o.source != c || o.type != 0) continue;
+    char b[64];
+    std::snprintf(b, sizeof b, "%X %llX: ", static_cast<unsigned>(o.id),
+                  static_cast<unsigned long long>(engine::ProjectileUpdateFn(o.id)));
+    out += b + engine::CinematicProbe(o.id) + ";";
+  }
+  Log("lua: PSTF_ProjectilesOf(%X) -> %s", static_cast<unsigned>(c), out.c_str());
+  engine::LuaPushString(L, out.c_str());
   return 1;
 }
 // PSTF_MultiLeft(caster) -> missiles of Force Missiles / Elemental Strike / Ice Knife still to aim (test probe).
@@ -3055,6 +3084,7 @@ bool InstallTbc(const IniMap& ini) {
   dev::AddLuaFunction("PSTF_Cursor", &LuaCursor);
   dev::AddLuaFunction("PSTF_MopFire", &LuaMopFire);
   dev::AddLuaFunction("PSTF_MultiLeft", &LuaMultiLeft);
+  dev::AddLuaFunction("PSTF_ProjectilesOf", &LuaProjectilesOf);
   dev::AddLuaFunction("PSTF_AreaLists", &LuaAreaLists);
   dev::AddLuaFunction("PSTF_MultiFire", &LuaMultiFire);
   dev::AddLuaFunction("PSTF_BarScroll", &LuaBarScroll);

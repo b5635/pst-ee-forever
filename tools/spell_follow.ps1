@@ -8,13 +8,13 @@
 #   -Owner self | foe | hit (the creature whose HP changed in the cast turn)   -Saves pass: the foe always saves
 param([string]$Caster = 'Grace', [Parameter(Mandatory)][string]$Cast, [string]$Owner = 'self', [int[]]$Stats = @(),
       [int]$Turns = 4, [int]$Level = 0, [string]$Saves = 'fail', [int]$Timeout = 400,
-      [string]$FoeAttacks = '', [string]$Pre = '', [string]$FoePre = '', [int]$OwnerHp = 0, [switch]$Lists, [switch]$CasterAttacks, [switch]$During)
+      [string]$FoeAttacks = '', [string]$Pre = '', [string]$FoePre = '', [int]$OwnerHp = 0, [switch]$Lists, [switch]$CasterAttacks, [switch]$During, [int]$FoeHp = 0)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $tmp = Join-Path $root 'build\tmp_spell_follow.lua'
 New-Item -ItemType Directory -Force (Split-Path $tmp) | Out-Null
 $lvl = if ($Level -gt 0) { ", level = $Level" } else { '' }
-$pre = "pstfFollow = {caster = '$Caster', cast = '$Cast', owner = '$Owner', turns = $Turns, stats = {$($Stats -join ',')}, saves = '$Saves'$lvl$(if ($FoeAttacks) { ", foeAttacks = '$FoeAttacks'" })$(if ($Pre) { ", pre = '$Pre'" })$(if ($FoePre) { ", foePre = '$FoePre'" })$(if ($OwnerHp) { ", ownerHp = $OwnerHp" })$(if ($Lists) { ", lists = true" })$(if ($CasterAttacks) { ", casterAttacks = true" })$(if ($During) { ", during = true" })}`n"
+$pre = "pstfFollow = {caster = '$Caster', cast = '$Cast', owner = '$Owner', turns = $Turns, stats = {$($Stats -join ',')}, saves = '$Saves'$lvl$(if ($FoeAttacks) { ", foeAttacks = '$FoeAttacks'" })$(if ($Pre) { ", pre = '$Pre'" })$(if ($FoePre) { ", foePre = '$FoePre'" })$(if ($OwnerHp) { ", ownerHp = $OwnerHp" })$(if ($Lists) { ", lists = true" })$(if ($CasterAttacks) { ", casterAttacks = true" })$(if ($During) { ", during = true" })$(if ($FoeHp) { ", foeHp = $FoeHp" })}`n"
 $pre + (Get-Content (Join-Path $root 'tests\ingame\spell_follow.lua') -Raw) | Set-Content -Path $tmp -Encoding utf8
 & (Join-Path $PSScriptRoot 'launch.ps1') -Save 000000990 -Lua $tmp -Env @{PSTF_TEST_TICK = '1'} -Until 'spell_follow: ok|TEST FAIL' -Close -Timeout $Timeout *> $null
 $rc = $LASTEXITCODE

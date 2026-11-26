@@ -983,6 +983,20 @@ TEST_CASE("tbc status: Halo's parentless AC takes the spell whose glow arrived w
   CHECK(first[1].parent.empty());
 }
 
+TEST_CASE("tbc round clock: an attached object's pulse fires once per owner round (Conflagration)") {
+  // the engine: 51 (ROUND_LENGTH) after a burn, -1 per update; the shift gives the frame's ticks back
+  uint16_t c = 51;
+  for (int t = 0; t < 300; ++t) {  // 300 world ticks of other creatures' turns: no burn
+    c = static_cast<uint16_t>(c - 1);
+    c = PulseAfterShift(c, 1);
+  }
+  CHECK(c == 51);
+  c = PulseAfterShift(c, -75);  // the owner's turn start
+  CHECK(c == 0);                // its next update burns
+  CHECK(PulseAfterShift(c, 1) == 0);  // the same frame's shift keeps it due
+  CHECK(PulseAfterShift(1, -75) == 0 && PulseAfterShift(0x7FF0, 100) == 0x7FFF);
+}
+
 TEST_CASE("tbc turns: the turn-lost check waits for the engine's state after the step") {
   LoseTurnCheck c;
   CHECK(!c.Due(5));  // not started
@@ -1130,6 +1144,33 @@ TEST_CASE("tbc: a turn does not end before its spell has finished for this round
   melee.since_action = 3;
   CHECK(TurnWaitsForSpell(melee) == SpellWait::None);
 }
+TEST_CASE("tbc spells: a cinematic spell that freezes the world holds the turn past the 4-round cap") {
+  SpellWaitIn in;
+  in.flying = 1;
+  in.waited = kSpellHoldCapTicks;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Capped);  // an ordinary projectile: cut at 4 rounds
+  in.cinematic = true;  // Celestial Host owns the game freeze: stage 13 of ~25 at 300 ticks
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Flying);
+  in.waited = kCinematicCapTicks;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Capped);  // still a safety cap
+  in.flying = 0, in.cinematic = false, in.waited = 951;  // it just ended: the landing hold is not a cap
+  in.cast_this_turn = true, in.since_action = 900, in.since_flying = 0;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Landing);
+}
+
+TEST_CASE("tbc spells: the turn holds a few ticks after the last projectile is gone (Deathbolt)") {
+  SpellWaitIn in;
+  in.cast_this_turn = true;
+  in.since_action = 200;
+  in.since_flying = 0;  // the bolt just went: its death effect is still on its way
+  CHECK(TurnWaitsForSpell(in) == SpellWait::Landing);
+  in.since_flying = kSpellLandTicks;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::None);
+  in.cast_this_turn = false;  // a melee swing: nothing to hold
+  in.since_flying = 0;
+  CHECK(TurnWaitsForSpell(in) == SpellWait::None);
+}
+
 
 TEST_CASE("tbc status: an effect until destroyed (Armor, ~INT_MAX ticks) has an icon with no countdown") {
   using namespace pstf::tbc;
@@ -1154,6 +1195,27 @@ TEST_CASE("tbc status: an attached visual does not hold the icon past the spell'
   std::vector<StatusEffect> only{{1, "SPWI119", 0, 1080, true, false, 0, -1}};
   icons = CollectStatus(1, only, 0, kRoundTicks5s, &spans, 8);
   CHECK(icons.size() == 1 && icons[0].rounds == 15);
+}
+
+TEST_CASE("tbc status: a parentless effect at a reused address is a new effect (Black-Barbed Shield after Submerge)") {
+  using namespace pstf::tbc;
+  OrphanMap m;
+  // Submerge the Will's AC: parentless, given SPWI119 while it was cast
+  std::vector<StatusEffect> fx{{0, "", 0, 3000, true, false, 0xABC, 0}};
+  AttributeOrphans(1, &fx, 0, &m);  // first look
+  m.NoteCast("SPWI119", 0, 10);
+  fx = {{0, "", 0, 3000, true, false, 0xABC, 0}, {0, "", 0, 2990, true, false, 0xDEF, 33}};
+  AttributeOrphans(1, &fx, 10, &m);
+  CHECK(fx[1].parent == "SPWI119");
+  // the suite removes it; Black-Barbed Shield's AC (op 0, 450 ticks) lands at that freed address while it is cast
+  m.NoteCast("SPWI203", 0, 500);
+  fx = {{0, "", 0, 450, true, false, 0xDEF, 0}};
+  AttributeOrphans(1, &fx, 500, &m);
+  CHECK(fx[0].parent == "SPWI203");
+  // a look later it keeps that parent (same opcode, time falling)
+  fx = {{0, "", 0, 440, true, false, 0xDEF, 0}};
+  AttributeOrphans(1, &fx, 1000, &m);
+  CHECK(fx[0].parent == "SPWI203");
 }
 
 TEST_CASE("tbc status: an attached object's re-applied parentless effects do not shorten its icon (Antimagic Shell)") {

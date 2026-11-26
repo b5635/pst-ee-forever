@@ -784,6 +784,14 @@ inline constexpr uint8_t kAttachedEndBytes[] = {0x8B, 0x96, 0xFC, 0x03, 0x00, 0x
 constexpr uint32_t kRvaAttachedCount = 0x3F97D2, kRvaAttachedList = 0x3F9800, kRvaAttachedEnd = 0x264A0D;
 constexpr uint32_t kOffSpriteAttachedCount = 0x5120, kOffSpriteAttached = 0x50D0, kOffAttachedEnd = 0x3FC;
 constexpr int kMaxAttached = 10;
+// CProjectilePSTSpriteAttachedObject::AIUpdate (lin 2E7070 / win 140263EF0), run from the owner's every tick
+// (CGameSprite::AIUpdate -> UpdateSpriteEffect): kind byte +0x42C (140263F72 `movzx eax, byte [rcx+42Ch]`); kinds 8
+// (an aura re-applying its effects) and 0xD (Conflagration's burn: 2d6 and a spread) count the word +0x434 down by
+// one per update (1402640D0 `movzx eax, word [rcx+434h]`) and act at 0, then reset it to ROUND_LENGTH.
+inline constexpr uint8_t kAttachedKindBytes[] = {0x0F, 0xB6, 0x81, 0x2C, 0x04, 0x00, 0x00};
+inline constexpr uint8_t kAttachedPulseBytes[] = {0x0F, 0xB7, 0x81, 0x34, 0x04, 0x00, 0x00};
+constexpr uint32_t kRvaAttachedKind = 0x263F72, kRvaAttachedPulse = 0x2640D0;
+constexpr uint32_t kOffAttachedKind = 0x42C, kOffAttachedPulse = 0x434;
 // Bumping: CGameSprite::CheckBumpable (lin 505B10, win 1403BC870) answers whether a creature may be pushed
 // aside by a walker (EA_ENEMY never is). Called from CGameSprite::AIUpdate (1403B539B) and
 // CGameSprite::ClearBumpPath (lin 50B260 / win 1403BFB50, at 1403BFB82); both `call` rel32.
@@ -961,6 +969,15 @@ inline constexpr uint8_t kSwarmArrivedBytes[] = {0x83, 0xB9, 0xE8, 0x03, 0x00, 0
 // It never "arrives": a lingering object from its first tick, paced like a cloud (one round of ticks per caster round).
 inline constexpr uint8_t kGlobeAIBytes[] = {0x40, 0x55, 0x53, 0x57, 0x41, 0x55, 0x48, 0x8D, 0x6C, 0x24, 0xC1, 0x48};
 constexpr uint32_t kRvaGlobeAI = 0x273030;
+// CPsSpellConflagration::AIUpdate (lin 2FE640 / win 14026DC30): the flames burn their victims and spread on a tick
+// countdown; in a fight they ran in world time (burns in anyone's turn): a lingering object like a cloud.
+inline constexpr uint8_t kConflagAIBytes[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x55, 0x57};
+constexpr uint32_t kRvaConflagAI = 0x26DC30;
+// The game freeze owner: g_PST +0x674 (sub_14025AB10 = CPlanescape::SetGameFreeze stores the projectile id, -1 none).
+// PST's cinematic spells (Celestial Host, Elysium's Fires, Mechanus Cannon, Blacksphere, Blade Storm, Howl...) take it
+// and freeze the world while they play: CPsSpellCelestialHost::AIUpdate 140268F1C `cmp [r10+674h], eax`.
+inline constexpr uint8_t kFreezeOwnerBytes[] = {0x41, 0x39, 0x82, 0x74, 0x06, 0x00, 0x00};
+constexpr uint32_t kRvaFreezeOwnerCmp = 0x268F1C, kOffPstFreezeOwner = 0x674;
 constexpr uint32_t kRvaAreaAI = 0x262180, kRvaSwarmAI = 0x2783F0, kRvaAreaArrived = 0x262222,
                    kRvaSwarmArrived = 0x278422, kOffProjArrived = 0x3E8;
 
@@ -1189,6 +1206,8 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CGameEffect::DecodeEffect", kRvaDecodeEffect, kDecodeEffectBytes, "lin 2012B0 / win 1401FE380"),
     PSTF_SYM("CGameSprite::UpdateSpriteEffect.count", kRvaAttachedCount, kAttachedCountBytes, "lin 50F9C0 / win 1403F97D2"),
     PSTF_SYM("CGameSprite::UpdateSpriteEffect.list", kRvaAttachedList, kAttachedListBytes, "lin 50F9C0 / win 1403F9800"),
+    PSTF_SYM("CProjectilePSTSpriteAttachedObject::AIUpdate.kind", kRvaAttachedKind, kAttachedKindBytes, "lin 2E7070 / win 140263F72"),
+    PSTF_SYM("CProjectilePSTSpriteAttachedObject::AIUpdate.pulse", kRvaAttachedPulse, kAttachedPulseBytes, "win 1402640D0"),
     PSTF_SYM("CProjectilePSTSpriteAttachedObject::AIUpdate.end", kRvaAttachedEnd, kAttachedEndBytes,
              "lin 2E7070 L498 / win 140264A0D"),
     PSTF_SYM("CGameSprite::AIUpdate.CheckBumpable", kRvaBumpCall1, kBumpCall1Bytes, "lin 53A510 / win 1403B539B"),
@@ -1229,6 +1248,8 @@ inline constexpr Symbol kAll[] = {
     PSTF_SYM("CProjectileArea::AIUpdate", kRvaAreaAI, kAreaAIBytes, "lin 308680 / win 140262180"),
     PSTF_SYM("CPsSpellSwarmCurse::AIUpdate", kRvaSwarmAI, kSwarmAIBytes, "lin 2F8E30 / win 1402783F0"),
     PSTF_SYM("CPsSpellGlobeOfInvulnerability::AIUpdate", kRvaGlobeAI, kGlobeAIBytes, "lin 302560 / win 140273030"),
+    PSTF_SYM("CPsSpellConflagration::AIUpdate", kRvaConflagAI, kConflagAIBytes, "lin 2FE640 / win 14026DC30"),
+    PSTF_SYM("CPsSpellCelestialHost::AIUpdate.freeze", kRvaFreezeOwnerCmp, kFreezeOwnerBytes, "lin 302B20 / win 140268F1C"),
     PSTF_SYM("CProjectileArea.arrived", kRvaAreaArrived, kAreaArrivedBytes, "win 140262222"),
     PSTF_SYM("CPsSpellSwarmCurse.arrived", kRvaSwarmArrived, kSwarmArrivedBytes, "win 140278422"),
     PSTF_SYM("CInfinity::SetViewPosition", kRvaSetViewPos, kSetViewPosBytes, "lin 3AE2B0 / win 140309630"),

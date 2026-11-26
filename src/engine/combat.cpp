@@ -216,6 +216,12 @@ void ShiftEffectClock(int32_t id, int32_t ticks) {
     for (int i = 0; i < n; ++i) {
       const uint64_t o = R<uint64_t>(p + sym::kOffSpriteAttached + 8ull * i);
       if (!PlausiblePtr(o)) continue;
+      // its pulse countdown is on the round clock too (round_rules.h PulseAfterShift): frozen with its owner, a round
+      // off it at the owner's turn start, so Conflagration burns once per victim round, not every 51 world ticks
+      static const int pulse_ok = AllOk({sym::kRvaAttachedKind, sym::kRvaAttachedPulse}) ? 1 : 0;
+      const uint8_t kind = R<uint8_t>(o + sym::kOffAttachedKind);
+      if (pulse_ok && (kind == 8 || kind == 0xD))
+        W<uint16_t>(o + sym::kOffAttachedPulse, tbc::PulseAfterShift(R<uint16_t>(o + sym::kOffAttachedPulse), ticks));
       const uint32_t end = R<uint32_t>(o + sym::kOffAttachedEnd);
       if (end == 0 || end >= 0xF0000000u) continue;
       W<uint32_t>(o + sym::kOffAttachedEnd, end + static_cast<uint32_t>(ticks));
@@ -234,6 +240,10 @@ int AttachedLeft(int32_t id, std::vector<int32_t>* out) {
     if (!PlausiblePtr(o)) continue;
     const uint32_t end = R<uint32_t>(o + sym::kOffAttachedEnd);
     if (out) out->push_back(end ? static_cast<int32_t>(end - now) : 0);
+    if (AllOk({sym::kRvaAttachedKind, sym::kRvaAttachedPulse}))
+      Log("combat: %X attached %d: kind %u pulse %u, %d ticks left", static_cast<unsigned>(id), i,
+          R<uint8_t>(o + sym::kOffAttachedKind), R<uint16_t>(o + sym::kOffAttachedPulse),
+          end ? static_cast<int32_t>(end - now) : 0);
   }
   return n;
 }
@@ -250,7 +260,11 @@ std::vector<AttachedView> AttachedObjects(int32_t id) {
     if (!PlausiblePtr(o)) continue;
     const uint32_t end = R<uint32_t>(o + sym::kOffAttachedEnd);
     const int32_t left = end ? static_cast<int32_t>(end - now) : 0;
-    if (left > 0) out.push_back({o, left});
+    // the key carries its kind: a new object at a freed one's address (Balance in All Things, kind 16, where Infernal
+    // Shield's kind 14 was, with the same 100 s) is another effect to the icons (status.h OrphanMap)
+    static const int kind_ok = AllOk({sym::kRvaAttachedKind}) ? 1 : 0;
+    const uint64_t kind = kind_ok ? R<uint8_t>(o + sym::kOffAttachedKind) : 0;
+    if (left > 0) out.push_back({o | (kind << 56), left});
   }
   return out;
 }
@@ -445,8 +459,8 @@ bool LingerOk() {
 // A landed cloud/swarm (its "arrived" flag), or a globe (always): it pulses where it is instead of flying.
 bool LingeringFn(uint64_t fn, uint64_t o) {
   if (!LingerOk()) return false;
-  if (fn == sym::kImageBase + sym::kRvaGlobeAI) {
-    static const int ok = AllOk({sym::kRvaGlobeAI}) ? 1 : 0;
+  if (fn == sym::kImageBase + sym::kRvaGlobeAI || fn == sym::kImageBase + sym::kRvaConflagAI) {
+    static const int ok = AllOk({sym::kRvaGlobeAI, sym::kRvaConflagAI}) ? 1 : 0;
     return ok != 0;
   }
   return (fn == sym::kImageBase + sym::kRvaAreaAI || fn == sym::kImageBase + sym::kRvaSwarmAI) &&
@@ -491,6 +505,27 @@ bool ProjectileLingers(int32_t projectile) {
   const auto it = g_proj_orig.find(R<uint64_t>(p));
   if (it == g_proj_orig.end()) return false;
   return LingeringFn(reinterpret_cast<uint64_t>(it->second), p);
+}
+
+int32_t GameFreezeOwner() {
+  static const int ok = AllOk({sym::kRvaFreezeOwnerCmp}) ? 1 : 0;
+  const uint64_t pst = ok ? R<uint64_t>(sym::kVaPlanescape) : 0;
+  return pst ? R<int32_t>(pst + sym::kOffPstFreezeOwner) : -1;
+}
+
+// Probe: the PST "cinematic" spell projectiles (Celestial Host win 140268EA0 and kin) run their stage machine only
+// while game +0xCE90 <= 0 and their +0x224 equals game +0xB8A4, and leave stage 0 once g_PST +0x674 (the game freeze
+// owner, sub_14025AB10) is theirs, or game +0xB8A4 == 1, or game +0xB558 == 65902.
+std::string CinematicProbe(int32_t projectile) {
+  const uint64_t p = LookupObject(projectile);
+  const uint64_t g = GameObject();
+  const uint64_t pst = R<uint64_t>(sym::kVaPlanescape);
+  if (!p || !g || !pst) return "?";
+  char b[200];
+  std::snprintf(b, sizeof b, "stage %u, own %d vs game %d, game+CE90 %d, freeze owner %X (me %X), game+B558 %d",
+                R<uint8_t>(p + 504), R<int32_t>(p + 548), R<int32_t>(g + 47268), R<int32_t>(g + 52880),
+                static_cast<unsigned>(R<int32_t>(pst + 1652)), static_cast<unsigned>(R<int32_t>(p + 72)), R<int32_t>(g + 46424));
+  return b;
 }
 
 uint64_t ProjectileUpdateFn(int32_t projectile) {

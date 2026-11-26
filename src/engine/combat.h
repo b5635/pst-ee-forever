@@ -120,6 +120,8 @@ bool MopUp();                                     // a hovering Missile of Patie
 // Multi-fire spells (Ice Knife, Force Missiles, Elemental Strike): missiles the caster still has to aim (0: none).
 int MultiFireLeft(int32_t caster);
 void MultiFireRaw(int32_t caster, int* left, int* spell);
+int32_t GameFreezeOwner();  // the projectile freezing the world for its cinematic (g_PST +0x674), -1 none
+std::string CinematicProbe(int32_t projectile);  // stage and freeze fields of a PST cinematic spell (log)
 uint64_t ProjectileUpdateFn(int32_t projectile);  // its class's AIUpdate VA (which projectile it is; logs)
 void AreaListCount(int32_t id, int* front, int* back);  // times it is in its area's front/back object list (probe)  // the two sprite fields as they are (probe)
 // one missile at target, as the player's click (MultiFireSpell); spell (2207/2405/2410) first sets the caster's

@@ -170,11 +170,11 @@ constexpr Skip kOutcomeSkips[] = {
     {"SPWI307", "Hold Undead: the suite's save has no undead to hold"},
     {"SPWI108", "Pacify: nothing on a hostile Hive thug, in real time too (vanilla; probe pacify, 2026-11-25)"},
     {"SPWI601", "Antimagic Shell: strips the caster's own magic, its icon carrier too (G test)"},
-    {"SPWI603", "Howl of Pandemonium: the stun comes from its projectile with no parent: no icon (open)"},
+    {"SPWI603", "Howl of Pandemonium: the stun's length is the engine's (by HD), random (vetted r*)"},
+    {"SPWI803", "Deathbolt: kills the suite's only foe, the fight ends before the measurement (death in the cast turn: spell_follow)"},
     {"SPWI705", "Stygian Ice Storm: its projectile adds a 30 s confusion: the icon outlasts the SPL's paralyse"},
     {"SPWI218", "Infernal Orb: needs the caster's attack roll, a miss does nothing"},
-    {"SPWI901", "Celestial Host: no damage on the suite's foe (open: hardcoded projectile 254)"},
-    {"SPWI902", "Conflagration: nothing on the suite's foe (open: attached flames, projectile 270)"},
+    {"SPWI902", "Conflagration: burns at the victims' turn starts, nothing in the cast turn (vetted)"},
 };
 bool Skipped(const char* res) {
   for (const auto& k : kOutcomeSkips)

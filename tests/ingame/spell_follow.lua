@@ -33,6 +33,7 @@ local function show(id, when)
 	local _, icons = PSTF_Status(id, 0)  -- logged with the raw parent effects
 	PSTF_Effects(id)  -- logs op:type:ticks
 	local x, y = PSTF_SpritePos(id, 1)
+	PSTF_Attached(id)
 	if F.lists then for w in pairs(snap0) do PSTF_AreaLists(w) end end
 	note(string.format('%s: %X hp %d stats [%s] state %X icons %s at %d,%d', when, id, hp(id), st, PSTF_State(id, 1) or 0,
 		(icons ~= '' and icons) or 'none', x or -1, y or -1))
@@ -109,8 +110,9 @@ function pstfTestTick()
 		for i = 1, 40 do
 			local w = PSTF_FightId(i)
 			if w == -1 then break end
-			if not isParty(w) then PSTF_SetHp(w, 1000, 1000) end
-			snap0[w] = (not isParty(w)) and 1000 or hp(w)
+			local fh = F.foeHp or 1000
+			if not isParty(w) then PSTF_SetHp(w, fh, fh) end
+			snap0[w] = (not isParty(w)) and fh or hp(w)
 			if not isParty(w) then fx0[w] = PSTF_Effects(w) end
 		end
 		if F.ownerHp then PSTF_SetHp(owner, F.ownerHp) end  -- room for a heal (Blood Bridge, cures)

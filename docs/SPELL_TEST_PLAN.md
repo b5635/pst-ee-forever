@@ -166,21 +166,21 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 
 | Res | Spell | Intended | TBC | Icon | Check | Layer | Vetted |
 |---|---|---|---|---|---|---|---|
-| SPWI701 | Acid Storm | 1d6/lvl acid then lingering 30 s | HARDCODED LINGER | D? | one pulse per caster round | U2 |  |
-| SPWI702 | Blade Storm | ice shards on all foes in area, save 1/2 | HARDCODED INSTANT | - | HP on every foe in range | U2 |  |
-| SPWI704 | Guardian Mantle | deflects all physical attacks 50 s + 5 s/lvl (op 375) | ATTACHED, PROTECT | B | attacks miss/blocked; ends | G |  |
-| SPWI705 | Stygian Ice Storm | 8d8 cold at 75 ticks + paralyse | SYNC | - | HP in the caster's turn (exists `tbc_ice`) | U2 (exists) |  |
-| SPWI802 | Meteor Storm Bombardment | 10d12 to all foes, save 1/2 | INSTANT | - | HP bounds on every foe | U1 U2 |  |
-| SPWI803 | Deathbolt | death (save) else 10d6 | ONSET | - | dead, or HP within bounds | U1 U2 |  |
-| SPWI804 | Ignus' Fury | 10-100 + lvl fire per cube | HARDCODED INSTANT | - | HP on foes; turn length | U2 |  |
-| SPWI805 | Power Word, Blind | blind up to 100 HP of creatures | HARDCODED DISABLE | D | blindness on targets by HP order | U2 |  |
-| SPWI807 | Mechanus Cannon | 20d4 + 10 energy | INSTANT | - | HP bounds | U1 U2 |  |
-| SPWI901 | Celestial Host | 40d3 to foes | INSTANT | - | HP bounds | U1 U2 |  |
-| SPWI902 | Conflagration | burns 2d6 per 5 s, 50 s, spreads to 10 ft (op 375) | ATTACHED, DOT | D 10 | one burn per victim round, not per world second | U2 G |  |
-| SPWI905 | Elysium's Fires | 5d4 fire bursts in area | INSTANT | - | HP bounds | U1 U2 |  |
-| SPWI909 | Power Word, Kill | kills up to 120 HP | ONSET | - | target <= 120 HP dies, > 120 not | U1 U2 |  |
-| SPWI912 | Abyssal Fury | ground swallows the target (projectile 234) | HARDCODED INSTANT | - | HP / death outcome | U2 |  |
-| SPWI914 | Rune of Torment | 14d6 + 16 to all in area, long cast (speed 9) | INSTANT | - | HP bounds; long cast not cut (exists) | U1 U2 |  |
+| SPWI701 | Acid Storm | 1d6/lvl acid then lingering 30 s | HARDCODED LINGER | D? | one pulse per caster round | U2 | yes 2026-11-25 |
+| SPWI702 | Blade Storm | ice shards on all foes in area, save 1/2 | HARDCODED INSTANT | - | HP on every foe in range | U2 | yes 2026-11-25 |
+| SPWI704 | Guardian Mantle | deflects all physical attacks 50 s + 5 s/lvl (op 375) | ATTACHED, PROTECT | B | attacks miss/blocked; ends | G | yes 2026-11-25 |
+| SPWI705 | Stygian Ice Storm | 8d8 cold at 75 ticks + paralyse | SYNC | - | HP in the caster's turn (exists `tbc_ice`) | U2 (exists) | yes 2026-11-25 |
+| SPWI802 | Meteor Storm Bombardment | 10d12 to all foes, save 1/2 | INSTANT | - | HP bounds on every foe | U1 U2 | yes 2026-11-25 |
+| SPWI803 | Deathbolt | death (save) else 10d6 | ONSET | - | dead, or HP within bounds | U1 U2 | yes 2026-11-25 |
+| SPWI804 | Ignus' Fury | 10-100 + lvl fire per cube | HARDCODED INSTANT | - | HP on foes; turn length | U2 | yes 2026-11-25 |
+| SPWI805 | Power Word, Blind | blind up to 100 HP of creatures | HARDCODED DISABLE | D | blindness on targets by HP order | U2 | yes 2026-11-25 |
+| SPWI807 | Mechanus Cannon | 20d4 + 10 energy | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
+| SPWI901 | Celestial Host | 40d3 to foes | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
+| SPWI902 | Conflagration | burns 2d6 per 5 s, 50 s, spreads to 10 ft (op 375) | ATTACHED, DOT | D 10 | one burn per victim round, not per world second | U2 G | yes 2026-11-25 |
+| SPWI905 | Elysium's Fires | 5d4 fire bursts in area | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
+| SPWI909 | Power Word, Kill | kills up to 120 HP | ONSET | - | target <= 120 HP dies, > 120 not | U1 U2 | yes 2026-11-25 |
+| SPWI912 | Abyssal Fury | ground swallows the target (projectile 234) | HARDCODED INSTANT | - | HP / death outcome | U2 | yes 2026-11-25 |
+| SPWI914 | Rune of Torment | 14d6 + 16 to all in area, long cast (speed 9) | INSTANT | - | HP bounds; long cast not cut (exists) | U1 U2 | yes 2026-11-25 |
 
 ### Special abilities
 

@@ -100,6 +100,19 @@ inline bool LosesTurn(int64_t state) {
   return state >= 0 && (static_cast<uint32_t>(state) & 0x800) == 0 && (static_cast<uint32_t>(state) & kLoseTurnStates) != 0;
 }
 
+// An attached spell object's pulse countdown (kinds 8 and 0xD, symbols.h kOffAttachedPulse) on the round clock. The
+// engine counts it down by one per owner update and acts at 0; the clock shift gives the frame's world ticks back
+// (frozen; at 1 it never reaches the 0 the engine checks first), the turn-start step (ticks < 0) takes a round off,
+// to 0 at the least: the next update acts, then the engine resets it to ROUND_LENGTH. So once per owner round.
+// A due pulse (0) stays due through the shift: the step set it in our frame hook, the same frame's shift ran after it
+// and the engine's next update saw 1 (no burn after the first one; spell_follow SPWI902, 2026-11-25). Frozen at its
+// reset value, a counter never drifts down to 0 by itself.
+inline uint16_t PulseAfterShift(uint16_t counter, int32_t ticks) {
+  if (counter == 0 && ticks > 0) return 0;
+  const int32_t v = static_cast<int32_t>(counter) + ticks;
+  return static_cast<uint16_t>(v < 0 ? 0 : v > 0x7FFF ? 0x7FFF : v);
+}
+
 // The "turn lost" check waits kTicks world ticks after the turn start: the round clock's step runs a sleep or a
 // paralysis out (Blacksphere's 150 ticks, Cone of Cold's 105: gone at the owner's 2nd turn start), but the engine
 // drops the expired effect and clears its STATE bit only on the creature's next update (ForceEffects); read at once,

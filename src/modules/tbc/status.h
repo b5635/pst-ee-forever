@@ -39,11 +39,19 @@ struct OrphanMap {
     std::string res;
     uint32_t type = 0, flags = 0;
     int64_t seen = 0;
+    int op = -2;       // the effect it was given to: a reused address with another opcode, or more time left than
+    int32_t left = 0;  // at the last look, is a new effect (Black-Barbed Shield's AC took Submerge the Will's parent)
   };
+  struct Seen {
+    int op = -2;
+    int32_t left = 0;
+  };
+  // the same effect as at the last look: same opcode and its time has not grown (the engine reuses freed memory)
+  static bool Same(int op0, int32_t left0, const StatusEffect& e) { return op0 == e.opcode && e.left <= left0 + 1; }
   std::map<int32_t, Parent> recent;                      // creature -> last spell on its way
   std::map<int32_t, std::map<uint64_t, Parent>> given;   // creature -> effect key -> its parent
   std::map<int32_t, std::set<uint64_t>> parented;        // creature -> keys of its parented effects at the last look
-  std::map<int32_t, std::set<uint64_t>> orphans;         // creature -> keys of its parentless effects at the last look
+  std::map<int32_t, std::map<uint64_t, Seen>> orphans;   // creature -> its parentless effects at the last look
   Parent cast;  // the spell being cast in the fight (any caster), last frame it was seen: a fallback parent
   // Halo of Lesser Revelation and Black-Barbed Shield bring only parentless effects (their projectiles build them):
   // with no parented effect arriving, a new orphan takes the spell being cast (CGameSprite +0x47F8, engine::CurrentSpell).
@@ -63,26 +71,31 @@ inline void AttributeOrphans(int32_t id, std::vector<StatusEffect>* fx, int64_t 
   m->parented[id].swap(keys);
   const auto old = m->orphans.find(id);
   const bool had_look = old != m->orphans.end();
-  std::set<uint64_t> orphan_keys;
+  std::map<uint64_t, OrphanMap::Seen> orphan_keys;
   for (const StatusEffect& e : *fx)
-    if (e.timed && e.parent.empty() && e.key) orphan_keys.insert(e.key);
+    if (e.timed && e.parent.empty() && e.key) orphan_keys[e.key] = {e.opcode, e.left};
   std::map<uint64_t, OrphanMap::Parent>& mine = m->given[id];
   std::map<uint64_t, OrphanMap::Parent> keep;
   const auto rec = m->recent.find(id);
   for (StatusEffect& e : *fx) {
     if (!e.timed || !e.parent.empty() || !e.key) continue;
     const auto it = mine.find(e.key);
+    bool arrived = false;
+    if (had_look) {
+      const auto was = old->second.find(e.key);
+      arrived = was == old->second.end() || !OrphanMap::Same(was->second.op, was->second.left, e);
+    }
     OrphanMap::Parent p;
-    if (it != mine.end()) {
+    if (it != mine.end() && OrphanMap::Same(it->second.op, it->second.left, e)) {
       p = it->second;
-    } else if (had_look && !old->second.count(e.key) && rec != m->recent.end() &&
-               now - rec->second.seen <= kOrphanWindowTicks) {
+    } else if (arrived && rec != m->recent.end() && now - rec->second.seen <= kOrphanWindowTicks) {
       p = rec->second;
-    } else if (had_look && !old->second.count(e.key) && !m->cast.res.empty() && now - m->cast.seen <= kOrphanWindowTicks) {
+    } else if (arrived && !m->cast.res.empty() && now - m->cast.seen <= kOrphanWindowTicks) {
       p = m->cast;
     } else {
       continue;
     }
+    p.op = e.opcode, p.left = e.left;
     keep[e.key] = p;
     e.parent = p.res, e.parent_type = p.type, e.parent_flags = p.flags;
     e.orphan = true;

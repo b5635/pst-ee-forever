@@ -17,7 +17,7 @@
 --   tools\launch.ps1 -Save 000000990 -Lua build\tmp_tbc_spells_all.lua -Env @{PSTF_TEST_TICK='1'; PSTF_FEEDBACK_LOG='1'} -Until 'tbc_spells_all: ok|TEST FAIL' -Close -Timeout 1500
 --   (tools\spell_suite.ps1 builds build\tmp_tbc_spells_all.lua = spell_list.lua + this file and runs it)
 if not pstfSpellList then error('pstfSpellList missing: run through tools/spell_suite.ps1') end
-local kStall = 750  -- frames after End Turn: the turn may wait kSpellHoldCapTicks (300 turn ticks = 600 frames) for its spell
+local kStall = 3200  -- a cinematic spell (Celestial Host) may hold its turn 20 rounds (kCinematicCapTicks); ordinary ones 4  -- frames after End Turn: the turn may wait kSpellHoldCapTicks (300 turn ticks = 600 frames) for its spell
 local kPriestLevel = 14  -- cleric level for the priest spells (6th level needs 11)
 local kMageLevel = 20    -- mage level for the mage spells (9th level abilities start at 18)
 local frames, cur, turnFrame = 0, -1, 0

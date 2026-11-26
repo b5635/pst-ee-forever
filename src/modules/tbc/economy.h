@@ -290,18 +290,27 @@ struct SpellWaitIn {
   int lingering = 0;          // its landed clouds/swarms with pulse ticks left this round
   int onsets = 0;             // delayed effects that resolve in this turn
   uint32_t waited = 0;        // ticks the end has waited so far
+  uint32_t since_flying = 1000;  // ticks since its last projectile was seen in the air
+  bool cinematic = false;     // one of its projectiles owns the engine's game freeze (the world is frozen anyway)
 };
 inline constexpr uint32_t kSpellAppearTicks = 25;  // a projectile appears up to a second after the cast animation
 inline constexpr uint32_t kSpellHoldCapTicks = Economy::kCastCapRounds * 75;  // 4 rounds of 75 ticks
+// A projectile's effects reach its target a tick or two after the projectile object is gone (Deathbolt: its death
+// effect and save came in the next creature's turn); the turn holds this long after the last one.
+inline constexpr uint32_t kSpellLandTicks = 4;
+// A cinematic spell (Celestial Host ~40 s in real time) freezes the whole world while it plays: its turn waits for it
+// up to this long instead of kSpellHoldCapTicks (the 4-round cap cut Celestial Host at its 13th stage).
+inline constexpr uint32_t kCinematicCapTicks = 20 * 75;
 inline SpellWait TurnWaitsForSpell(const SpellWaitIn& in) {
+  const bool landing = in.cast_this_turn && in.since_flying < kSpellLandTicks;
   const bool any = in.casting || in.flying > 0 || in.lingering > 0 || in.onsets > 0 ||
                    (in.cast_this_turn && in.since_action < kSpellAppearTicks);
-  if (!any) return SpellWait::None;
-  if (in.waited >= kSpellHoldCapTicks) return SpellWait::Capped;
+  if (!any) return landing ? SpellWait::Landing : SpellWait::None;  // a few ticks, never the cap
+  if (in.waited >= (in.cinematic ? kCinematicCapTicks : kSpellHoldCapTicks)) return SpellWait::Capped;
   if (in.casting) return SpellWait::Casting;
   if (in.flying > 0) return SpellWait::Flying;
   if (in.lingering > 0) return SpellWait::Pulsing;
-  if (in.onsets > 0) return SpellWait::Landing;
+  if (in.onsets > 0 || landing) return SpellWait::Landing;
   return SpellWait::Appearing;
 }
 inline const char* SpellWaitName(SpellWait w) {
