@@ -53,6 +53,16 @@ function S.spawn(res, dx, dy)
 	local x, y = PSTF_SpritePos(S.tno(), 1)
 	PSTF_EvalAs(S.tno(), 'CreateCreature("' .. res .. '",[' .. math.floor(x + dx) .. '.' .. math.floor(y + dy) .. '],0)')
 end
+-- Ids of the living creatures in the party's area now (set); S.newIn(before) = an id that is not in `before`.
+function S.ids()
+	local t = {}
+	for sid in string.gmatch(PSTF_ActorRefs(), '(%-?%d+),%-?%d+;') do t[tonumber(sid)] = true end
+	return t
+end
+function S.newIn(before)
+	for id in pairs(S.ids()) do if not before[id] then return id end end
+	return -1
+end
 -- A creature in the party's area by script name, else by its shown (TLK) name; nth (1-based) among equals.
 function S.find(name, nth)
 	nth = nth or 1
@@ -160,11 +170,12 @@ function S.stepCaster(o)
 		return top
 	end
 	S.steps[26] = function()
-		id = S.find(o.name)
-		if id == -1 and o.cre then S.spawn(o.cre, 200, 40) end
+		id = o.cre and o.spawn and -1 or S.find(o.name)
+		if id == -1 and o.cre then S.before = S.ids() S.spawn(o.cre, 200, 40) end
 	end
 	S.steps[29] = function()
 		if id == -1 then id = S.find(o.name) end
+		if id == -1 and S.before then id = S.newIn(S.before) end
 		if id == -1 and o.cre then id = S.find(o.cre) end
 		if id == -1 then return S.fail(o.name .. ' not found') end
 		S.caster = id
@@ -229,11 +240,12 @@ function S.chainCaster(o)
 	S.maxFrames = o.maxFrames or 9000
 	local id, turns, casts0, total, started = -1, 0, 0, 0, false
 	S.steps[26] = function()
-		id = S.find(o.name)
-		if id == -1 and o.cre then S.spawn(o.cre, o.near and o.near[1] or 200, o.near and o.near[2] or 40) end
+		id = o.cre and o.spawn and -1 or S.find(o.name)
+		if id == -1 and o.cre then S.before = S.ids() S.spawn(o.cre, o.near and o.near[1] or 200, o.near and o.near[2] or 40) end
 	end
 	S.steps[29] = function()
 		if id == -1 then id = S.find(o.name) end
+		if id == -1 and S.before then id = S.newIn(S.before) end
 		if id == -1 and o.cre then id = S.find(o.cre) end
 		if id == -1 then return S.fail(o.name .. ' not found') end
 		S.caster = id

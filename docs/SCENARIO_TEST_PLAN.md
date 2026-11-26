@@ -50,6 +50,29 @@ Scenarios are run grouped by the mechanism they share, so one fix is checked by 
    triggers (ProcessPendingTriggers waits for the turn).
 4. **Dialogue inside a fight** (section D) S36-S40, then crowds and fleeing (section C), bosses (E), edge cases (F).
 
+## Setup workarounds (think of these first when a scenario cannot start)
+
+When a scenario's setup fails, it is usually the save or the forcing, not the feature. Try these before calling it
+an ISSUE, and add new ones here:
+
+- **Actor not in the save** (dead already, other area, spawned later): spawn its CRE next to the party
+  (`cre = 'X', spawn = true`), give it the area actor's script (`script = 'BCS'`, `tools/bcs.py who CRE`), and find
+  the spawn as the id that was not there before (`S.ids()` / `S.newIn(before)`), not by name.
+- **Name lookups:** `S.find` takes the shown (TLK) name or the script name; the CRE name (`bcs.py users`) is
+  neither. List a save's creatures with `-Id S00 -Save PREFIX`.
+- **Several BCS actions:** one action per `PSTF_EvalAs` (C:Eval runs only the first); the first call clears its queue
+  (takeover), later ones append.
+- **Creature far away / its AI idle:** its own `JumpToPoint` may never run; jump the party to it instead (`go = {dx, dy}`).
+- **Save loads inside a banter dialogue** (the world waits, every action stays queued): `lib.lua` steps it closed
+  (`worldScreen:StepDialog()`) in the first ticks.
+- **Script gated on another area's variable** (`Global("X","AR0209",..)` while the save is in AR0208): an unloaded
+  area's variables do not read or write; pick a save in that area (`install_walk_saves.ps1 -List`).
+- **Variable names:** BCS `LOCALScd_int_0` = scope `LOCALS` + name `cd_int_0`.
+- **The party kills it too fast:** HP 3000 on the scenario creature (`hp =`), party HP 400.
+- **Turns lost to knockdowns** (party AI trips): count them before reading a step counter as stuck (combat.log
+  `MOVE ... stands up and loses its action`).
+- **Expected counts:** check what the creature really has (a spent `Spell` falls through: Shilandra knows 3 of 5).
+
 ## What "working well" means (every scenario)
 
 1. **Same outcome as real time.** Script variables, deaths, hostility, dialogue and cutscenes end as they would
@@ -75,14 +98,14 @@ before the first action is replaced by an ordered attack (the nudge). Real-time 
 | S03 | 000700117 Exotic Shopping (AR0609) | Vrischika: set LOCALS `Scd_int_1` 14, make her hostile | Casts 2209 (close), 2405, 2207 (far), each gated by `StartTimer(1,1..4)` | TIMER `1:`; casts per turn | - |
 | S04 | 000700136 Spoke to Splinter (AR0601) | Jumble (in the area), LOCALS `cd_int_0` 1, hostile, HP 3000 | Step 1 (2102 self), step 2 (`Wait(1)` then 2115), step 3 ... counter climbs once per turn | Wait-first steps | ok: 1 -> 7 in 9 turns, one spell each; the 2 turns without a step were knockdowns (stand up = the action) |
 | S05 | 000700145 Extravagant Ones Complete (AR0603) | Lady Thorncombe (0603LADY), same as S04 | Same as S04 | Same | ok: one spell per turn (5 steps in 10 turns: 3 knockdowns, 1 step lost inside the engine's cinematic freeze, vanilla) |
-| S06 | 000700148 Personal Experiences Done (AR0604) | Quell (0604QUEL), same as S04 | Same as S04 | Same | - |
-| S07 | 000700128 Wizard is Dead (AR13WZ) | Spawn CBOSS, `ChangeAIScript("1300CWIZ",0)`, LOCALS `Scd_int_0` 1, hostile | Steps 2807 at Player1, 2504 self, 2301; past step 3, `WaitRandom(5,10)` then two ReallyForceSpell 2107 | Lead `WaitRandom`: is it nudged into melee? | - |
-| S08 | 000700186 Carceri Return (AR0900) | Hezobol (0900HEZO): LOCALS `Scd_int_0` 1, hostile | Through all 12 steps, one spell per turn (2304, 2502, 2402 ...) | Counter progress per turn | - |
-| S09 | 000700042 Stuck with the Box (AR0306A) | Shilandra (0306SHIL; spawn SHILAND if absent), hostile | `Spell` x5 then Attack with no waits: one spell per turn, none skipped; a spent spell fails without taking the action | Casts per turn (`PSTF_Casts`), ACTION lines | - |
+| S06 | 000700148 Personal Experiences Done (AR0604) | Quell (0604QUEL), same as S04 | Same as S04 | Same | ok: 1 -> 9 in 8 turns |
+| S07 | 000700128 Wizard is Dead (AR13WZ) | Spawn CBOSS, `ChangeAIScript("1300CWIZ",0)`, LOCALS `Scd_int_0` 1, hostile | Steps 2807 at Player1, 2504 self, 2301; past step 3, `WaitRandom(5,10)` then two ReallyForceSpell 2107 | Lead `WaitRandom`: is it nudged into melee? | ok: counter 1 -> 4 (2807 before the fight, then one step per turn) |
+| S08 | 000700186 Carceri Return (AR0900) | Hezobol (0900HEZO): LOCALS `Scd_int_0` 1, hostile | Through all 12 steps, one spell per turn (2304, 2502, 2402 ...) | Counter progress per turn | ok: 1 -> 13 in 17 turns; the gaps are knockdowns and turns its `See()` gate failed (nudged attack) |
+| S09 | 000700042 Stuck with the Box (AR0306A) | Shilandra (0306SHIL; spawn SHILAND if absent), hostile | `Spell` x5 then Attack with no waits: one spell per turn, none skipped; a spent spell fails without taking the action | Casts per turn (`PSTF_Casts`), ACTION lines | FIXED: was 4 casts in one turn, then ~200-tick turns on spent spells; now one cast per turn, spent spells fall through to Attack at once |
 | S10 | 000700130 Inventory Management (AR0600) | Salabesh (0600SALA) and Elobrande (0600ELOB), hostile together | `Spell; Wait(2); Spell; ...` chains: one spell per turn through the list | After the first spell: melee forever = ISSUE | - |
 | S11 | 000700027 Cleared Entrance (AR0208) | Spawn STRAHAN, `ChangeAIScript("0209NECR",0)`, `SetGlobal("0209_Attack","AR0209",1)`, hostile | Spell sequence 2408, 2213, 2207, 2201, 2309, one per turn | `SpellPoint` at a point; chain progress | - |
 | S12 | 000700052 Got the Gem (AR3010A) | Spawn APPRENT..APPRENT5 with 3012APR1..5, LOCALS `Scd_int_0` 1, all hostile | Four casters each walk through their steps (ForceSpell 2107/2207/2202) | Four step counters at once; turn order | - |
-| S13 | 000700046 Killed Rotten Williams (AR3006D) | Spawn AOLA (3006AOLA), LOCALS `Scd_int_0` 1, hostile | 1106 self, 1103, 1204 ... one per turn | Counter | - |
+| S13 | 000700046 Killed Rotten Williams (AR3006D) | Spawn AOLA (3006AOLA), LOCALS `cd_int_0` 1, hostile | 1106 self, 1103, 1204 ... one per turn | Counter | ok (first run, before the one-cast rule): 1 -> 4 |
 | S14 | 000700083 Got The Key (AR0403) | `S14_starved_dog_mage.lua`: spawn SDMAGE + 0403MAGE, MortalKombat=1, hostile | MortalKombat climbs 1 to 5 | First run: counter stuck at 2 (`turn end drops queue [Wait, IncrementGlobal]`) | FIXED 49e4c6c: 1 -> 5, one step per turn |
 | S15 | 000700061 Cleared Trash Warrens (AR0108) | Spawn SPELRAT, 0108SRAT, hostile | ReallyForceSpell chain 2207 x2, 2115, 2107 ..., then `AR0108Rat_Leader_Done`=1 | The same first spell every turn, the variable never set = ISSUE | - |
 | S16 | 000700077 Killed Many-As-One (AR1600) | Spawn SPELRAT, `ChangeAIScript("1600T2LD",0)`, hostile (`AR1600_PC_Enemy`=1) | Leader casts its Spell/Wait chain; `Leaving_2` global timer path works | Chain; global timer | - |
