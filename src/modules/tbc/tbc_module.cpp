@@ -1101,7 +1101,11 @@ void StandUp(int32_t id) {
 // Every sprite's per-tick update (CGameSprite::AIUpdate): the trip swing's pace and the prone poses.
 void SpriteUpdate(void* sprite, int32_t id, void (*orig)(void*)) {
   int n = 1;
-  if (g.trip_pace.Active() && id == g.trip_pace.id) n = g.trip_pace.Updates(engine::IsAttackSequence(engine::SpriteSequence(id)));
+  if (g.trip_pace.Active() && id == g.trip_pace.id) {
+    const int ph = static_cast<int>(g.trip_pace.phase);
+    n = g.trip_pace.Updates(engine::IsAttackSequence(engine::SpriteSequence(id)));
+    CLog("PACE", Name(id) + " phase " + std::to_string(ph) + " n " + std::to_string(n) + " anim " + engine::AnimProbe(id));
+  }
   // A mover caught one tick late (it floats: no walk path to hold) waits where it is for the swing.
   if (g.aoo_freeze && g.aoo.Active() && id == g.aoo.mover) n = 0;
   // The reactor's attack round runs at kReactionPace until it swings: its swing slot (weapon speed, rolled at the

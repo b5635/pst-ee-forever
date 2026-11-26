@@ -220,7 +220,7 @@ TEST_CASE("tbc aoo lookahead: a running step past the reach edge still provokes,
   CHECK(!StepLeavesReach(rx, ry, 200, 126, later, reach, kAooLookAheadPx));
 }
 
-TEST_CASE("tbc trip pace: half-speed wind-up, 1.5x follow-through, ends with the attack sequence") {
+TEST_CASE("tbc trip pace: half-speed wind-up, 2x follow-through, ends with the attack sequence") {
   TripPace p;
   CHECK(p.Updates(true) == 1);  // inactive: one update a tick
   p.Start(0x180018);
@@ -230,7 +230,7 @@ TEST_CASE("tbc trip pace: half-speed wind-up, 1.5x follow-through, ends with the
   p.Resolved();
   sum = 0;
   for (int i = 0; i < 10; ++i) sum += p.Updates(true);
-  CHECK(sum == 15);  // 1.5x
+  CHECK(sum == 20);  // 2x
   CHECK(p.Active());
   CHECK(p.Updates(false) == 1);  // the attack sequence ended: normal pace
   CHECK(!p.Active());

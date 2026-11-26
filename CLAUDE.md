@@ -285,7 +285,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   next turn start) via `engine::ApplyEffect` (DecodeEffect + vtable AddEffect); no op 39 (its sleep overlay). The pose
   is ours: `engine::PoseLying` holds the PST animation's die cycle (anim SetSequence vtable +0x170, cell frame +0x118),
   played backwards to get up, from the CGameSprite::AIUpdate slot hook (`InstallSpriteUpdate`), which also paces the
-  trip swing (half speed to the hit, 1.5x after; `TripPace`). A trip hit plays the engine's armour hit sound
+  trip swing (half speed to the hit, 2x after; `TripPace`; combat.log `PACE` lines per tick: phase, updates, anim run/cycle/frame/seq). A trip hit plays the engine's armour hit sound
   (`PlayArmorHitSound`) and the target's damage sequence. Engine melee reach = Chebyshev cells (CAIUtil::CountSquares)
   + RANGE_FUDGE 1 while sprite+0x49BC is set; a reaction starts a new attack round (+0x48B2 = 0xFFFF) or it waits a
   whole round to swing. Withdraw walks: the walk/run cycle is chosen only in the anim's SetSequence (re-set on a flip).

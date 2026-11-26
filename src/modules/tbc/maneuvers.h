@@ -229,8 +229,9 @@ struct Reaction {
 
 // --- the trip swing's pace -------------------------------------------------------------------------------
 // The armed swing starts (the attacker's sequence turns into an attack): the trip sound plays, the wind-up
-// runs at half speed (its sprite updates every other tick) up to the hit; then the follow-through runs 1.5x
-// (two updates every other tick) until the attack sequence ends. Presentation only: the engine's own roll
+// runs at half speed (its sprite updates every other tick) up to the hit; then the follow-through runs 2x
+// (two updates every tick) until the attack sequence ends. In game the hit lands at frame 8 of 15: 16 ticks
+// of wind-up, then the 7 follow-through frames in 4 ticks (1.5x was 6 ticks: too close to normal to read). Presentation only: the engine's own roll
 // decides, and the slowed wind-up shifts the swing in time, not its rules.
 struct TripPace {
   enum class Phase : uint8_t { None, Windup, Follow } phase = Phase::None;
@@ -252,7 +253,7 @@ struct TripPace {
       return 1;
     }
     if (phase == Phase::Windup) return (ticks & 1) ? 0 : 1;  // half speed
-    return (ticks & 1) ? 2 : 1;                                // 1.5x
+    return 2;                                                  // 2x
   }
 };
 
