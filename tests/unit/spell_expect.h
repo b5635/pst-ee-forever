@@ -8,7 +8,7 @@
 namespace pstf::spellexpect {
 struct Expect {
   const char* res;
-  const char* stats;  // exact derived stat changes on the measured creature, as spell_results.h writes them
+  const char* stats;  // exact derived stat changes on the measured creature, as spell_results.h writes them; "*" random
   unsigned state;     // STATE bits set
   const char* icon;   // status icon at the end of the cast turn ("rN:buff", "rN:debuff", "none"; "r*:..." any rounds)
   int hp_min, hp_max; // HP change of the measured creature in the cast turn (heals +, damage -)
@@ -72,6 +72,25 @@ inline constexpr Expect kExpect[] = {
     {"SPWI115", "2:+4,7:+4", 0x40000U, "r12:debuff", 0, 0, 12,
      "Blindness (op 74, 60 s): THAC0 +4, AC +4, STATE_BLIND (CGameEffectBlindness::ApplyEffect); a save negates it "
      "all (-Saves pass: no effect, no icon); decay as Vilquar's Eye's op 74 (tbc_decay.lua)"},
+    {"SPWI111", "2:-3,9:-1,10:-1,11:-1,12:-1,13:-1", 0x0U, "r100:buff", 0, 0, 100,
+     "Shield (op 375 type 1): AC -3, saves +1, 25 s/level (500 s at 20)"},
+    {"SPWI113", "-", 0x0U, "none", 0, 0, 0,
+     "Missile of Patience: hovers for its target (the suite's foe takes nothing); tbc_mop.lua: 3 shots of 2d8 (save), "
+     "then gone, an extra click does nothing"},
+    {"SPWI114", "*", 0x0U, "r*:buff", 0, 0, 0,
+     "Friends (op 6): CHR +2d4 for 5-20 s + 5 s/level (random each cast: 1650-1800 ticks at 20); the icon follows the "
+     "CHR, not its sparkle (an attached visual that outlived it: fixed 2026-11-25)"},
+    {"SPWI116", "-", 0x0U, "none", -20, -5, 0, "Tongues of Flame: 5 missiles of 1d4 fire at level >= 9, no save"},
+    {"SPWI117", "50:-1,151:-1", 0x0U, "r6:debuff", 0, 0, 6,
+     "Seeking Flames: Curse's op 379 and foes-only projectile 257, 30 s (save -1 at the rigged foe's cap)"},
+    {"SPWI118", "9:-1,10:-1,11:-1,12:-1,13:-1,50:+1,151:+1", 0x800000U, "r6:buff", 0, 0, 6,
+     "Scripture of Steel: Blessing's op 130 and projectile 256, 30 s"},
+    {"SPWI119", "2:-4,9:-1,10:-1,11:-1,12:-1,13:-1", 0x0U, "r50:buff", 0, 0, 50,
+     "Submerge the Will (op 375 type 15): AC -4, saves +1 for 15 x (25 x level / 2) ticks (the engine's 12.5 s/level, "
+     "250 s at 20; the text says 12); decay in tbc_decay.lua"},
+    {"SPWI120", "2:+4,7:+4", 0x40000U, "r6:debuff", 0, 0, 6,
+     "Vilquar's Eye: op 74 blind 30 s, save at -1 negates; decay in tbc_decay.lua"},
+    {"SPWI121", "-", 0x0U, "none", -30, -15, 0, "Reign of Anger: 5 missiles of 1d4+2 at level >= 9, no save"},
     {"SPWI201", "-", 0x0U, "none", -8, -2, 7,
      "Adder's Kiss (op 374): 2-8 in the cast turn, then one 2-8 hit at each of the victim's turn starts, "
      "1 + level/3 hits in all (7 at level 20), then none (tbc_decay.lua phase C); no status icon (vanilla)"},

@@ -1086,3 +1086,16 @@ TEST_CASE("tbc status: an effect until destroyed (Armor, ~INT_MAX ticks) has an 
   CHECK(icons[0].parent == "SPPR101" && icons[0].rounds == 6);  // the one with an end first
   CHECK(icons[1].parent == "SPWI102" && icons[1].rounds == 0 && icons[1].share == 1.0);
 }
+
+TEST_CASE("tbc status: an attached visual does not hold the icon past the spell's own effects (Friends)") {
+  using namespace pstf::tbc;
+  // spell_follow SPWI114 at owner turn start 22: CHR (op 6) gone, its sparkle (an attached object) 105 ticks left
+  StatusSpans spans;
+  std::vector<StatusEffect> fx{{1, "SPWI114", 0, 30, true, false, 0, 6}, {1, "SPWI114", 0, 105, true, false, 0, -1}};
+  auto icons = CollectStatus(1, fx, 0, kRoundTicks5s, &spans, 8);
+  CHECK(icons.size() == 1 && icons[0].rounds == 1);  // the CHR's last round, not the sparkle's 2
+  // a spell with only an attached object (Submerge the Will's shield) keeps its icon from it
+  std::vector<StatusEffect> only{{1, "SPWI119", 0, 1080, true, false, 0, -1}};
+  icons = CollectStatus(1, only, 0, kRoundTicks5s, &spans, 8);
+  CHECK(icons.size() == 1 && icons[0].rounds == 15);
+}

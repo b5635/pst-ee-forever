@@ -103,16 +103,16 @@ its row in `tests/unit/spell_expect.h` holds what was seen.
 | SPWI105 | Identify | identify an item | OOC | - | item identified; no-cast-time cast spends the action | G (exists) | yes 2026-11-25 |
 | SPWI107 | Magic Missile | 1-5 missiles 1d4+1 | INSTANT | - | HP loss = n x (2..5); all missiles land in the turn | U1 U2 | yes 2026-11-25 |
 | SPWI108 | Pacify | 2-8 non-undead stop fighting (paralyse + sleep-like), 40 s + 5 s/lvl; broken by damage (SPWI108A) | DISABLE, LINGER | D | targets lose their turns; damage ends it (they act next turn) | U2 G |  |
-| SPWI111 | Shield | AC 3 vs most, MM immunity (op 375) | ATTACHED | B | AC; Magic Missile refused | U2 G |  |
-| SPWI113 | Missile of Patience | hovers, fires when the caster clicks (cursor 20), 3 shots | special | - | exists: `tbc_mop.lua` | G (exists) |  |
-| SPWI114 | Friends | +2d4 CHR | BUFF | B | CHR +2..8; ends | U1 U2 |  |
+| SPWI111 | Shield | AC 3 vs most, MM immunity (op 375) | ATTACHED | B | AC; Magic Missile refused | U2 G | yes 2026-11-25 |
+| SPWI113 | Missile of Patience | hovers, fires when the caster clicks (cursor 20), 3 shots | special | - | exists: `tbc_mop.lua` | G (exists) | yes 2026-11-25 |
+| SPWI114 | Friends | +2d4 CHR | BUFF | B | CHR +2..8; ends | U1 U2 | yes 2026-11-25 |
 | SPWI115 | Blindness | blind 60 s, save neg | DISABLE | D 12 | to-hit / AC penalties of op 74; ends after 12 rounds | U1 U2 | yes 2026-11-25 |
-| SPWI116 | Tongues of Flame | fire missiles 1d4+1 each | INSTANT | - | HP bounds | U1 U2 |  |
-| SPWI117 | Seeking Flames | foes -1 hit/saves 30 s (op 379) | DEBUFF | D 6 | as Curse | U1 U2 |  |
-| SPWI118 | Scripture of Steel | allies +1 hit/saves 30 s (op 130) | BUFF | B 6 | as Blessing | U1 U2 |  |
-| SPWI119 | Submerge the Will | AC + saves, 12 s/lvl (op 375, parentless effects) | ATTACHED | B | icon via orphans (exists); ends on time | U2 (exists partly) |  |
-| SPWI120 | Vilquar's Eye | blind 30 s, save -1 | DISABLE | D 6 | as Blindness | U1 U2 |  |
-| SPWI121 | Reign of Anger | missiles 1d4+2 | INSTANT | - | HP bounds | U1 U2 |  |
+| SPWI116 | Tongues of Flame | fire missiles 1d4+1 each | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
+| SPWI117 | Seeking Flames | foes -1 hit/saves 30 s (op 379) | DEBUFF | D 6 | as Curse | U1 U2 | yes 2026-11-25 |
+| SPWI118 | Scripture of Steel | allies +1 hit/saves 30 s (op 130) | BUFF | B 6 | as Blessing | U1 U2 | yes 2026-11-25 |
+| SPWI119 | Submerge the Will | AC + saves, 12 s/lvl (op 375, parentless effects) | ATTACHED | B | icon via orphans (exists); ends on time | U2 (exists partly) | yes 2026-11-25 |
+| SPWI120 | Vilquar's Eye | blind 30 s, save -1 | DISABLE | D 6 | as Blindness | U1 U2 | yes 2026-11-25 |
+| SPWI121 | Reign of Anger | missiles 1d4+2 | INSTANT | - | HP bounds | U1 U2 | yes 2026-11-25 |
 | SPWI201 | Adder's Kiss | acid hit, lingers 5 s / 3 lvls (op 374) | INSTANT + DOT | D | first hit in the cast turn, then one per victim round (exists: `tbc_hive`) | U2 (exists) | yes 2026-11-25 |
 | SPWI202 | Black-Barbed Curse | barbs 4d4 after 35 ticks | ONSET | - | HP within 4..16, in the caster's turn | U1 U2 |  |
 | SPWI203 | Black-Barbed Shield | barbs hurt attackers, 10-30 s (op 375) | ATTACHED | B | melee attacker loses HP | U2 G |  |

@@ -119,7 +119,8 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
   struct Src {
     std::string res;
     uint32_t type = 0, flags = 0;
-    int32_t left = 0;
+    int32_t left = 0;     // longest of its own timed effects
+    int32_t attached = 0; // longest of its attached spell objects (opcode -1)
   };
   (void)now;  // spans follow the time left, not the world clock (frozen in a fight)
   std::vector<Src> src;
@@ -133,15 +134,16 @@ inline std::vector<StatusIcon> CollectStatus(int32_t id, const std::vector<Statu
     // and made the icon a round too long; a spell with nothing but such effects left has no status
     if (IsPresentationOpcode(e.opcode)) continue;
     auto it = std::find_if(src.begin(), src.end(), [&](const Src& s) { return s.res == e.parent; });
-    if (it == src.end()) {
-      src.push_back({e.parent, e.parent_type, e.parent_flags, e.left});
-    } else {
-      it->left = std::max(it->left, e.left);
-      it->flags |= e.parent_flags;
-    }
+    if (it == src.end()) it = src.insert(src.end(), {e.parent, e.parent_type, e.parent_flags, 0, 0});
+    // An attached spell object counts only for a spell with no timed effect of its own: Friends' sparkle (its op
+    // 369 visual, an attached object) outlived its CHR bonus by a round and held the icon (spell_follow, 2026-11-25);
+    // Submerge the Will's and the shields' objects carry their spell when the effects are short re-applies.
+    (e.opcode == -1 ? it->attached : it->left) = std::max(e.opcode == -1 ? it->attached : it->left, e.left);
+    it->flags |= e.parent_flags;
   }
   std::vector<StatusIcon> out;
-  for (const Src& s : src) {
+  for (Src s : src) {
+    if (s.left <= 0) s.left = s.attached;
     StatusIcon icon;
     icon.parent = s.res;
     icon.parent_type = s.type;

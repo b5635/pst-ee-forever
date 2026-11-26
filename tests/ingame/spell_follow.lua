@@ -30,7 +30,7 @@ local function isParty(id)
 end
 local function show(id, when)
 	local st = (#(F.stats or {}) > 0) and PSTF_Stat(id, (table.unpack or unpack)(F.stats)) or '-'
-	local _, icons = PSTF_Status(id, 1)
+	local _, icons = PSTF_Status(id, 0)  -- logged with the raw parent effects
 	PSTF_Effects(id)  -- logs op:type:ticks
 	note(string.format('%s: %X hp %d stats [%s] state %X icons %s', when, id, hp(id), st, PSTF_State(id, 1) or 0,
 		(icons ~= '' and icons) or 'none'))

@@ -19,6 +19,6 @@ $lines = Get-Content $log
 for ($i = 0; $i -lt $lines.Count; $i++) {
   $l = $lines[$i]
   if ($l -match 'spell_follow:|TEST FAIL|WARNING|faulted') { $l.Substring(13) }
-  elseif ($l -match 'PSTF_Effects' -and $i + 1 -lt $lines.Count -and $lines[$i + 1] -match 'spell_follow:') { '   ' + $l.Substring(13) }
+  elseif ($l -match 'PSTF_Effects|PSTF_Status' -and $i + 1 -lt $lines.Count -and ($lines[$i + 1] -match 'spell_follow:' -or ($i + 2 -lt $lines.Count -and $lines[$i + 2] -match 'spell_follow:'))) { '   ' + $l.Substring(13) }
 }
 exit $rc
