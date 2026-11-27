@@ -4,14 +4,15 @@
 --      -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'} -Until 'combat_text: ok|TEST FAIL' -Close -Timeout 400
 -- 1. Blessing on the Nameless One: its name shows (status on); removed: shown again and struck through.
 -- 2. Damage effects on a companion: 4 fire -> a number in the fire colour, 3 crushing -> a white number, landing
---    together in one row (a second 1 crushing in the same tick adds to the 3: "4"); a heal -> a green number. The engine's own "Damage: N" floaters are taken over.
+--    each glides out from the body's middle for ~0.3 s, then sits; the two stop apart (a second 1 crushing in the same
+--    tick adds to the 3: "4"); a heal -> a white "+2". The engine's own "Damage: N" floaters are taken over.
 -- 3. A fight against the nearest Hive thug (its AC raised: the party misses): "Miss!" or "Critical Miss!" over it,
 --    weapon damage as white numbers; a line never moves while the view does not (it stays where it appeared).
 -- Shots: pst_forever/logs/ctext_{status,strike,numbers,fight,hover}.bmp
 local function fail(msg) PSTF_Note('TEST FAIL: ' .. msg) pstfTestTick = nil end
-local FIRE, WHITE, HEAL = 0x287CF6, 0xFFFFFF, 0x5CCE70
+local FIRE, WHITE = 0x287CF6, 0xFFFFFF
 local n, party, enemy, fight_at = 0, {}, -1, -1
-local got = {on = false, strike = false, fire = false, white = false, row = false, heal = false, miss = false, wnum = false}
+local got = {on = false, strike = false, fire = false, white = false, apart = false, glide = false, heal = false, miss = false, wnum = false}
 local shots = {}
 local pos = {}  -- line key -> x, y, view centre when first seen
 
@@ -40,12 +41,19 @@ local function scan()
     if l.k == 3 then
       if l.c == FIRE or l.c2 == FIRE then got.fire = true end
       if l.c == WHITE or l.c2 == WHITE then got.white = true end
-      if l.n >= 2 then got.row = true shot('numbers') end
       for j = 1, l.n do if l.cs[j] == WHITE and l.ts[j] == '4' then got.merged = true end end
       if fight_at > 0 and l.c == WHITE then got.wnum = true end
     end
-    if l.k == 3 or l.k == 4 then  -- a heal landing with damage shares its row
-      for j = 1, l.n do if l.cs[j] == HEAL then got.heal = true end end
+    if l.k == 4 and l.c == WHITE and string.sub(l.t, 1, 1) == '+' then got.heal = true end
+    if (l.k == 3 or l.k == 4) and fight_at < 0 then
+      for _, o in ipairs(lines()) do  -- two of this creature's numbers, both settled: stopped apart
+        local q = pos[o.id .. '|' .. o.slot .. '|' .. o.k .. '|' .. o.t .. '|' .. o.c]
+        local mine = pos[l.id .. '|' .. l.slot .. '|' .. l.k .. '|' .. l.t .. '|' .. l.c]
+        if o.id == l.id and (o.k == 3 or o.k == 4) and (o.t ~= l.t or o.c ~= l.c) and q and mine and n - q.t > 12
+          and n - mine.t > 12 and (math.abs(o.x - l.x) > 12 or math.abs(o.y - l.y) > 14) then
+          got.apart = true shot('numbers')
+        end
+      end
     end
     if (l.k == 2 or l.k == 1) and fight_at > 0 then
       got.miss = got.miss or l.t == 'Miss!' or l.t == 'Critical Miss!'
@@ -53,10 +61,15 @@ local function scan()
       if l.t == 'Miss!' and l.k ~= 2 then return fail('Miss! is kind ' .. l.k) end
     end
     -- sitting still: the same line at the same UI point while the view stays put
-    local key = l.id .. '|' .. l.slot .. '|' .. l.k .. '|' .. l.t
+    -- a number glides for kCtDriftMs (~9 ticks) first: its still check starts after that
+    local num = l.k == 3 or l.k == 4
+    local key = l.id .. '|' .. l.slot .. '|' .. l.k .. '|' .. l.t .. '|' .. l.c
     local p = pos[key]
     if not p then
-      pos[key] = {x = l.x, y = l.y, vx = vx, vy = vy, t = n}
+      pos[key] = {x = l.x, y = l.y, vx = vx, vy = vy, t = n, x0 = l.x, y0 = l.y}
+    elseif num and n - p.t <= 12 then
+      if p.vx == vx and p.vy == vy and (math.abs(p.x0 - l.x) > 2 or math.abs(p.y0 - l.y) > 2) then got.glide = true end
+      p.x, p.y, p.vx, p.vy = l.x, l.y, vx, vy
     elseif p.vx == vx and p.vy == vy and n - p.t < 60 and (math.abs(p.x - l.x) > 1 or math.abs(p.y - l.y) > 1) then
       return fail(string.format('line "%s" moved from %d,%d to %d,%d with the view still', l.t, p.x, p.y, l.x, l.y))
     end
@@ -91,12 +104,13 @@ function pstfTestTick()
   if n == 84 then PSTF_StatusFxApply(party[2], 17, 2, 0, 0) return end  -- heal 2
   if n == 110 then
     local cnt, floaters, taken = PSTF_CombatText()
-    PSTF_Note(string.format('combat_text: lines %d, engine floaters %d, taken %d; fire %s white %s row %s heal %s', cnt,
-      floaters, taken, tostring(got.fire), tostring(got.white), tostring(got.row), tostring(got.heal)))
+    PSTF_Note(string.format('combat_text: lines %d, engine floaters %d, taken %d; fire %s white %s apart %s heal %s', cnt,
+      floaters, taken, tostring(got.fire), tostring(got.white), tostring(got.apart), tostring(got.heal)) .. ' glide ' .. tostring(got.glide))
     if not got.fire then return fail('no fire-coloured number') end
     if not got.white then return fail('no white number for crushing damage') end
-    if not got.row then return fail('the two numbers did not share a row') end
-    if not got.heal then return fail('no green heal number') end
+    if not got.glide then return fail('no number glided out from the body') end
+    if not got.apart then return fail('the fire and crushing numbers did not stop apart') end
+    if not got.heal then return fail('no white +N heal number') end
     if not got.merged then return fail('3 + 1 crushing in one tick did not show one white 4') end
     if (taken or 0) < 2 then return fail('the engine floaters were not taken over') end
     enemy = PSTF_MakeEnemyNearest()

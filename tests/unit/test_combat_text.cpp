@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // L0 tests for the BG3 combat text (src/modules/tbc/combat_text.h). Times from the reference clip
 // (youtube.com/watch?v=mfZz9N57glw at 5 fps): "Miss!" stays put ~2.4 s then fades, an ended status is struck
-// through from the left ~0.3 s after it shows, numbers that land together share a row ("13 12").
+// through from the left ~0.3 s after it shows; at 25-30 fps: a number glides ~0.3 s out from the body and stops,
+// numbers one after another stop apart (Magic Missile's 3 5 3 at 0:41).
 #include "mini_test.h"
 #include "modules/tbc/combat_text.h"
 
@@ -71,17 +72,17 @@ TEST_CASE("timing: fades in, sits still, fades out, gone; the strike crosses aft
 TEST_CASE("stacking: a creature's lines keep its first point and fill slots from the top down") {
   CombatTextBook b;
   b.Add(1, 100, 50, CtKind::Miss, {"Miss!"}, 1000);
-  const CtLine& dmg = b.Add(1, 140, 60, CtKind::Damage, {"12"}, 1100);  // it walked: same point
-  CHECK(dmg.slot == 1);
-  CHECK(dmg.ax == 100);
-  CHECK(dmg.ay == 50);
+  const CtLine& st = b.Add(1, 140, 60, CtKind::StatusOn, {"Blessing"}, 1100);  // it walked: same point
+  CHECK(st.slot == 1);
+  CHECK(st.ax == 100);
+  CHECK(st.ay == 50);
   const CtLine& other = b.Add(2, 300, 80, CtKind::Text, {"Run!"}, 1100);
   CHECK(other.slot == 0);
   CHECK(other.ax == 300);
-  // "Miss!" gone (t0 1000 + life): the next line takes slot 0 again, above the number row
+  // "Miss!" gone (t0 1000 + life): the next line takes slot 0 again, under "Blessing"
   const CtLine& late = b.Add(1, 500, 500, CtKind::Crit, {"Critical Hit!"}, 1000 + kCtLifeMs);
   CHECK(late.slot == 0);
-  CHECK(late.ax == 100);  // the number row still holds the point
+  CHECK(late.ax == 100);  // "Blessing" still holds the point
   CHECK(b.Lines().size() == 3);
   // all gone: a new stack starts where the creature is now
   const CtLine& fresh = b.Add(1, 520, 510, CtKind::Text, {"Block!"}, 10000);
@@ -90,57 +91,91 @@ TEST_CASE("stacking: a creature's lines keep its first point and fill slots from
   CHECK(b.Lines().size() == 1);
 }
 
-TEST_CASE("numbers that land together share a row; later ones start a new row") {
+TEST_CASE("numbers glide out from the body's middle, ease out, stop, and stop apart from each other") {
+  // the glide (reference clip: ~0.3 s, fast first)
+  CHECK(CtDrift(0) == 0.0);
+  CHECK(CtDrift(kCtDriftMs / 2) == 0.875);  // ease-out cubic: 7/8 of the way at half time
+  CHECK(CtDrift(kCtDriftMs) == 1.0);
+  CHECK(CtDrift(2000) == 1.0);
   CombatTextBook b;
-  b.Add(7, 0, 0, CtKind::Damage, {"13", kCtNumber}, 0);
-  const CtLine& row = b.Add(7, 0, 0, CtKind::Damage, {"12", DamageColor(0x8)}, 150);
-  CHECK(row.segs.size() == 2);
-  CHECK(row.segs[1].color == DamageColor(0x8));
-  CHECK(b.Lines().size() == 1);
-  b.Add(7, 0, 0, CtKind::Heal, {"4", kCtHeal}, 200);
-  b.Add(7, 0, 0, CtKind::Damage, {"1"}, 300);
-  CHECK(b.Lines().back().segs.size() == 4);
-  const CtLine& next = b.Add(7, 0, 0, CtKind::Damage, {"2"}, 350);  // the row is full
-  CHECK(next.slot == 1);
-  const CtLine& later = b.Add(7, 0, 0, CtKind::Damage, {"3"}, 350 + kCtJoinMs);  // too late for row 2
-  CHECK(later.slot == 2);
-  CHECK(b.Lines().size() == 3);
+  const CtLine& a = b.Add(7, 200, 100, CtKind::Damage, {"3", DamageColor(0x40), 3}, 0);
+  CHECK(a.ax == 200);  // starts at the point given: the body's middle
+  CHECK(a.ay == 100);
+  CHECK(a.ex == kCtFan[0][0]);
+  CHECK(a.ey == kCtFan[0][1]);
+  int x = 0, y = 0;
+  CombatTextBook::Position(a, 0, &x, &y);
+  CHECK(x == 200);
+  CHECK(y == 100);
+  CombatTextBook::Position(a, kCtDriftMs / 2, &x, &y);
+  CHECK(y == 100 - 26);  // -30 * 0.875 = -26.25
+  CombatTextBook::Position(a, 1500, &x, &y);
+  CHECK(y == 100 + kCtFan[0][1]);  // stopped there
+  // Magic Missile: three more bolts, 80 ms apart (no merge: past kCtMergeMs) -> three other end spots
+  b.Add(7, 200, 100, CtKind::Damage, {"5", DamageColor(0x40), 5}, 120);
+  b.Add(7, 200, 100, CtKind::Damage, {"3", DamageColor(0x40), 3}, 240);
+  b.Add(7, 200, 100, CtKind::Damage, {"4", DamageColor(0x40), 4}, 360);
+  CHECK(b.Lines().size() == 4);
+  for (size_t i = 0; i < b.Lines().size(); ++i)
+    for (size_t j = i + 1; j < b.Lines().size(); ++j) {
+      const CtLine& p = b.Lines()[i];
+      const CtLine& q = b.Lines()[j];
+      const bool touch = std::abs((p.ay + p.ey) - (q.ay + q.ey)) < kCtNumH && CtOverlapX(p.ax + p.ex, p.w, q.ax + q.ex, q.w);
+      CHECK(!touch);
+    }
+  CHECK(b.Lines()[1].ex == kCtFan[1][0]);  // left, then right, then up-left
+  CHECK(b.Lines()[2].ex == kCtFan[2][0]);
+  CHECK(b.Lines()[3].ey == kCtFan[3][1]);
+  // numbers take no text slot: a "Miss!" over the same creature is still slot 0
+  CHECK(b.Add(7, 200, 60, CtKind::Miss, {"Miss!"}, 400).slot == 0);
+}
+
+TEST_CASE("heals: white +N, and heals within kCtMergeMs add up, never into damage") {
+  CHECK(HealText(5) == "+5");
+  CHECK(kCtHeal == kCtNumber);  // white
+  CombatTextBook b;
+  CHECK(b.Add(7, 0, 0, CtKind::Heal, {"5", kCtHeal, 5}, 1000).segs[0].text == "+5");
+  const CtLine& h = b.Add(7, 0, 0, CtKind::Heal, {"2", kCtHeal, 2}, 1050);
+  CHECK(b.Merged());
+  CHECK(h.segs[0].text == "+7");
+  b.Add(7, 0, 0, CtKind::Damage, {"3", kCtNumber, 3}, 1060);  // white weapon damage, same moment: its own number
+  CHECK(!b.Merged());
+  CHECK(b.Lines().size() == 2);
+  CHECK(b.Lines().back().segs[0].text == "3");
+  b.Add(7, 0, 0, CtKind::Heal, {"1", kCtHeal, 1}, 1000 + kCtMergeMs);  // past the window: a new heal
+  CHECK(!b.Merged());
+  CHECK(b.Lines().back().segs[0].text == "+1");
 }
 
 TEST_CASE("numbers of one damage type within kCtMergeMs add up: a dagger's 1d6 + 1 shows 7") {
   CombatTextBook b;
   b.Add(7, 0, 0, CtKind::Damage, {"6", kCtNumber, 6}, 1000);
   CHECK(!b.Merged());
-  const CtLine& row = b.Add(7, 0, 0, CtKind::Damage, {"1", kCtNumber, 1}, 1000);  // same tick
+  const CtLine& n = b.Add(7, 0, 0, CtKind::Damage, {"1", kCtNumber, 1}, 1000);  // same tick
   CHECK(b.Merged());
-  CHECK(row.segs.size() == 1);
-  CHECK(row.segs[0].text == "7");
-  CHECK(row.segs[0].value == 7);
+  CHECK(n.segs.size() == 1);
+  CHECK(n.segs[0].text == "7");
+  CHECK(n.segs[0].value == 7);
+  CHECK(b.Lines().size() == 1);
   b.Add(7, 0, 0, CtKind::Damage, {"2", kCtNumber, 2}, 1000 + kCtMergeMs - 1);  // still within the window
   CHECK(b.Lines().back().segs[0].text == "9");
-  // another type: its own number in the row
+  // another type: its own number
   b.Add(7, 0, 0, CtKind::Damage, {"4", DamageColor(0x8), 4}, 1050);
   CHECK(!b.Merged());
-  CHECK(b.Lines().back().segs.size() == 2);
-  // the same type but later than the window (still inside the row's join time): a second number
+  CHECK(b.Lines().size() == 2);
+  // the same type but later than the window: its own number
   b.Add(7, 0, 0, CtKind::Damage, {"3", kCtNumber, 3}, 1000 + kCtMergeMs);
   CHECK(!b.Merged());
-  CHECK(b.Lines().back().segs.size() == 3);
-  CHECK(b.Lines().back().segs[2].text == "3");
-  // a heal never adds to damage; two heals do add up
-  b.Add(7, 0, 0, CtKind::Heal, {"5", kCtHeal, 5}, 1150);
-  b.Add(7, 0, 0, CtKind::Heal, {"2", kCtHeal, 2}, 1160);
-  CHECK(b.Merged());
-  CHECK(b.Lines().back().segs.size() == 4);
-  CHECK(b.Lines().back().segs[3].text == "7");
+  CHECK(b.Lines().size() == 3);
+  CHECK(b.Lines().back().segs[0].text == "3");
   // another creature's number never adds
-  b.Add(8, 0, 0, CtKind::Damage, {"1", kCtNumber, 1}, 1160);
+  b.Add(8, 0, 0, CtKind::Damage, {"1", kCtNumber, 1}, 1100);
   CHECK(!b.Merged());
-  CHECK(b.Lines().size() == 2);
-  // text segments (no value) never add
+  CHECK(b.Lines().size() == 4);
+  // text (no value) never adds
   b.Add(9, 0, 0, CtKind::Damage, {"x"}, 2000);
   b.Add(9, 0, 0, CtKind::Damage, {"y"}, 2000);
-  CHECK(b.Lines().back().segs.size() == 2);
+  CHECK(b.Lines().back().segs[0].text == "y");
 }
 
 TEST_CASE("a full stack drops its oldest line; the book holds at most kCtLines") {
@@ -160,9 +195,9 @@ TEST_CASE("neighbours: only lines that would touch share rows; others stay level
   CHECK(CtOverlapX(0, 100, 100, 100));    // 100 apart, 50 + 50 wide halves + air: touching
   CHECK(!CtOverlapX(0, 40, 100, 40));     // short lines 100 apart: apart
   CombatTextBook b;
-  // two party members 70 px apart take damage at once: short numbers, side by side, both just above the head
-  const CtLine& a = b.Add(1, 100, 50, CtKind::Damage, {"7", kCtNumber, 7}, 0);
-  const CtLine& c = b.Add(2, 170, 56, CtKind::Damage, {"12", kCtNumber, 12}, 0);
+  // two party members 70 px apart: short lines, side by side, both just above their own heads
+  const CtLine& a = b.Add(1, 100, 50, CtKind::Miss, {"Miss!"}, 0);
+  const CtLine& c = b.Add(2, 170, 56, CtKind::Miss, {"Miss!"}, 0);
   CHECK(a.slot == 0);
   CHECK(c.slot == 0);
   CHECK(c.ay == 56);  // its own head height

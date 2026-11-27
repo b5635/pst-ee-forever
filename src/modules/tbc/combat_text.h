@@ -6,8 +6,9 @@
 // new line takes the lowest free slot, so nothing drops onto the body or the feet. A neighbour's lines count only
 // when they would really run into ours (CtOverlapX on the text widths): then we share their rows, else creatures
 // side by side keep their lines level over their own heads.
-// Damage is a bare number, white for weapon damage and coloured by damage type; numbers that land together share
-// a row ("13 12"); numbers of one colour within kCtMergeMs are one number (a dagger's 1d6 + 1 shows "7", not "6 1").
+// Damage is a bare number, white for weapon damage and coloured by damage type, a heal a white "+N"; numbers glide
+// out from the middle of the body and stop apart (kCtFan); one kind and colour within kCtMergeMs is one number (a
+// dagger's 1d6 + 1 shows "7", not "6 1").
 // "Miss!" or "Critical Miss!" (never both), "Critical Hit!" in red. A buff or debuff shows its name
 // when it starts; when it ends the name shows again and a line is drawn through it from left to right.
 #include <cstdint>
@@ -23,8 +24,7 @@ constexpr uint32_t kCtFadeOutMs = 2300;   // fully shown until here (the clip: ~
 constexpr uint32_t kCtLifeMs = 2800;
 constexpr uint32_t kCtStrikeDelayMs = 300;  // a status that ends: shown plain, then struck through
 constexpr uint32_t kCtStrikeMs = 400;       // the line crosses the name in this time
-constexpr uint32_t kCtJoinMs = 400;         // damage numbers of one creature this close share a row
-constexpr uint32_t kCtMergeMs = 100;        // ...and of one colour (damage type) this close add up: 6 + 1 -> "7"
+constexpr uint32_t kCtMergeMs = 100;        // numbers of one creature, kind and colour this close add up: 6 + 1 -> "7"
 constexpr int kCtLines = 24;                // on screen at once (UI menus PSTF_CT1..N)
 constexpr int kCtSegs = 4;                  // numbers in one row
 // Damage numbers: PTSERIF. The game's VOLLKORN has old-style figures, its "1" is a short capital I.
@@ -43,7 +43,23 @@ constexpr uint32_t Bgr(int r, int g, int b) {
 constexpr uint32_t kCtWhite = Bgr(236, 232, 224);   // BG3's warm white
 constexpr uint32_t kCtNumber = Bgr(255, 255, 255);  // weapon damage
 constexpr uint32_t kCtRed = Bgr(214, 34, 30);       // "Concentration Broken!" / "Critical Hit!"
-constexpr uint32_t kCtHeal = Bgr(112, 206, 92);
+constexpr uint32_t kCtHeal = Bgr(255, 255, 255);  // heals: white "+N"
+inline std::string HealText(int v) { return "+" + std::to_string(v); }
+
+// Damage and heal numbers (reference clip at 25-30 fps: the dagger's 12 at 0:10, Magic Missile's 3 5 3 at 0:41):
+// a number appears at the middle of the body, glides out ~30 px with an ease-out in kCtDriftMs and stops, then sits
+// until it fades. Numbers that come one after another each take another end spot round the body (kCtFan, the
+// first free one), so where they stop they do not overlap. Offsets are world px at zoom 1.
+constexpr uint32_t kCtDriftMs = 300;
+constexpr int kCtFanN = 8;
+constexpr int kCtFan[kCtFanN][2] = {{0, -30}, {-38, -10}, {38, -10}, {-30, -56}, {30, -56}, {0, -82}, {-64, -34}, {64, -34}};
+constexpr int kCtNumH = 26;  // a number's height: end spots closer than this in y and touching in x collide
+// Share of the glide done at ms since the number appeared (ease-out cubic).
+inline double CtDrift(uint32_t ms) {
+  if (ms >= kCtDriftMs) return 1.0;
+  const double t = 1.0 - static_cast<double>(ms) / kCtDriftMs;
+  return 1.0 - t * t * t;
+}
 
 // Damage type bits (the damage effect's param2 high word, IESDP opcode 12) -> the number's colour.
 // Weapon damage (crushing 0, piercing 0x10, slashing 0x100, missile 0x80) stays white.
@@ -134,7 +150,8 @@ struct CtSeg {
 };
 struct CtLine {
   int32_t id = -1;        // the creature it is about
-  int ax = 0, ay = 0;     // world point of slot 0 (fixed when the creature's first line appeared)
+  int ax = 0, ay = 0;     // world point of slot 0 (fixed when the creature's first line appeared); a number: its start
+  int ex = 0, ey = 0;     // a number: where it glides to, from (ax, ay) (kCtFan)
   int slot = 0;           // 0 just above the head; higher slots stack upward (kCtLinePx each)
   int w = 0;              // estimated width (CtLineWidth), world px at zoom 1
   uint32_t t0 = 0;        // ms when it appeared
@@ -161,56 +178,37 @@ inline bool CtOverlapX(int ax, int wa, int bx, int wb) { return 2 * std::abs(ax 
 // The lines on screen. Pure: the module gives it times, ids and world points.
 class CombatTextBook {
  public:
-  // A new line over creature `id` whose head point is (x, y) now. Damage/heal numbers join that creature's newest
-  // number row when it is younger than kCtJoinMs and has room; a number of the same colour as one in that row
-  // that came less than kCtMergeMs ago is added to it (Merged() says so). -> the line (or the row it joined).
+  // A new line over creature `id`: (x, y) is its head point now for text, the middle of its body for a damage/heal
+  // number (AddNumber; Merged() says it was added to an earlier number). -> the line (or the number it joined).
   const CtLine& Add(int32_t id, int x, int y, CtKind kind, CtSeg seg, uint32_t now) {
     Expire(now);
     merged_ = false;
     seg.t = now;
-    const bool number = kind == CtKind::Damage || kind == CtKind::Heal;
-    if (number) {
-      for (auto it = lines_.rbegin(); it != lines_.rend(); ++it) {
-        if (it->id != id || (it->kind != CtKind::Damage && it->kind != CtKind::Heal)) continue;
-        if (seg.value >= 0)
-          for (CtSeg& s : it->segs)
-            if (s.value >= 0 && s.color == seg.color && now - s.t < kCtMergeMs) {
-              s.value += seg.value;
-              s.text = std::to_string(s.value);
-              merged_ = true;
-              return *it;
-            }
-        if (now - it->t0 < kCtJoinMs && static_cast<int>(it->segs.size()) < kCtSegs) {
-          it->segs.push_back(std::move(seg));
-          it->w = CtLineWidth(it->kind, it->segs);
-          return *it;
-        }
-        break;
-      }
-    }
+    if (IsNumber(kind)) return AddNumber(id, x, y, kind, std::move(seg), now);
     CtLine l;
     l.id = id, l.kind = kind, l.t0 = now, l.ax = x, l.ay = y;
     l.segs.push_back(std::move(seg));
     l.w = CtLineWidth(kind, l.segs);
     bool own = false;
     for (const CtLine& o : lines_)
-      if (o.id == id) l.ax = o.ax, l.ay = o.ay, own = true;  // the creature's stack keeps its point
+      if (o.id == id && !IsNumber(o.kind)) l.ax = o.ax, l.ay = o.ay, own = true;  // the creature's stack keeps its point
     // A neighbour's line close in height that the new line would run into: share its rows (its height), keep our
     // own x. Neighbours whose lines do not touch ours keep their own heights and slots.
-    auto collides = [&](const CtLine& o) { return o.ay == l.ay && CtOverlapX(o.ax, o.w, l.ax, l.w); };
+    // (numbers glide on their own and take no slot)
+    auto collides = [&](const CtLine& o) { return !IsNumber(o.kind) && o.ay == l.ay && CtOverlapX(o.ax, o.w, l.ax, l.w); };
     if (!own)
       for (const CtLine& o : lines_)
-        if (std::abs(o.ay - y) < kCtNearY && CtOverlapX(o.ax, o.w, l.ax, l.w)) {
+        if (!IsNumber(o.kind) && std::abs(o.ay - y) < kCtNearY && CtOverlapX(o.ax, o.w, l.ax, l.w)) {
           l.ay = o.ay;
           break;
         }
     uint32_t used = 0;
     for (const CtLine& o : lines_)
-      if (o.id == id || collides(o)) used |= 1u << o.slot;
+      if ((o.id == id && !IsNumber(o.kind)) || collides(o)) used |= 1u << o.slot;
     l.slot = FirstFree(used);
     if (l.slot < 0) {  // full: the oldest line of the rows gives way
       for (auto it = lines_.begin(); it != lines_.end(); ++it)
-        if (it->id == id || collides(*it)) {
+        if ((it->id == id && !IsNumber(it->kind)) || collides(*it)) {
           l.slot = it->slot;
           lines_.erase(it);
           break;
@@ -227,6 +225,14 @@ class CombatTextBook {
   void Clear() { lines_.clear(); }
   const std::vector<CtLine>& Lines() const { return lines_; }
   bool Merged() const { return merged_; }  // the last Add added its number to an earlier one
+  static bool IsNumber(CtKind k) { return k == CtKind::Damage || k == CtKind::Heal; }
+  // Where a line is drawn at `now`, world px: a number glides from its start toward its end spot; a text line sits
+  // at its stack point (the caller adds its slot).
+  static void Position(const CtLine& l, uint32_t now, int* x, int* y) {
+    const double d = IsNumber(l.kind) ? CtDrift(now - l.t0) : 0.0;
+    *x = l.ax + static_cast<int>(l.ex * d + (l.ex >= 0 ? 0.5 : -0.5));
+    *y = l.ay + static_cast<int>(l.ey * d + (l.ey >= 0 ? 0.5 : -0.5));
+  }
   static int FirstFree(uint32_t used) {
     for (int s = 0; s < kCtSlots; ++s)
       if (!(used & (1u << s))) return s;
@@ -234,6 +240,45 @@ class CombatTextBook {
   }
 
  private:
+  // A damage/heal number over creature `id` whose body middle is (x, y) now. The same kind and colour within
+  // kCtMergeMs adds to the earlier number (a dagger's 6 + 1 shows 7; heals show "+N"). Otherwise it is a new line that
+  // glides to the first spot of kCtFan whose end does not touch another number's end (any creature's).
+  const CtLine& AddNumber(int32_t id, int x, int y, CtKind kind, CtSeg seg, uint32_t now) {
+    const bool heal = kind == CtKind::Heal;
+    if (seg.value >= 0)
+      for (auto it = lines_.rbegin(); it != lines_.rend(); ++it) {
+        if (it->id != id || it->kind != kind || it->segs.empty()) continue;
+        CtSeg& s = it->segs[0];
+        if (s.value >= 0 && s.color == seg.color && now - s.t < kCtMergeMs) {
+          s.value += seg.value;
+          s.text = heal ? HealText(s.value) : std::to_string(s.value);
+          it->w = CtLineWidth(it->kind, it->segs);
+          merged_ = true;
+          return *it;
+        }
+      }
+    if (heal && seg.value >= 0) seg.text = HealText(seg.value);
+    CtLine l;
+    l.id = id, l.kind = kind, l.t0 = now, l.ax = x, l.ay = y;
+    l.segs.push_back(std::move(seg));
+    l.w = CtLineWidth(kind, l.segs);
+    int best = -1, best_hits = 1 << 30;
+    for (int k = 0; k < kCtFanN; ++k) {
+      const int ex = x + kCtFan[k][0], ey = y + kCtFan[k][1];
+      int hits = 0;
+      for (const CtLine& o : lines_) {
+        if (!IsNumber(o.kind)) continue;
+        if (std::abs(o.ay + o.ey - ey) < kCtNumH && CtOverlapX(o.ax + o.ex, o.w, ex, l.w)) ++hits;
+      }
+      if (hits < best_hits) best_hits = hits, best = k;
+      if (hits == 0) break;
+    }
+    l.ex = kCtFan[best][0], l.ey = kCtFan[best][1];
+    if (static_cast<int>(lines_.size()) >= kCtLines) lines_.erase(lines_.begin());
+    lines_.push_back(std::move(l));
+    return lines_.back();
+  }
+
   std::vector<CtLine> lines_;  // oldest first
   bool merged_ = false;
 };

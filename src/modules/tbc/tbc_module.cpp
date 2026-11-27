@@ -993,7 +993,10 @@ const CtLine* CtAdd(int32_t id, CtKind kind, CtSeg seg) {
     }
   g.ct_area[id] = o.area;
   ++g.ct_added;
-  return &g.ct.Add(id, wx, wy - (hgt > 0 ? hgt : 90) - kCtAboveHeadPx, kind, std::move(seg), now);
+  const int head = hgt > 0 ? hgt : 90;
+  // numbers start at the middle of the body and glide out (combat_text.h kCtFan); text sits over the head
+  const int y = CombatTextBook::IsNumber(kind) ? wy - head / 2 : wy - head - kCtAboveHeadPx;
+  return &g.ct.Add(id, wx, y, kind, std::move(seg), now);
 }
 void FloatText(int32_t id, const std::string& text, uint32_t ms) {
   if (g.ctext) {
@@ -1781,9 +1784,11 @@ bool OnFloater(const engine::FloaterInfo& f) {
     const uint32_t colour = p.kind == CtKind::Heal ? kCtHeal : DamageColor(f.damage_bits);
     const CtLine* l = CtAdd(id, p.kind, {std::to_string(p.value), colour, p.value});
     if (l && g.ct.Merged()) {
-      std::string row;
-      for (const CtSeg& s : l->segs) row += (row.empty() ? "" : " ") + s.text;
-      Log("tbc: text over %s: %d added to the same damage type's number (row \"%s\")", Who(id).c_str(), p.value, row.c_str());
+      Log("tbc: text over %s: %d added to the same %s number (now \"%s\")", Who(id).c_str(), p.value,
+          p.kind == CtKind::Heal ? "heal" : "damage type's", l->segs[0].text.c_str());
+    } else if (l) {
+      Log("tbc: number \"%s\" over %s glides %+d,%+d from the body's middle", l->segs[0].text.c_str(), Who(id).c_str(), l->ex,
+          l->ey);
     }
   } else if (g.rolls && f.text.compare(0, 8, "Critical") == 0) {
     // AttackCombatText says it
@@ -3163,8 +3168,10 @@ int __cdecl LuaCombatText(engine::LuaState* L) {
   if (on) {
     engine::SpriteInfo o;
     const auto a = g.ct_area.find(l->id);
-    on = engine::GetSprite(l->id, &o) && a != g.ct_area.end() && a->second == o.area && engine::WorldToUi(l->ax, l->ay, &ux, &uy);
-    uy -= l->slot * kCtLinePx;  // slots stack upward from just above the head
+    int px = 0, py = 0;
+    CombatTextBook::Position(*l, now, &px, &py);  // a number glides out from the body, then sits
+    on = engine::GetSprite(l->id, &o) && a != g.ct_area.end() && a->second == o.area && engine::WorldToUi(px, py, &ux, &uy);
+    if (!CombatTextBook::IsNumber(l->kind)) uy -= l->slot * kCtLinePx;  // text slots stack upward from just above the head
   }
   engine::LuaPushNumber(L, on ? 1 : 0);
   engine::LuaPushNumber(L, ux);
