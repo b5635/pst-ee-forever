@@ -4,7 +4,8 @@
 // above the creature that rolled, for every save (the engine only said "Save vs. death : 18" for a save made).
 // Timings measured frame by frame from the reference clip (30 fps): the banner fades in, the icon (PFSVOK /
 // PFSVBAD, tools/make_save_bams.py) tumbles a d20 and turns to the verdict at 0.70 s, the banner holds where it
-// is (no rise) and fades out at 2.8-3.0 s. The success/fail sound goes with the verdict.
+// is (no rise) and fades out at 2.8-3.0 s. The success/fail sound plays [tbc] save_sound_ms after the banner appears
+// (default 0: at once; 700 = with the icon's verdict).
 #include <cstdint>
 #include <string>
 
@@ -18,6 +19,9 @@ constexpr int kSaveIconFrames = 32;        // 0..30 = t 0..1.0 s at 30 fps, 31 =
 constexpr uint32_t kSaveMergeMs = 300;     // one spell's several effects share one roll: one banner
 constexpr int kSaveBanners = 6;            // on screen at once (UI menus PSTF_SAVE1..6)
 constexpr int kSaveAboveHeadPx = 28;       // world px between the overhead-text point and the banner's middle
+
+// The banner's sound is due once its age reaches the delay ([tbc] save_sound_ms; negative counts as 0).
+inline bool SaveSoundDue(uint32_t ms, int delay_ms) { return delay_ms <= 0 || ms >= static_cast<uint32_t>(delay_ms); }
 
 inline int SaveIconFrame(uint32_t ms) {
   const uint32_t f = ms * 30 / 1000;

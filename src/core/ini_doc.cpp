@@ -49,6 +49,7 @@ const std::set<std::string, std::less<>> kNotBool = {
     "lighting.debug",     // debug view 0..8
     "smooth.frame_rate",  // 0 = display refresh rate
     "locks.retry_hours",  // hours
+    "tbc.save_sound_ms",  // milliseconds
 };
 
 }  // namespace

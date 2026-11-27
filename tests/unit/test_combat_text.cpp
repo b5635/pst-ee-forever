@@ -123,9 +123,10 @@ TEST_CASE("numbers glide out from the body's middle, ease out, stop, and stop ap
       const bool touch = std::abs((p.ay + p.ey) - (q.ay + q.ey)) < kCtNumH && CtOverlapX(p.ax + p.ex, p.w, q.ax + q.ex, q.w);
       CHECK(!touch);
     }
-  CHECK(b.Lines()[1].ex == kCtFan[1][0]);  // left, then right, then up-left
+  CHECK(b.Lines()[1].ex == kCtFan[1][0]);  // left, then right, then down-right (any direction, as in the clip)
   CHECK(b.Lines()[2].ex == kCtFan[2][0]);
   CHECK(b.Lines()[3].ey == kCtFan[3][1]);
+  CHECK(b.Lines()[3].ey > 0);  // below the body's middle
   // numbers take no text slot: a "Miss!" over the same creature is still slot 0
   CHECK(b.Add(7, 200, 60, CtKind::Miss, {"Miss!"}, 400).slot == 0);
 }

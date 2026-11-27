@@ -19,9 +19,9 @@ local pos = {}  -- line key -> x, y, view centre when first seen
 local function lines()
   local out = {}
   for i = 1, 24 do
-    local on, x, y, a, s, k, cnt, t1, c1, t2, c2, t3, c3, t4, c4, id, slot = PSTF_CombatText(i)
+    local on, x, y, a, s, k, cnt, t1, c1, t2, c2, t3, c3, t4, c4, id, slot, t0 = PSTF_CombatText(i)
     if on == 1 then
-      out[#out + 1] = {x = x, y = y, a = a, s = s, k = k, n = cnt, t = t1, c = c1, t2 = t2, c2 = c2, cs = {c1, c2, c3, c4}, ts = {t1, t2, t3, t4}, id = id, slot = slot}
+      out[#out + 1] = {x = x, y = y, a = a, s = s, k = k, n = cnt, t = t1, c = c1, t2 = t2, c2 = c2, cs = {c1, c2, c3, c4}, ts = {t1, t2, t3, t4}, id = id, slot = slot, t0 = t0}
     end
   end
   return out
@@ -47,9 +47,9 @@ local function scan()
     if l.k == 4 and l.c == WHITE and string.sub(l.t, 1, 1) == '+' then got.heal = true end
     if (l.k == 3 or l.k == 4) and fight_at < 0 then
       for _, o in ipairs(lines()) do  -- two of this creature's numbers, both settled: stopped apart
-        local q = pos[o.id .. '|' .. o.slot .. '|' .. o.k .. '|' .. o.t .. '|' .. o.c]
-        local mine = pos[l.id .. '|' .. l.slot .. '|' .. l.k .. '|' .. l.t .. '|' .. l.c]
-        if o.id == l.id and (o.k == 3 or o.k == 4) and (o.t ~= l.t or o.c ~= l.c) and q and mine and n - q.t > 12
+        local q = pos[o.id .. '|' .. o.t0 .. '|' .. o.c]
+        local mine = pos[l.id .. '|' .. l.t0 .. '|' .. l.c]
+        if o.id == l.id and (o.k == 3 or o.k == 4) and (o.t0 ~= l.t0 or o.c ~= l.c) and q and mine and n - q.t > 12
           and n - mine.t > 12 and (math.abs(o.x - l.x) > 12 or math.abs(o.y - l.y) > 14) then
           got.apart = true shot('numbers')
         end
@@ -63,7 +63,7 @@ local function scan()
     -- sitting still: the same line at the same UI point while the view stays put
     -- a number glides for kCtDriftMs (~9 ticks) first: its still check starts after that
     local num = l.k == 3 or l.k == 4
-    local key = l.id .. '|' .. l.slot .. '|' .. l.k .. '|' .. l.t .. '|' .. l.c
+    local key = l.id .. '|' .. l.t0 .. '|' .. l.c
     local p = pos[key]
     if not p then
       pos[key] = {x = l.x, y = l.y, vx = vx, vy = vy, t = n, x0 = l.x, y0 = l.y}

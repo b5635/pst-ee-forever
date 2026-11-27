@@ -52,7 +52,9 @@ inline std::string HealText(int v) { return "+" + std::to_string(v); }
 // first free one), so where they stop they do not overlap. Offsets are world px at zoom 1.
 constexpr uint32_t kCtDriftMs = 300;
 constexpr int kCtFanN = 8;
-constexpr int kCtFan[kCtFanN][2] = {{0, -30}, {-38, -10}, {38, -10}, {-30, -56}, {30, -56}, {0, -82}, {-64, -34}, {64, -34}};
+// Round the body like a clock: up, the sides, short ones down (not onto the legs or a neighbour's head), then
+// further out above. Each end spot is 26+ px (kCtNumH) in y or 38+ px in x from the others: two-digit numbers fit.
+constexpr int kCtFan[kCtFanN][2] = {{0, -30}, {-38, -10}, {38, -10}, {24, 18}, {-24, 18}, {-30, -56}, {30, -56}, {0, -82}};
 constexpr int kCtNumH = 26;  // a number's height: end spots closer than this in y and touching in x collide
 // Share of the glide done at ms since the number appeared (ease-out cubic).
 inline double CtDrift(uint32_t ms) {

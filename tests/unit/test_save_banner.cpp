@@ -25,6 +25,13 @@ TEST_CASE("save banner icon frames follow the clip at 30 fps, then hold") {
   CHECK(SaveIconFrame(2500) == 31);
 }
 
+TEST_CASE("save banner sound: at once by default, else after the delay") {
+  CHECK(SaveSoundDue(0, 0));
+  CHECK(SaveSoundDue(0, -5));
+  CHECK(!SaveSoundDue(699, 700));
+  CHECK(SaveSoundDue(700, 700));
+}
+
 TEST_CASE("save banner: fades in, holds still, fades out, gone at 3 s") {
   CHECK(SaveBannerAlpha(0) == 0.0);
   CHECK(SaveBannerAlpha(75) == 0.5);

@@ -140,6 +140,7 @@ struct State {
   bool sight = true;                 // [tbc] combat_sight: every combatant is in view during a fight
   bool items = false;                // item use hooks installed: an instant item use takes the action
   bool save_sounds = true;           // [tbc] save_sounds: success/fail sound with the engine's "Save vs." line
+  int save_sound_ms = 0;             // [tbc] save_sound_ms: banner sound delay (0 = at once, 700 = icon verdict)
   bool save_banner = false;          // [tbc] save_banner: icon + "Save Success: N (Death)" over every save
   bool save_silenced = false;        // the engine's own "Save vs." line is patched out
   struct Banner {
@@ -1723,7 +1724,7 @@ void PlayResultSound(bool good) {
   Log("tbc: save sound %s (%s)", good ? "success" : "failed", ok ? "playing" : "not played");
 }
 
-// A save shown over the creature that rolled (save_banner.h); the sound waits for the icon's verdict.
+// A save shown over the creature that rolled (save_banner.h); the sound waits [tbc] save_sound_ms (0 = at once).
 void AddSaveBanner(const engine::RollEvent& e) {
   const uint32_t now = GetTickCount();
   for (auto& b : g.banners)
@@ -1754,7 +1755,7 @@ void SaveBannerTick() {
   const uint32_t now = GetTickCount();
   int sound = -1;
   for (auto& b : g.banners)
-    if (!b.sounded && now - b.t0 >= kSaveVerdictMs) {
+    if (!b.sounded && SaveSoundDue(now - b.t0, g.save_sound_ms)) {
       b.sounded = true;
       sound = b.good ? 1 : 0;
     }
@@ -3187,7 +3188,8 @@ int __cdecl LuaCombatText(engine::LuaState* L) {
   }
   engine::LuaPushNumber(L, on ? l->id : -1);
   engine::LuaPushNumber(L, on ? l->slot : -1);
-  return 9 + 2 * kCtSegs;
+  engine::LuaPushNumber(L, on ? static_cast<double>(l->t0) : -1.0);  // when it appeared: tells two equal lines apart
+  return 10 + 2 * kCtSegs;
 }
 
 int __cdecl LuaBar(engine::LuaState* L) {
@@ -3655,6 +3657,7 @@ bool InstallTbc(const IniMap& ini) {
   g.dice_panel = IniBool(ini, "tbc.dice_panel", false);
   g.save_sounds = IniBool(ini, "tbc.save_sounds", true);
   g.save_banner = IniBool(ini, "tbc.save_banner", true);
+  g.save_sound_ms = IniInt(ini, "tbc.save_sound_ms", 0);
   g.sight = IniBool(ini, "tbc.combat_sight", true);
   g.sight_radius = IniInt(ini, "tbc.sight_radius", g.sight_radius);
   g.select_voice = IniBool(ini, "tbc.select_voice", true);

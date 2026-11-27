@@ -439,7 +439,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
 - Saving-throw banner (`[tbc] save_banner`, rules `src/modules/tbc/save_banner.h`, art `python -I tools/make_save_bams.py
   [--preview OUT.png]` -> `data/override/PFSVOK.BAM`/`PFSVBAD.BAM`, reference clip youtube.com/shorts/WyovFSwwKvg): every save,
   made or failed, shows "[icon] Save Success: N (Death)" over the creature (UI menus PSTF_SAVE1..6, one each so each fades
-  alone with menu `opacity lua`), sound at the icon's verdict (0.7 s), gone at 3 s. The engine's own "Save vs." line is
+  alone with menu `opacity lua`), sound at once (`[tbc] save_sound_ms`, 0; 700 = the icon's verdict), gone at 3 s. The engine's own "Save vs." line is
   patched out (`engine::SilenceSaveFeedback`, symbols.h kRvaSaveFeedbackRead). Saves are taken out of fights too. Test:
   `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\save_banner.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_NOFIGHT='1'}
   -Until 'save_banner: ok|TEST FAIL' -Close` (shots `logs\save_banner_NN.bmp`). Probe `PSTF_SaveBanner([i])`.
@@ -454,7 +454,7 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   a creature's own words, left to the engine), damage type from `CGameEffectDamage::ApplyEffect`'s param2. Test:
   `tools\launch.ps1 -Save 000000126 -Lua tests\ingame\combat_text.lua -Env @{PSTF_TEST_TICK='1'; PSTF_TBC_AUTOPARTY='1'}
   -Until 'combat_text: ok|TEST FAIL' -Close -Timeout 400` (`combat_text=0` fails it at the first line: the toggle check).
-  Probe `PSTF_CombatText(i)` -> on, ui x/y, alpha, strike, kind, n, text/colour x4, id, slot; `()` -> lines, floaters
+  Probe `PSTF_CombatText(i)` -> on, ui x/y, alpha, strike, kind, n, text/colour x4, id, slot, start ms (tells equal lines apart); `()` -> lines, floaters
   seen, taken, added. Log `tbc: floater "..."` (first 80) and `tbc: text over X: ...`. UI text widths: Lua
   `pstfTextWidth(t, pt)` (Infinity_GetContentHeight only wraps between words: one word needs the ' |' calibration).
   Shots of UI need `PSTF_SHOT_DIR` (`PSTF_LightShot` is the world pass only, no menus).
