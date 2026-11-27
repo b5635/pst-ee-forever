@@ -153,6 +153,30 @@ TEST_CASE("a full stack drops its oldest line; the book holds at most kCtLines")
   CHECK(static_cast<int>(b.Lines().size()) == kCtLines);
 }
 
+TEST_CASE("neighbours: only lines that would touch share rows; others stay level over their own heads") {
+  CHECK(CtLineWidth(CtKind::Text, {{"Initiative: 4"}}) == 13 * kCtCharPx);
+  CHECK(CtLineWidth(CtKind::Damage, {{"12"}, {"7"}}) == 3 * kCtDigitPx + kCtNumGapPx);
+  CHECK(CtLineWidth(CtKind::Text, {{"@274"}}) == 12 * kCtCharPx);
+  CHECK(CtOverlapX(0, 100, 100, 100));    // 100 apart, 50 + 50 wide halves + air: touching
+  CHECK(!CtOverlapX(0, 40, 100, 40));     // short lines 100 apart: apart
+  CombatTextBook b;
+  // two party members 70 px apart take damage at once: short numbers, side by side, both just above the head
+  const CtLine& a = b.Add(1, 100, 50, CtKind::Damage, {"7", kCtNumber, 7}, 0);
+  const CtLine& c = b.Add(2, 170, 56, CtKind::Damage, {"12", kCtNumber, 12}, 0);
+  CHECK(a.slot == 0);
+  CHECK(c.slot == 0);
+  CHECK(c.ay == 56);  // its own head height
+  // a party of four 40 px apart rolls initiative together: long lines that touch share one stack, upward
+  CombatTextBook i;
+  for (int k = 0; k < 4; ++k) i.Add(10 + k, 100 + 40 * k, 50 + 3 * k, CtKind::Text, {"Initiative: " + std::to_string(k)}, 0);
+  for (int k = 0; k < 4; ++k) {
+    CHECK(i.Lines()[k].slot == k);
+    CHECK(i.Lines()[k].ay == 50);
+  }
+  // one standing 300 px off keeps its own line at slot 0
+  CHECK(i.Add(20, 400, 60, CtKind::Text, {"Initiative: 9"}, 0).slot == 0);
+}
+
 TEST_CASE("engine feedback text: trimmed; a cast shows the spell's name") {
   CHECK(CleanFloaterText(" Casts Magic Missile : Morte") == "Magic Missile");
   CHECK(CleanFloaterText(" Casts Blessing") == "Blessing");

@@ -2,8 +2,10 @@
 #pragma once
 // Combat text ([tbc] combat_text), BG3 style (reference: youtube.com/watch?v=mfZz9N57glw, read at 5 and 60 fps):
 // nothing rises. A line appears where the creature's head was (a fixed world point: the creature may walk away),
-// sits there and fades out. Lines of one creature share that point and stack in slots from the top down: a new
-// line takes the highest free slot ("Miss!" over the head, the damage row under it, a save line under that...).
+// sits there and fades out. Lines of one creature share that point and stack upward from just above the head: a
+// new line takes the lowest free slot, so nothing drops onto the body or the feet. A neighbour's lines count only
+// when they would really run into ours (CtOverlapX on the text widths): then we share their rows, else creatures
+// side by side keep their lines level over their own heads.
 // Damage is a bare number, white for weapon damage and coloured by damage type; numbers that land together share
 // a row ("13 12"); numbers of one colour within kCtMergeMs are one number (a dagger's 1d6 + 1 shows "7", not "6 1").
 // "Miss!" or "Critical Miss!" (never both), "Critical Hit!" in red. A buff or debuff shows its name
@@ -28,9 +30,9 @@ constexpr int kCtSegs = 4;                  // numbers in one row
 // Damage numbers: PTSERIF. The game's VOLLKORN has old-style figures, its "1" is a short capital I.
 constexpr const char* kCtNumFont = "PTSERIF";
 constexpr int kCtSlots = 6;                 // lines over one creature
-constexpr int kCtLinePx = 26;               // UI px between slots
+constexpr int kCtLinePx = 26;               // UI px between slots (slot n is n * this ABOVE slot 0)
 constexpr int kCtAboveHeadPx = 20;          // world px from the overhead-text point up to slot 0
-constexpr int kCtNearX = 170, kCtNearY = 90;  // a new stack this close to another one shares its rows
+constexpr int kCtNearY = 90;  // a new stack this close in height to a line it would run into shares its rows
 
 enum class CtKind : uint8_t { Text, Crit, Miss, Damage, Heal, StatusOn, StatusOff };
 
@@ -133,11 +135,28 @@ struct CtSeg {
 struct CtLine {
   int32_t id = -1;        // the creature it is about
   int ax = 0, ay = 0;     // world point of slot 0 (fixed when the creature's first line appeared)
-  int slot = 0;
+  int slot = 0;           // 0 just above the head; higher slots stack upward (kCtLinePx each)
+  int w = 0;              // estimated width (CtLineWidth), world px at zoom 1
   uint32_t t0 = 0;        // ms when it appeared
   CtKind kind = CtKind::Text;
   std::vector<CtSeg> segs;
 };
+
+// A line's width as drawn (18 pt VOLLKORN text ~9 px a character, 26 pt numbers ~14 px a digit, 3 px between
+// numbers; a TLK strref "@N" counts as 12 characters). An estimate: it only decides whether lines collide.
+constexpr int kCtCharPx = 9, kCtDigitPx = 14, kCtNumGapPx = 3, kCtPadPx = 10;
+inline int CtLineWidth(CtKind kind, const std::vector<CtSeg>& segs) {
+  int w = 0;
+  const bool num = kind == CtKind::Damage || kind == CtKind::Heal;
+  for (size_t i = 0; i < segs.size(); ++i) {
+    const std::string& t = segs[i].text;
+    const int chars = !t.empty() && t[0] == '@' ? 12 : static_cast<int>(t.size());
+    w += chars * (num ? kCtDigitPx : kCtCharPx) + (i > 0 ? kCtNumGapPx : 0);
+  }
+  return w;
+}
+// Two lines centred at ax with widths wa and bx, wb collide (with kCtPadPx air between them).
+inline bool CtOverlapX(int ax, int wa, int bx, int wb) { return 2 * std::abs(ax - bx) < wa + wb + 2 * kCtPadPx; }
 
 // The lines on screen. Pure: the module gives it times, ids and world points.
 class CombatTextBook {
@@ -163,6 +182,7 @@ class CombatTextBook {
             }
         if (now - it->t0 < kCtJoinMs && static_cast<int>(it->segs.size()) < kCtSegs) {
           it->segs.push_back(std::move(seg));
+          it->w = CtLineWidth(it->kind, it->segs);
           return *it;
         }
         break;
@@ -170,29 +190,33 @@ class CombatTextBook {
     }
     CtLine l;
     l.id = id, l.kind = kind, l.t0 = now, l.ax = x, l.ay = y;
+    l.segs.push_back(std::move(seg));
+    l.w = CtLineWidth(kind, l.segs);
     bool own = false;
     for (const CtLine& o : lines_)
       if (o.id == id) l.ax = o.ax, l.ay = o.ay, own = true;  // the creature's stack keeps its point
-    if (!own)  // a neighbour's stack close by: share its rows (its height), keep our own x
+    // A neighbour's line close in height that the new line would run into: share its rows (its height), keep our
+    // own x. Neighbours whose lines do not touch ours keep their own heights and slots.
+    auto collides = [&](const CtLine& o) { return o.ay == l.ay && CtOverlapX(o.ax, o.w, l.ax, l.w); };
+    if (!own)
       for (const CtLine& o : lines_)
-        if (std::abs(o.ax - x) < kCtNearX && std::abs(o.ay - y) < kCtNearY) {
+        if (std::abs(o.ay - y) < kCtNearY && CtOverlapX(o.ax, o.w, l.ax, l.w)) {
           l.ay = o.ay;
           break;
         }
     uint32_t used = 0;
     for (const CtLine& o : lines_)
-      if (o.id == id || (o.ay == l.ay && std::abs(o.ax - l.ax) < kCtNearX)) used |= 1u << o.slot;
+      if (o.id == id || collides(o)) used |= 1u << o.slot;
     l.slot = FirstFree(used);
     if (l.slot < 0) {  // full: the oldest line of the rows gives way
       for (auto it = lines_.begin(); it != lines_.end(); ++it)
-        if (it->id == id || (it->ay == l.ay && std::abs(it->ax - l.ax) < kCtNearX)) {
+        if (it->id == id || collides(*it)) {
           l.slot = it->slot;
           lines_.erase(it);
           break;
         }
     }
     if (static_cast<int>(lines_.size()) >= kCtLines) lines_.erase(lines_.begin());
-    l.segs.push_back(std::move(seg));
     lines_.push_back(std::move(l));
     return lines_.back();
   }

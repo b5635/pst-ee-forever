@@ -3124,7 +3124,7 @@ int __cdecl LuaSaveBanner(engine::LuaState* L) {
   bool on = b && now - b->t0 < kSaveLifeMs && engine::GetSprite(b->id, &o);
   if (on && b->slot >= 0) {  // its place in the combat text stack
     on = engine::WorldToUi(b->ax, b->ay, &ux, &uy);
-    uy += b->slot * kCtLinePx;
+    uy -= b->slot * kCtLinePx;  // slots stack upward from just above the head
   } else if (on) {
     int wx = o.x, wy = o.y;
     engine::InterpDrawPos(b->id, &wx, &wy);
@@ -3164,7 +3164,7 @@ int __cdecl LuaCombatText(engine::LuaState* L) {
     engine::SpriteInfo o;
     const auto a = g.ct_area.find(l->id);
     on = engine::GetSprite(l->id, &o) && a != g.ct_area.end() && a->second == o.area && engine::WorldToUi(l->ax, l->ay, &ux, &uy);
-    uy += l->slot * kCtLinePx;
+    uy -= l->slot * kCtLinePx;  // slots stack upward from just above the head
   }
   engine::LuaPushNumber(L, on ? 1 : 0);
   engine::LuaPushNumber(L, ux);
