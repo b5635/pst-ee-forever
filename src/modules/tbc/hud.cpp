@@ -44,10 +44,12 @@ end
 -- Our menus are on the stack exactly when they belong there (called every frame by the DLL): the hotbar,
 -- portrait column and status icons with the bottom bar, the fight overlay on the world screen. An
 -- engine bar pushed again (back from the inventory...) goes over ours, so ours are pushed again on top.
+-- -> true when it pushed the menu (it is now the top one)
 function pstfMenuSync(name, want, top)
 	local on = Infinity_IsMenuOnStack(name)
 	if on and (not want or top) then Infinity_PopMenu(name) on = false end
-	if want and not on then Infinity_PushMenu(name) end
+	if want and not on then Infinity_PushMenu(name) return true end
+	return false
 end
 function pstfHudGuard()
 	if pstfHudRaising then pstfHudAfterOpen() end
@@ -58,8 +60,13 @@ function pstfHudGuard()
 	pstfMenuSync('PSTF_BAR', bar and (pstfBg3 or (pstfTbc.on and world)))
 	pstfMenuSync('PSTF_STATUS', bar)
 	pstfMenuSync('PSTF_TBC', pstfTbc.on and world)
-	if pstfSvGuard then pstfSvGuard(world) end
-	if pstfCtGuard then pstfCtGuard(world) end
+	local pushed = false
+	if pstfSvGuard then pushed = pstfSvGuard(world) or pushed end
+	if pstfCtGuard then pushed = pstfCtGuard(world) or pushed end
+	-- the HUD stays over the world's text: the fight overlay (initiative portraits, round title), then the hover
+	-- card (its health bar) and status icons on top of everything, above combat text and save banners
+	if pushed and pstfTbc.on and world then pstfMenuSync('PSTF_TBC', true, true) end
+	if pushed and bar then pstfMenuSync('PSTF_STATUS', true, true) end
 end
 -- WORLD_ACTIONBAR_LEFT's onOpen: it was just pushed, so ours go on top of it again.
 function pstfHudRaise()
@@ -730,10 +737,12 @@ end
 function pstfSvAlpha(i) return pstfSv[i].a end
 function pstfSvBam(i) return pstfSv[i].good and 'PFSVOK' or 'PFSVBAD' end
 function pstfSvGuard(world)
+	local pushed = false
 	for i = 1, PSTF_SAVES do
 		local want = world and PSTF_SaveBanner ~= nil and PSTF_SaveBanner(i) == 1
-		pstfMenuSync('PSTF_SAVE' .. i, want)
+		if pstfMenuSync('PSTF_SAVE' .. i, want) then pushed = true end
 	end
+	return pushed
 end
 )LUA" + "`\n";
   for (int i = 1; i <= kSaveBanners; ++i) {
@@ -817,10 +826,12 @@ function pstfCtTick(i)
 end
 function pstfCtAlpha(i) return pstfCt[i].a end
 function pstfCtGuard(world)
+	local pushed = false
 	for i = 1, PSTF_CTN do
 		local want = world and PSTF_CombatText ~= nil and PSTF_CombatText(i) == 1
-		pstfMenuSync('PSTF_CT' .. i, want)
+		if pstfMenuSync('PSTF_CT' .. i, want) then pushed = true end
 	end
+	return pushed
 end
 )LUA" + "`\n";
   for (int i = 1; i <= kCtLines; ++i) {
