@@ -1,5 +1,6 @@
 -- SPDX-License-Identifier: GPL-2.0-or-later
 -- BG3 cursor hints on a party turn (Hive save 000000126, one hostile thug jumped beside the Nameless One):
+--   pick        the card shows only inside the foe's selection circle (the engine's click pick), not over its body;
 --   hit chance  hovering the foe with the plain (attack) cursor shows "NN%" next to the cursor (pstfHovHitOn),
 --               not on the hover card;
 --   AoO         a move preview that walks out of the thug's reach says "Provokes attack of opportunity"
@@ -49,9 +50,18 @@ function pstfTestTick()
 	end
 	if step == 0 then
 		if cells(tno, thug) > 2.5 then beside() at = frames step = -1 return end
+		-- over its body but outside its selection circle: a click there would not pick it, so no card
+		step, at = 5, frames
+		local tx, ty = PSTF_SpritePos(thug, 1)
+		PSTF_HoverAt(tx, ty - 70)
+		return
+	end
+	if step == 5 and frames - at == 4 then
+		PSTF_Note(string.format('tbc_preview_aoo: hover 70 px over the thug\'s feet -> card %s', tostring(pstfHov.on)))
+		if pstfHov.on then return fail('the hover card shows outside the selection circle') end
 		step, at = 1, frames
 		local tx, ty = PSTF_SpritePos(thug, 1)
-		PSTF_HoverAt(tx, ty - 30)
+		PSTF_HoverAt(tx, ty)  -- inside its selection circle
 		return
 	end
 	if step == -1 then

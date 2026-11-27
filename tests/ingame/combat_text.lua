@@ -110,7 +110,7 @@ function pstfTestTick()
   end
   if fight_at > 0 and enemy ~= -1 and n % 30 == 0 and PSTF_HoverAt and not shots.hover then
     local x, y = PSTF_SpritePos(enemy)
-    PSTF_HoverAt(math.floor(x), math.floor(y) - 30)
+    PSTF_HoverAt(math.floor(x), math.floor(y))  -- inside its selection circle
     if n > fight_at + 90 then shot('hover') PSTF_HoverAt(-1, -1) end
   end
   if fight_at > 0 and got.miss and got.wnum and shots.hover then

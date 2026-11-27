@@ -205,6 +205,20 @@ uint64_t VisibleArea() {
 }
 }  // namespace
 
+int32_t PickedId() {
+  const uint64_t area = HudAvailable() ? VisibleArea() : 0;
+  return area ? R<int32_t>(area + sym::kOffAreaPicked) : -1;
+}
+
+bool SpriteIsOver(int32_t id, int x, int y) {
+  const uint64_t p = HudAvailable() ? Lookup(id) : 0;
+  if (!p) return false;
+  const uint64_t fn = R<uint64_t>(R<uint64_t>(p) + sym::kVtblSpriteIsOver);
+  if (fn != sym::kVaSpriteIsOver) return false;  // not the 3.2.2 sprite vtable we know
+  const int32_t pt[2] = {x, y};
+  return reinterpret_cast<int(__fastcall*)(uint64_t, const int32_t*)>(fn)(p, pt) != 0;
+}
+
 bool CursorWorld(int* x, int* y) {
   const uint64_t area = HudAvailable() && CostOk() ? VisibleArea() : 0;
   if (!area) return false;

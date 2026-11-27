@@ -164,7 +164,9 @@ observe.** Use the engine's own rules; never write a parallel rules engine.
   skipped, so frame counts in tests stay calibrated to the tick rate):
   `PSTF_TbcCurrent()` (id, round, party, used, acting, ft), `PSTF_FightId(i)`, `PSTF_EvalAs(id, bcs[, 1])`
   (queue BCS on any creature; 1 = take over), `PSTF_MakeEnemy`, `PSTF_SetHp`, `PSTF_Effects/HasEffect(id, op)`,
-  `PSTF_Objects([caster|-3])`, `PSTF_Stats(id)`, `PSTF_HoverAt(x,y)`, `PSTF_RollProbe(kind, ok, roll)`, `PSTF_BarSlots()`.
+  `PSTF_Objects([caster|-3])`, `PSTF_Stats(id)`, `PSTF_HoverAt(x,y)` (asks each candidate's engine `IsOver`: the
+  selection circle at the feet, so hover the feet point, not the body; the real cursor uses the engine's own pick,
+  CGameArea +0x244; log `tbc: hover card: X (engine|probe IsOver pick ...)`), `PSTF_RollProbe(kind, ok, roll)`, `PSTF_BarSlots()`.
   Env `PSTF_FEEDBACK_LOG=1` logs every engine FeedBack (why a cast failed); `PSTF_TBC_NOFIGHT=1` = probes, no fights.
 - In-game suites: `tests\ingame\tbc_rules.lua` (round clock: Blur, Adder's Kiss, regen), `tbc_spells.lua` (needs the Dead Nations save, no longer on disk),
   `tbc_bar.lua` (hotbar), `tbc_hud2.lua` (hover/dice screenshots), `smooth.lua` (frame interpolation: the loop

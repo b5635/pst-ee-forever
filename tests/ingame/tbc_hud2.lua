@@ -1,4 +1,4 @@
-﻿-- SPDX-License-Identifier: GPL-2.0-or-later
+-- SPDX-License-Identifier: GPL-2.0-or-later
 -- HUD look: initiative portraits with red damage fill, hover card with hit chance over the enemy,
 -- the dice panel for an attack (party member 3 attacks) and a saving throw (probe roll, plays the
 -- save sound). Screenshots: tools\launch.ps1 -Lua tests\ingame\tbc_hud2.lua -Env @{PSTF_TEST_TICK='1';
@@ -14,7 +14,7 @@ function pstfTestTick()
 	local id, r, party = PSTF_TbcCurrent()
 	if id ~= cur then cur, turnStart = id, frames end
 	local x, y = PSTF_SpritePos(enemy, 1)
-	PSTF_HoverAt(x, y - 30)
+	PSTF_HoverAt(x, y)  -- inside its selection circle
 	if id == P[3] and frames - turnStart == 5 and not saw.attack then
 		saw.attack = true
 		C:Eval('Attack(NearestEnemyOf(Myself))', 2)

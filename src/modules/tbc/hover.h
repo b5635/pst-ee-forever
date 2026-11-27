@@ -17,23 +17,14 @@ inline int HitChancePercent(int thac0, int ac) {
   return faces * 5;
 }
 
-// A creature stands at its feet point; its body is drawn above it. The cursor is over it when it is
-// inside a box 26 px each side and from 90 px above to 14 px below the feet (PST character size at
-// zoom 1). Of several, the one whose feet are nearest the cursor wins.
-struct HoverCandidate {
-  int32_t id = -1;
-  int x = 0, y = 0;
-};
-inline int32_t PickHovered(const std::vector<HoverCandidate>& c, int cx, int cy) {
-  int32_t best = -1;
-  long long best_d = -1;
-  for (const auto& h : c) {
-    const int dx = cx - h.x, dy = cy - h.y;
-    if (dx < -26 || dx > 26 || dy < -90 || dy > 14) continue;
-    const long long d = 1LL * dx * dx + 1LL * (dy + 38) * (dy + 38);  // body centre ~38 px up
-    if (best_d < 0 || d < best_d) best_d = d, best = h.id;
-  }
-  return best;
+// The creature the hover card is about: the one the engine picked under the mouse (engine::PickedId, the object a
+// click selects or attacks: the cursor is inside its selection circle), when it is one of the candidates (alive in
+// the leader's area; combatants only in a fight). -1 otherwise (nothing, a door, a container, a bystander).
+inline int32_t HoverPick(const std::vector<int32_t>& candidates, int32_t picked) {
+  if (picked == -1) return -1;
+  for (int32_t id : candidates)
+    if (id == picked) return id;
+  return -1;
 }
 
 // Dice panel: the die tumbles, lands, the verdict shows, then it fades (ms since the roll).

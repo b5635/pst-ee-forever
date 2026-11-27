@@ -472,6 +472,13 @@ constexpr uint32_t kVtblAnimPersonalSpace = 0xC0, kVtblSpriteTerrain = 0x148;
 // (CInfinity screen space); world = point - rect(+0x78) + view(+0x60) (CInfinity::GetWorldCoordinates).
 inline constexpr uint8_t kMouseStoreBytes[] = {0x48, 0x8B, 0x0F, 0x45, 0x33, 0xE4, 0x48, 0x89, 0x8B, 0x5C, 0x02, 0x00, 0x00};
 constexpr uint32_t kRvaMouseStore = 0x19D8A2, kOffAreaMouse = 0x25C;
+// The object under the mouse (what a click selects or attacks): CGameArea::AIUpdate (lin 1B8840 L970-992,
+// win 14018E0E0) tests each object's IsOver at the mouse point and stores the hit id at area+0x244 (int index 145;
+// -1 when nothing, L1279). CGameSprite::IsOver (lin 502680 vtable +0x68, win 1403D1A60 vtable +0x60: MSVC has one
+// destructor slot) = inside the selection ellipse: the animation's ellipse rect (anim vtable +0xB0) around the
+// feet, dx^2 + (4dy/3)^2 <= right^2.
+constexpr uint32_t kOffAreaPicked = 0x244, kVtblSpriteIsOver = 0x60;
+constexpr uint64_t kVaSpriteIsOver = 0x1403D1A60ull;
 
 // --- frame interpolation -------------------------------------------------------------------------
 // EE advances the world exactly once per main-loop iteration (CTimerWorld::UpdateTime win 1402B3490 /

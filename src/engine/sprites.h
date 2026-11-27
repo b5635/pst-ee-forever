@@ -56,6 +56,11 @@ bool IsSelected(int32_t id);
 
 // Cursor position in the world of the visible area (false when it is outside the world viewport).
 bool CursorWorld(int* x, int* y);
+// The object under the mouse as the engine picked it for clicks (select / attack): inside its selection
+// circle. -1 when nothing (may be a door or container id: check it is a sprite you want).
+int32_t PickedId();
+// The engine's own hit test (CGameSprite::IsOver): is world point x,y inside the creature's selection circle?
+bool SpriteIsOver(int32_t id, int x, int y);
 
 // Walk cost of search-map cells for one creature, as CGameSprite::SetTarget asks the engine
 // (CSearchBitmap::GetCost with its terrain table and personal space). 0xFF = impassable.

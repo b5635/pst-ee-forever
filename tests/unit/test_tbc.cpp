@@ -592,14 +592,12 @@ TEST_CASE("tbc hover: hit chance from THAC0 and AC, 5..95 %") {
   CHECK(HitChancePercent(5, 10) == 95);   // needs -5: all but a natural 1
 }
 
-TEST_CASE("tbc hover: the creature under the cursor, nearest body wins") {
-  std::vector<HoverCandidate> c = {{1, 100, 200}, {2, 110, 205}, {3, 400, 400}};
-  CHECK(PickHovered(c, 100, 160) == 1);   // over 1's body
-  CHECK(PickHovered(c, 112, 170) == 2);   // nearer 2
-  CHECK(PickHovered(c, 250, 250) == -1);  // empty ground
-  CHECK(PickHovered(c, 400, 410) == 3);   // at the feet
-  CHECK(PickHovered(c, 400, 415) == -1);  // 15 px below the feet: no
-  CHECK(PickHovered(c, 400, 300) == -1);  // 100 px above: no
+TEST_CASE("tbc hover: the engine's pick (what a click selects or attacks), candidates only") {
+  const std::vector<int32_t> c = {0x870087, 0x180018};
+  CHECK(HoverPick(c, 0x180018) == 0x180018);  // the thug's selection circle is under the mouse
+  CHECK(HoverPick(c, -1) == -1);              // nothing picked: no card
+  CHECK(HoverPick(c, 0x510051) == -1);        // a bystander outside the fight (or a door): no card
+  CHECK(HoverPick({}, 0x180018) == -1);
 }
 
 TEST_CASE("tbc dice: tumble, land on the roll, verdict, fade") {

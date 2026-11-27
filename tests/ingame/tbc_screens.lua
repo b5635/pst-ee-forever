@@ -1,4 +1,4 @@
-﻿-- SPDX-License-Identifier: GPL-2.0-or-later
+-- SPDX-License-Identifier: GPL-2.0-or-later
 -- BG3 HUD across screens (Hive save 000000126, manual party turns):
 --   - item icons keep their aspect: PSTF_IconSize('II020') (Bandages, cycle 0 frame 0) = 61 x 47;
 --   - status icons: Blessing (SPPR101) applied to the protagonist shows as an icon (PSTF_Status);
@@ -40,7 +40,7 @@ function pstfTestTick()
 		if not s or not s[1] then return fail('pstfStat[0] has no icon') end
 		PSTF_Note('tbc_screens: slot 0 icon ' .. tostring(s[1].b) .. ' rounds ' .. tostring(s[1].r))
 		local x, y = PSTF_SpritePos(PSTF_PartyId(1))
-		PSTF_HoverAt(x, y - 30)
+		PSTF_HoverAt(x, y)  -- inside its selection circle
 		go('hover')
 	elseif step == 'hover' and since == 10 then
 		if not pstfHov.on then return fail('no hover card out of a fight') end

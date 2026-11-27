@@ -1965,17 +1965,37 @@ void FillHover(HoverView* v) {
   } else if (!engine::CursorWorld(&wx, &wy)) {
     return;
   }
-  std::vector<HoverCandidate> cand;
+  std::vector<int32_t> cand;
   if (g.running) {
     for (int32_t id : g.in) {
       engine::SpriteInfo o;
-      if (engine::GetSprite(id, &o) && o.alive) cand.push_back({id, o.x, o.y});
+      if (engine::GetSprite(id, &o) && o.alive) cand.push_back(id);
     }
   } else {
     for (const auto& s : engine::AllSprites())
-      if (s.area == g.area && s.alive) cand.push_back({s.id, s.x, s.y});
+      if (s.area == g.area && s.alive) cand.push_back(s.id);
   }
-  const int32_t id = PickHovered(cand, wx, wy);
+  // Whom a click would select or attack: the engine's pick (inside the selection circle). The probe point asks
+  // the engine's own hit test (CGameSprite::IsOver) of each candidate instead.
+  int32_t picked = -1;
+  if (g.hover_at.x >= 0) {
+    for (int32_t c : cand)
+      if (engine::SpriteIsOver(c, wx, wy)) {
+        picked = c;
+        break;
+      }
+  } else {
+    picked = engine::PickedId();
+  }
+  const int32_t id = HoverPick(cand, picked);
+  {
+    static int32_t last = -2;
+    if (id != last) {
+      last = id;
+      Log("tbc: hover card: %s (%s pick %X at %d,%d)", id == -1 ? "none" : Who(id).c_str(),
+          g.hover_at.x >= 0 ? "probe IsOver" : "engine", static_cast<unsigned>(picked), wx, wy);
+    }
+  }
   if (id == -1) return;
   engine::SpriteInfo o;
   if (!engine::GetSprite(id, &o)) return;
