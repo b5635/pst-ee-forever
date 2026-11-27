@@ -1357,6 +1357,11 @@ TEST_CASE("combat text menu: one Lua chunk, a menu per line, balanced braces") {
   CHECK(m.find("name 'PSTF_CT1'") != std::string::npos);
   CHECK(m.find("name 'PSTF_CT24'") != std::string::npos);
   CHECK(m.find("pstfCtGuard") != std::string::npos);
+  // damage numbers in PTSERIF (VOLLKORN's old-style "1" reads as an I), measured in the same font
+  CHECK(m.find("text font \"PTSERIF\"\n\t\ttext point 26") != std::string::npos);
+  CHECK(m.find("text font \"VOLLKORN\"\n\t\ttext point 26") == std::string::npos);
+  CHECK(m.find("PSTF_CT_NUMFONT = 'PTSERIF'") != std::string::npos);
+  CHECK(m.find("pstfCtWidth(s.t[k], 26, PSTF_CT_NUMFONT)") != std::string::npos);
   const std::string h = BuildHudMenu();
   CHECK(h.find("pstfHovIN1") != std::string::npos);  // status names on the hover card
   CHECK(h.find("pstfHoverLv") != std::string::npos);

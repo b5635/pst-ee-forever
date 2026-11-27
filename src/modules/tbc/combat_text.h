@@ -25,6 +25,8 @@ constexpr uint32_t kCtJoinMs = 400;         // damage numbers of one creature th
 constexpr uint32_t kCtMergeMs = 100;        // ...and of one colour (damage type) this close add up: 6 + 1 -> "7"
 constexpr int kCtLines = 24;                // on screen at once (UI menus PSTF_CT1..N)
 constexpr int kCtSegs = 4;                  // numbers in one row
+// Damage numbers: PTSERIF. The game's VOLLKORN has old-style figures, its "1" is a short capital I.
+constexpr const char* kCtNumFont = "PTSERIF";
 constexpr int kCtSlots = 6;                 // lines over one creature
 constexpr int kCtLinePx = 26;               // UI px between slots
 constexpr int kCtAboveHeadPx = 20;          // world px from the overhead-text point up to slot 0

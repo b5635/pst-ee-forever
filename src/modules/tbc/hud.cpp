@@ -755,7 +755,7 @@ end
 // The combat text lines (combat_text.h): one small menu per line, so each fades on its own (menu opacity).
 // PSTF_CombatText(i) is read once per drawn frame (pstfCtTick, the first item); the labels use that copy.
 std::string BuildCombatTextMenu() {
-  std::string m = "`\nPSTF_CTN = " + std::to_string(kCtLines) + R"LUA(
+  std::string m = "`\nPSTF_CTN = " + std::to_string(kCtLines) + "\nPSTF_CT_NUMFONT = '" + kCtNumFont + "'" + R"LUA(
 pstfCt = {}
 for i = 1, PSTF_CTN do pstfCt[i] = {on = false, a = 0, n = 0, num = false, s = 0, k = 0, t = {'', '', '', ''}, c = {0, 0, 0, 0}} end
 pstfCtStrs = {}
@@ -768,8 +768,8 @@ function pstfCtStr(t)
 	end
 	return v
 end
-function pstfCtWidth(t, pt)
-	if pstfTextWidth then return pstfTextWidth(t, pt) end
+function pstfCtWidth(t, pt, font)
+	if pstfTextWidth then return pstfTextWidth(t, pt, font) end
 	return string.len(t) * pt / 2
 end
 local function ctHide(n) Infinity_SetArea(n, -100, -100, 1, 1) end
@@ -787,7 +787,7 @@ function pstfCtTick(i)
 	if s.num then
 		local gap, ws, total = 3, {}, 0
 		for k = 1, n do
-			ws[k] = pstfCtWidth(s.t[k], 26)
+			ws[k] = pstfCtWidth(s.t[k], 26, PSTF_CT_NUMFONT)
 			total = total + ws[k] + (k > 1 and gap or 0)
 		end
 		local x0 = x - math.floor(total / 2)
@@ -835,7 +835,7 @@ end
       const std::string ks = std::to_string(k);
       m += "\tlabel\n\t{\n\t\tname \"pstfCtN" + n + "_" + ks + "\"\n\t\tarea 0 0 1 1\n\t\tenabled \"" + c + ".on and " + c +
            ".num and " + c + ".n >= " + ks + "\"\n\t\ttext lua \"" + c + ".t[" + ks +
-           "]\"\n\t\ttext style \"normal\"\n\t\ttext font \"VOLLKORN\"\n\t\ttext point 26\n\t\ttext shadow 1\n\t\ttext color lua \"" + c +
+           "]\"\n\t\ttext style \"normal\"\n\t\ttext font \"" + kCtNumFont + "\"\n\t\ttext point 26\n\t\ttext shadow 1\n\t\ttext color lua \"" + c +
            ".c[" + ks + "]\"\n\t\talign left center\n\t\tignoreEvents\n\t}\n";
     }
     // the strike: a dark rim under a bone line
