@@ -541,6 +541,14 @@ function pstfHovHitOn()
 	return pstfHov.on and pstfHov.foe and pstfHov.aim and (pstfHov.chance or -1) >= 0 and (pstfHov.cx or -1) >= 0
 end
 function pstfHovHit() return string.format('%d%%', pstfHov.chance) end
+-- UI px from the cursor's hot spot to just past the attack cursor's right edge (CURSORS / CURS2X cycle 12: 44 / 110
+-- screen px wide, hot spot at its left edge), so the chance is never under the axe
+function pstfCursorClear()
+	local sw = Infinity_GetScreenSize()
+	local pw = (pstfHov.pw or 0) > 0 and pstfHov.pw or sw
+	local dbl = tonumber(Infinity_GetINIValue('Graphics', 'Use Double Size Cursors', 0)) == 1
+	return math.floor((dbl and 110 or 44) * sw / pw + 0.5) + 4
+end
 function pstfHovIconName(i)
 	local s = pstfSt(-1, i)
 	if not s then return '' end
@@ -615,7 +623,7 @@ function pstfHovLayout(sw, sh)
 	else
 		hide('pstfHoverTipL') hide('pstfHoverTipR') hide('pstfHoverKnobL') hide('pstfHoverKnobR')
 	end
-	if pstfHovHitOn() then area('pstfHoverHit', pstfHov.cx + 24, pstfHov.cy - 4, 80, 26) end
+	if pstfHovHitOn() then area('pstfHoverHit', pstfHov.cx + pstfCursorClear(), pstfHov.cy - 13, 80, 26) end
 	local n = #(pstfHov.icons or {})
 	if n > PSTF_HOV_ICONS then n = PSTF_HOV_ICONS end
 	if n > 0 then
@@ -1004,9 +1012,9 @@ std::string BuildStatusLua(const std::vector<std::vector<StatusIconView>>& party
   }
   char b[256];
   std::snprintf(b, sizeof b,
-                "} pstfHov = {on=%s,fight=%s,name=%d,hp=%d,max=%d,foe=%s,chance=%d,ac=%d,needs=%d,lv=%d,aim=%s,cx=%d,cy=%d,sub=\"",
+                "} pstfHov = {on=%s,fight=%s,name=%d,hp=%d,max=%d,foe=%s,chance=%d,ac=%d,needs=%d,lv=%d,aim=%s,cx=%d,cy=%d,pw=%d,sub=\"",
                 h.on ? "true" : "false", h.fight ? "true" : "false", h.name_ref, h.hp, h.max_hp, h.foe ? "true" : "false",
-                h.chance, h.ac, h.needs, h.level, h.aim ? "true" : "false", h.cur_x, h.cur_y);
+                h.chance, h.ac, h.needs, h.level, h.aim ? "true" : "false", h.cur_x, h.cur_y, h.px_w);
   s += b;
   AppendEscaped(&s, h.sub);
   s += "\",str=\"";

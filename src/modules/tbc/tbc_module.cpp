@@ -34,6 +34,7 @@
 
 #include "core/log.h"
 #include "core/patch.h"
+#include "core/shot.h"
 #include "core/tick.h"
 #include "engine/combat.h"
 #include "engine/dialog.h"
@@ -2001,6 +2002,7 @@ void FillHover(HoverView* v) {
     v->chance = HitChancePercent(a.thac0, t.ac);
     // BG3: "80%" next to the attack cursor, on a party member's own turn while no spell/item is being aimed
     v->aim = PartySlot(g.current) >= 0 && engine::GameCursorState() == 0 && engine::WorldToUi(wx, wy, &v->cur_x, &v->cur_y);
+    if (v->aim) v->px_w = GameClientWidth();
     static int32_t logged = -1;
     if (v->aim && logged != id) {
       logged = id;

@@ -65,6 +65,14 @@ function pstfTestTick()
 			pstfHov.cx or -1, pstfHov.cy or -1))
 		if not on then return fail('no hit chance next to the cursor over the foe') end
 		if not string.match(txt, '^%d+%%$') then return fail('hit chance text is "' .. txt .. '", wanted NN%') end
+		-- clear of the axe: the attack cursor is 44 screen px wide (110 with double-size cursors) right of its hot spot
+		local sw = Infinity_GetScreenSize()
+		local pw = (pstfHov.pw or 0) > 0 and pstfHov.pw or sw
+		local dbl = tonumber(Infinity_GetINIValue('Graphics', 'Use Double Size Cursors', 0)) == 1
+		local clear = pstfCursorClear()
+		PSTF_Note(string.format('tbc_preview_aoo: chance %d UI px right of the cursor (UI %d px wide, window %d px, double cursor %s)',
+			clear, sw, pw, tostring(dbl)))
+		if clear * pw < (dbl and 110 or 44) * sw then return fail('the hit chance is under the cursor') end
 		PSTF_HoverAt(-1, -1)
 		local x, y = awayPoint()
 		PSTF_PreviewAt(x, y)

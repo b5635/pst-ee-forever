@@ -930,8 +930,8 @@ TEST_CASE("tbc status: the drained frame and fitted icons") {
   CHECK(lua.find("pstfHov = {on=true,fight=false,name=5,") != std::string::npos);
   CHECK(lua.find("aim=false,cx=-1,cy=-1,") != std::string::npos);
   // the hit chance goes next to the cursor (BG3), not on the card
-  h.foe = true, h.fight = true, h.chance = 80, h.aim = true, h.cur_x = 400, h.cur_y = 300;
-  CHECK(BuildStatusLua({}, h).find("chance=80,ac=0,needs=0,lv=0,aim=true,cx=400,cy=300,") != std::string::npos);
+  h.foe = true, h.fight = true, h.chance = 80, h.aim = true, h.cur_x = 400, h.cur_y = 300, h.px_w = 2560;
+  CHECK(BuildStatusLua({}, h).find("chance=80,ac=0,needs=0,lv=0,aim=true,cx=400,cy=300,pw=2560,") != std::string::npos);
 }
 
 TEST_CASE("tbc preview: a creature is dear ground, the path goes round it and stays round") {

@@ -12,4 +12,8 @@ extern int g_last_read_fbo;
 // Returns "" on success, else the reason.
 std::string SaveScreenshot(const std::string& path);
 
+// The game window's client width in screen pixels (the window of the current GL context), 0 if unknown.
+// UI coordinates are smaller with Scale UI: UI px = screen px * Infinity_GetScreenSize() width / this.
+int GameClientWidth();
+
 }  // namespace pstf

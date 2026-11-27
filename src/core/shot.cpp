@@ -19,6 +19,16 @@ using PixelStoreiFn = void(WINAPI*)(unsigned, int);
 using GetCurrentContextFn = HGLRC(WINAPI*)();
 }  // namespace
 
+int GameClientWidth() {
+  HMODULE gl = GetModuleHandleW(L"opengl32.dll");
+  if (!gl) return 0;
+  using GetDcFn = HDC(WINAPI*)();
+  auto dc = reinterpret_cast<GetDcFn>(GetProcAddress(gl, "wglGetCurrentDC"));
+  HWND wnd = dc && dc() ? WindowFromDC(dc()) : nullptr;
+  RECT rc{};
+  return wnd && GetClientRect(wnd, &rc) ? rc.right - rc.left : 0;
+}
+
 std::string SaveScreenshot(const std::string& path) {
   HMODULE gl = GetModuleHandleW(L"opengl32.dll");
   if (!gl) return "opengl32 not loaded";

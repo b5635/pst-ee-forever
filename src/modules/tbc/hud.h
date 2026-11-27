@@ -93,6 +93,7 @@ struct HoverView {
   bool foe = false, fight = false;
   bool aim = false;            // a party member's turn, plain (attack) cursor: the chance shows at the cursor
   int cur_x = -1, cur_y = -1;  // the cursor in UI coordinates
+  int px_w = 0;                // the game window's width in screen px (UI px differ with Scale UI; 0 = same)
   int level = 0;               // "Lv. 5" after the name (0: not shown)
   std::string sub;             // the line under the name: class or stance (hover.h HoverSubtitle)
   std::vector<StatusIconView> icons;
